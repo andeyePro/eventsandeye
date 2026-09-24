@@ -1,0 +1,47 @@
+---
+// Events&I – Copyright (C) 2026 andeye Ltd. AGPL-3.0, see ../LICENSE.
+interface Props { contact: string }
+const { contact } = Astro.props;
+/** Landing page for the "Complete registration" link. Confirmation is a POST behind a button, so link scanners cannot confirm. */
+---
+<div class="not-content panel" id="confirm-panel" data-contact={contact}>
+	<p id="confirm-intro">Click the button to confirm your email address and complete your registration.</p>
+	<button type="button" id="confirm-btn" class="big">Complete registration</button>
+	<div id="confirm-result" role="status" aria-live="polite"></div>
+</div>
+<script>
+	const t = new URLSearchParams(location.search).get('t');
+	const btn = document.getElementById('confirm-btn') as HTMLButtonElement;
+	const out = document.getElementById('confirm-result')!;
+	if (!t) {
+		btn.hidden = true;
+		document.getElementById('confirm-intro')!.textContent = 'This link is incomplete. Please use the full link from your email.';
+	}
+	btn.addEventListener('click', async () => {
+		btn.disabled = true;
+		out.textContent = 'Confirming…';
+		try {
+			const res = await fetch('/api/rsvp/confirm', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ t }) });
+			const d = await res.json();
+			if (!d.ok) throw new Error(d.error);
+			const r = d.registration;
+			btn.hidden = true;
+			document.getElementById('confirm-intro')!.hidden = true;
+			const lines: string[] = [d.already ? 'Your registration was already confirmed.' : 'Thank you, your registration is complete.'];
+			if (r.attendance === 'remote') lines.push('You are registered to join the talks remotely. We have emailed you the joining instructions, with calendar invitations.');
+			else if (r.place === 'waitlist') lines.push('In-person places are currently full, so you are on the waiting list. We will email you if a place becomes available.');
+			else lines.push('You have an in-person place. We have emailed you the joining instructions, with calendar invitations.');
+			if (r.tour_label) lines.push(r.tour_place === 'waitlist' ? `You are on the waiting list for the ${r.tour_label}.` : `You are booked on the ${r.tour_label}.`);
+			lines.push('To change or cancel, use the "Manage my registration" link in your emails.');
+			out.replaceChildren(...lines.map((l, i) => { const p = document.createElement('p'); if (i === 0) { const s = document.createElement('strong'); s.textContent = l; p.append(s); } else p.textContent = l; return p; }));
+		} catch (e) {
+			out.textContent = (e as Error).message || `Something went wrong. Please email ${document.getElementById('confirm-panel')!.dataset.contact}.`;
+			btn.disabled = false;
+		}
+	});
+</script>
+<style>
+	.panel { margin-block: 1.5rem; }
+	.big { background: #0069a0; color: #fff; border: 0; border-radius: 0.4rem; padding: 0.9rem 1.8rem; font-size: var(--sl-text-lg); font-weight: 700; cursor: pointer; }
+	.big:disabled { opacity: 0.6; }
+</style>

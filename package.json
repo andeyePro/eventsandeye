@@ -1,0 +1,12 @@
+{
+  "name": "eventsandeye",
+  "version": "0.2.0-beta",
+  "description": "Events&I: open source event registration on Cloudflare Pages Functions, D1 and Resend, with calendar invitations, waiting lists and session hosts.",
+  "license": "AGPL-3.0-only",
+  "author": "andeye Ltd",
+  "homepage": "https://github.com/andeyePro/eventsandeye",
+  "repository": { "type": "git", "url": "https://github.com/andeyePro/eventsandeye.git" },
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=22" }
+}

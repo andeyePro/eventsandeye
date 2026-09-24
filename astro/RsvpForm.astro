@@ -1,0 +1,171 @@
+---
+// Events&I – Copyright (C) 2026 andeye Ltd. AGPL-3.0, see ../LICENSE.
+interface Props {
+	event: string;
+	/** Data controller named in the consent text, e.g. "AMYBO (andeye Ltd)". */
+	controller: string;
+	/** Contact address shown for problems. */
+	contact: string;
+	privacyHref?: string;
+}
+const { event, controller, contact, privacyHref = '/privacy/' } = Astro.props;
+const siteKey = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY || '1x00000000000000000000AA';
+---
+<form class="rsvp not-content" id="rsvp-form" data-event={event} data-contact={contact} novalidate>
+	<p class="status-line" id="rsvp-availability" aria-live="polite">Checking availability…</p>
+
+	<div class="field">
+		<label for="rsvp-name">Name <span aria-hidden="true">*</span></label>
+		<input id="rsvp-name" name="name" type="text" autocomplete="name" required maxlength="120" />
+	</div>
+	<div class="field">
+		<label for="rsvp-email">Email <span aria-hidden="true">*</span></label>
+		<input id="rsvp-email" name="email" type="email" autocomplete="email" required maxlength="254" aria-describedby="rsvp-email-help" />
+		<p class="help" id="rsvp-email-help">We will email you a link to confirm this address. Your registration is not complete until you click it.</p>
+	</div>
+
+	<fieldset class="field">
+		<legend>How will you attend? <span aria-hidden="true">*</span></legend>
+		<label class="choice"><input type="radio" name="attendance" value="in_person" required /> In person at White City</label>
+		<label class="choice"><input type="radio" name="attendance" value="remote" /> Remotely, talks only, on Google Meet</label>
+	</fieldset>
+
+	<fieldset class="field" id="rsvp-tour-fieldset">
+		<legend>Optional lab tour (in person only)</legend>
+		<p class="help">Tours have limited places. If a tour is full you can join its waiting list.</p>
+		<label class="choice"><input type="radio" name="tour_id" value="none" checked /> No tour, thanks</label>
+		<div id="rsvp-tours"></div>
+	</fieldset>
+
+	<div class="field">
+		<label for="rsvp-affiliation">Organisation or affiliation (optional)</label>
+		<input id="rsvp-affiliation" name="affiliation" type="text" autocomplete="organization" maxlength="200" />
+	</div>
+	<div class="field">
+		<label for="rsvp-needs">Dietary or access needs (optional)</label>
+		<textarea id="rsvp-needs" name="needs" rows="3" maxlength="1000"></textarea>
+	</div>
+
+	<div class="hp" aria-hidden="true">
+		<label for="rsvp-website">Leave this field empty</label>
+		<input id="rsvp-website" name="website" type="text" tabindex="-1" autocomplete="off" />
+	</div>
+
+	<div class="field consent">
+		<label class="choice">
+			<input type="checkbox" name="consent" id="rsvp-consent" required />
+			<span>I agree that {controller} may use my details to organise this event and email me about it, as described in the <a href={privacyHref}>privacy notice</a>. My details are deleted 30 days after the event. <span aria-hidden="true">*</span></span>
+		</label>
+		<label class="choice">
+			<input type="checkbox" name="share_contact" id="rsvp-share" />
+			<span>Optional: share my email address with the hosts of the sessions I attend, so they can contact me about them. Otherwise hosts see only my name.</span>
+		</label>
+	</div>
+
+	<div class="cf-turnstile" data-sitekey={siteKey} data-response-field-name="cf-turnstile-response"></div>
+
+	<p class="help"><span aria-hidden="true">*</span> Required</p>
+	<button type="submit" class="submit">Register</button>
+	<div id="rsvp-result" role="status" aria-live="polite"></div>
+	<p class="help beta">Registrations via <a href="https://github.com/andeyePro/eventsandeye">Events&amp;I</a> beta – all feedback hugely welcome at <a href={`mailto:${contact}`}>{contact}</a>.</p>
+</form>
+
+<script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+<script>
+	const form = document.getElementById('rsvp-form') as HTMLFormElement;
+	const event = form.dataset.event!;
+	const result = document.getElementById('rsvp-result')!;
+	const avail = document.getElementById('rsvp-availability')!;
+	const toursBox = document.getElementById('rsvp-tours')!;
+	const tourFs = document.getElementById('rsvp-tour-fieldset') as HTMLFieldSetElement;
+
+	function syncTour() {
+		const inPerson = (form.elements.namedItem('attendance') as RadioNodeList).value === 'in_person';
+		tourFs.disabled = !inPerson;
+		if (!inPerson) (form.querySelector('input[name=tour_id][value=none]') as HTMLInputElement).checked = true;
+	}
+	form.addEventListener('change', syncTour);
+	syncTour();
+
+	fetch(`/api/rsvp/status?event=${encodeURIComponent(event)}`)
+		.then((r) => r.json())
+		.then((s) => {
+			if (!s.ok) throw new Error(s.error);
+			if (!s.event.open) {
+				avail.textContent = 'Registration for this event has closed.';
+				form.querySelectorAll('input,textarea,button').forEach((el) => ((el as HTMLInputElement).disabled = true));
+				return;
+			}
+			const deadline = new Date(s.event.deadline).toLocaleString('en-GB', { dateStyle: 'full', timeStyle: 'short', timeZone: 'Europe/London' });
+			avail.textContent = `${s.in_person_available ? 'In-person places are available.' : 'In-person places are full: new in-person registrations join the waiting list.'} Remote places are unlimited. Registration closes ${deadline} (UK time).`;
+			for (const t of s.tours) {
+				const label = document.createElement('label');
+				label.className = 'choice';
+				const input = document.createElement('input');
+				input.type = 'radio';
+				input.name = 'tour_id';
+				input.value = t.id;
+				input.disabled = !t.open;
+				label.append(input, ` ${t.label}${!t.open ? ' (booking closed)' : t.available ? '' : ' (full: waiting list)'}`);
+				toursBox.append(label);
+			}
+		})
+		.catch(() => {
+			avail.textContent = `Could not check availability. You can still try to register, or email ${form.dataset.contact}.`;
+		});
+
+	form.addEventListener('submit', async (e) => {
+		e.preventDefault();
+		result.textContent = '';
+		if (!form.reportValidity()) return;
+		const fd = new FormData(form);
+		const body: Record<string, unknown> = Object.fromEntries(fd.entries());
+		body.event = event;
+		body.consent = (document.getElementById('rsvp-consent') as HTMLInputElement).checked;
+		body.share_contact = (document.getElementById('rsvp-share') as HTMLInputElement).checked;
+		const btn = form.querySelector('button[type=submit]') as HTMLButtonElement;
+		btn.disabled = true;
+		try {
+			const res = await fetch('/api/rsvp/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+			const data = await res.json();
+			if (!data.ok) throw new Error(data.error || 'Registration failed.');
+			form.reset();
+			syncTour();
+			result.innerHTML = '';
+			const box = document.createElement('div');
+			box.className = 'notice';
+			const h = document.createElement('p');
+			h.innerHTML = '<strong>Nearly there: check your email.</strong>';
+			const p = document.createElement('p');
+			p.textContent = `We have sent an email to ${String(fd.get('email'))}. If this is a new registration, it is not complete until you click the "Complete registration" button in that email, and unconfirmed registrations are deleted automatically. If you had already registered, the email reminds you of your registration and joining instructions. If nothing arrives within a few minutes, check your spam folder or email ${form.dataset.contact}.`;
+			box.append(h, p);
+			result.append(box);
+			box.setAttribute('tabindex', '-1');
+			box.focus();
+		} catch (err) {
+			result.textContent = (err as Error).message;
+			(window as unknown as { turnstile?: { reset: () => void } }).turnstile?.reset();
+		} finally {
+			btn.disabled = false;
+		}
+	});
+</script>
+
+<style>
+	.rsvp { display: grid; gap: 1rem; max-width: 40rem; margin-block: 1.5rem; }
+	.field { display: grid; gap: 0.35rem; border: 0; padding: 0; margin: 0; }
+	.field label:not(.choice), legend { font-weight: 600; }
+	.choice { display: flex; gap: 0.5rem; align-items: flex-start; font-weight: normal; }
+	.choice input { margin-top: 0.3rem; }
+	input[type='text'], input[type='email'], textarea {
+		padding: 0.5rem; border: 1px solid var(--sl-color-gray-3); border-radius: 0.3rem; background: var(--sl-color-bg); color: var(--sl-color-text); font: inherit;
+	}
+	fieldset:disabled { opacity: 0.6; }
+	.help { font-size: var(--sl-text-sm); color: var(--sl-color-gray-2); margin: 0; }
+	.hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+	.submit { justify-self: start; background: var(--sl-color-accent-high); color: var(--sl-color-black); border: 0; border-radius: 999px; padding: 0.7rem 1.6rem; font-weight: 700; font-size: var(--sl-text-base); cursor: pointer; }
+	:global([data-theme='light']) .submit { background: #0069a0; color: #fff; }
+	.submit:disabled { opacity: 0.6; cursor: wait; }
+	.status-line { font-weight: 600; }
+	#rsvp-result :global(.notice) { padding: 1rem; border: 2px solid var(--sl-color-accent); border-radius: 0.5rem; }
+</style>

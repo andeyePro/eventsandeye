@@ -1,0 +1,145 @@
+---
+// Events&I – Copyright (C) 2026 andeye Ltd. AGPL-3.0, see ../LICENSE.
+/** Self-service view/change/cancel page, driven by the signed token in ?t=. */
+---
+<div class="not-content" id="manage">
+	<p id="manage-loading" role="status">Loading your registration…</p>
+	<form id="manage-form" hidden novalidate>
+		<p id="manage-summary" class="summary"></p>
+		<div class="field">
+			<label for="m-name">Name</label>
+			<input id="m-name" name="name" type="text" required maxlength="120" autocomplete="name" />
+		</div>
+		<p class="help">Email: <span id="m-email"></span>. To use a different address, cancel and register again.</p>
+		<fieldset class="field">
+			<legend>How will you attend?</legend>
+			<label class="choice"><input type="radio" name="attendance" value="in_person" /> In person at White City</label>
+			<label class="choice"><input type="radio" name="attendance" value="remote" /> Remotely, talks only, on Google Meet</label>
+		</fieldset>
+		<fieldset class="field" id="m-tour-fs">
+			<legend>Optional lab tour (in person only)</legend>
+			<label class="choice"><input type="radio" name="tour_id" value="none" /> No tour, thanks</label>
+			<div id="m-tours"></div>
+		</fieldset>
+		<div class="field">
+			<label for="m-affiliation">Organisation or affiliation (optional)</label>
+			<input id="m-affiliation" name="affiliation" type="text" maxlength="200" />
+		</div>
+		<div class="field">
+			<label for="m-needs">Dietary or access needs (optional)</label>
+			<textarea id="m-needs" name="needs" rows="3" maxlength="1000"></textarea>
+		</div>
+		<label class="choice"><input type="checkbox" name="share_contact" id="m-share" /> Share my email address with the hosts of the sessions I attend</label>
+		<div id="m-calendar"></div>
+		<p class="help">Moving to a different tour, or from remote to in person, is subject to availability: if it is full you join the waiting list.</p>
+		<div class="actions">
+			<button type="submit" class="primary">Save changes</button>
+			<button type="button" id="m-cancel" class="danger">Cancel my registration</button>
+		</div>
+		<div id="manage-result" role="status" aria-live="polite"></div>
+	</form>
+</div>
+<script>
+	const t = new URLSearchParams(location.search).get('t');
+	const form = document.getElementById('manage-form') as HTMLFormElement;
+	const loading = document.getElementById('manage-loading')!;
+	const out = document.getElementById('manage-result')!;
+	const tourFs = document.getElementById('m-tour-fs') as HTMLFieldSetElement;
+
+	type View = { ok: boolean; error?: string; event: { title: string; page_path: string }; tours: { id: string; label: string; available: boolean; open: boolean }[]; registration: Record<string, string | null | boolean>; calendar: { key: string; summary: string; start: string; url: string }[] };
+
+	function describe(r: View['registration']) {
+		const parts: string[] = [];
+		parts.push(r.status === 'pending' ? 'Not yet confirmed: please click the "Complete registration" button in your email.' : 'Confirmed.');
+		if (r.attendance === 'remote') parts.push('Attending remotely.');
+		else parts.push(r.place === 'waitlist' ? 'On the in-person waiting list.' : 'In-person place.');
+		if (r.tour_label) parts.push(r.tour_place === 'waitlist' ? `Waiting list for the ${r.tour_label}.` : `Booked on the ${r.tour_label}.`);
+		return parts.join(' ');
+	}
+	function syncTour() {
+		const inPerson = (form.elements.namedItem('attendance') as RadioNodeList).value === 'in_person';
+		tourFs.disabled = !inPerson;
+		if (!inPerson) (form.querySelector('input[name=tour_id][value=none]') as HTMLInputElement).checked = true;
+	}
+	function fill(v: View) {
+		const r = v.registration;
+		document.getElementById('manage-summary')!.textContent = `${v.event.title}: ${describe(r)}`;
+		(form.elements.namedItem('name') as HTMLInputElement).value = String(r.name ?? '');
+		document.getElementById('m-email')!.textContent = String(r.email ?? '');
+		(form.elements.namedItem('affiliation') as HTMLInputElement).value = String(r.affiliation ?? '');
+		(form.elements.namedItem('needs') as HTMLTextAreaElement).value = String(r.needs ?? '');
+		const box = document.getElementById('m-tours')!;
+		box.replaceChildren(...v.tours.map((tour) => {
+			const l = document.createElement('label');
+			l.className = 'choice';
+			const i = document.createElement('input');
+			i.type = 'radio'; i.name = 'tour_id'; i.value = tour.id;
+			i.disabled = !tour.open;
+			l.append(i, ` ${tour.label}${!tour.open ? ' (booking closed)' : tour.available || tour.id === r.tour_id ? '' : ' (full: waiting list)'}`);
+			return l;
+		}));
+		(form.querySelector(`input[name=attendance][value=${r.attendance}]`) as HTMLInputElement).checked = true;
+		(form.querySelector(`input[name=tour_id][value="${r.tour_id ?? 'none'}"]`) as HTMLInputElement).checked = true;
+		(document.getElementById('m-share') as HTMLInputElement).checked = !!r.share_contact;
+		const cal = document.getElementById('m-calendar')!;
+		cal.replaceChildren();
+		if (v.calendar?.length) {
+			const p = document.createElement('p');
+			p.className = 'help';
+			p.textContent = 'Calendar files for your registration:';
+			const ul = document.createElement('ul');
+			for (const c of v.calendar) {
+				const li = document.createElement('li');
+				const a = document.createElement('a');
+				a.href = c.url;
+				a.textContent = `${c.summary} (.ics)`;
+				li.append(a);
+				ul.append(li);
+			}
+			cal.append(p, ul);
+		}
+		syncTour();
+	}
+	async function call(method: string, body?: object) {
+		const res = await fetch(method === 'GET' ? `/api/rsvp/manage?t=${encodeURIComponent(t ?? '')}` : '/api/rsvp/manage', {
+			method, headers: body ? { 'content-type': 'application/json' } : {}, body: body ? JSON.stringify({ t, ...body }) : undefined,
+		});
+		const d = await res.json();
+		if (!d.ok) throw new Error(d.error);
+		return d;
+	}
+	form.addEventListener('change', syncTour);
+	call('GET').then((v) => { loading.hidden = true; form.hidden = false; fill(v); }).catch((e) => { loading.textContent = e.message || 'This link is not valid.'; });
+
+	form.addEventListener('submit', async (e) => {
+		e.preventDefault();
+		if (!form.reportValidity()) return;
+		const fd: Record<string, unknown> = Object.fromEntries(new FormData(form).entries());
+		fd.share_contact = (document.getElementById('m-share') as HTMLInputElement).checked;
+		try { fill(await call('POST', fd)); out.textContent = 'Your changes have been saved.'; } catch (err) { out.textContent = (err as Error).message; }
+	});
+	document.getElementById('m-cancel')!.addEventListener('click', async () => {
+		if (!confirm('Cancel your registration? Your details will be deleted.')) return;
+		try {
+			await call('DELETE', {});
+			form.replaceChildren();
+			const p = document.createElement('p');
+			p.textContent = 'Your registration has been cancelled and your details deleted. We have emailed you a confirmation.';
+			form.append(p);
+		} catch (err) { out.textContent = (err as Error).message; }
+	});
+</script>
+<style>
+	#manage-form { display: grid; gap: 1rem; max-width: 40rem; margin-block: 1.5rem; }
+	.summary { font-weight: 600; }
+	.field { display: grid; gap: 0.35rem; border: 0; padding: 0; margin: 0; }
+	.field label:not(.choice), legend { font-weight: 600; }
+	.choice { display: flex; gap: 0.5rem; align-items: flex-start; }
+	.choice input { margin-top: 0.3rem; }
+	input[type='text'], textarea { padding: 0.5rem; border: 1px solid var(--sl-color-gray-3); border-radius: 0.3rem; background: var(--sl-color-bg); color: var(--sl-color-text); font: inherit; }
+	fieldset:disabled { opacity: 0.6; }
+	.help { font-size: var(--sl-text-sm); color: var(--sl-color-gray-2); margin: 0; }
+	.actions { display: flex; gap: 1rem; flex-wrap: wrap; }
+	.primary { background: #0069a0; color: #fff; border: 0; border-radius: 999px; padding: 0.6rem 1.4rem; font-weight: 700; cursor: pointer; }
+	.danger { background: transparent; color: var(--sl-color-text); border: 2px solid #b3261e; border-radius: 999px; padding: 0.5rem 1.2rem; font-weight: 700; cursor: pointer; }
+</style>
