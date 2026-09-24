@@ -1,13 +1,14 @@
 ---
 // Events&I – Copyright (C) 2026 andeye Ltd. AGPL-3.0, see ../LICENSE.
-interface Props { contact: string }
-const { contact } = Astro.props;
+interface Props { contactHref: string }
+const { contactHref } = Astro.props;
 /** Landing page for the "Complete registration" link. Confirmation is a POST behind a button, so link scanners cannot confirm. */
 ---
-<div class="not-content panel" id="confirm-panel" data-contact={contact}>
+<div class="not-content panel" id="confirm-panel" data-contact={contactHref}>
 	<p id="confirm-intro">Click the button to confirm your email address and complete your registration.</p>
 	<button type="button" id="confirm-btn" class="big">Complete registration</button>
 	<div id="confirm-result" role="status" aria-live="polite"></div>
+	<p class="help"><a href={contactHref}>Contact us</a> if something is not right.</p>
 </div>
 <script>
 	const t = new URLSearchParams(location.search).get('t');
@@ -35,7 +36,7 @@ const { contact } = Astro.props;
 			lines.push('To change or cancel, use the "Manage my registration" link in your emails.');
 			out.replaceChildren(...lines.map((l, i) => { const p = document.createElement('p'); if (i === 0) { const s = document.createElement('strong'); s.textContent = l; p.append(s); } else p.textContent = l; return p; }));
 		} catch (e) {
-			out.textContent = (e as Error).message || `Something went wrong. Please email ${document.getElementById('confirm-panel')!.dataset.contact}.`;
+			out.textContent = (e as Error).message || 'Something went wrong. Please contact us using the link below.';
 			btn.disabled = false;
 		}
 	});

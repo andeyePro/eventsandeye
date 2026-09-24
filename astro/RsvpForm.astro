@@ -4,18 +4,18 @@ interface Props {
 	event: string;
 	/** Data controller named in the consent text, e.g. "AMYBO (andeye Ltd)". */
 	controller: string;
-	/** Contact address shown for problems. */
-	contact: string;
+	/** Where to send people with problems: a mailto: or a contact-form URL. */
+	contactHref: string;
 	privacyHref?: string;
 	/** Where Events&I's source and feedback live. */
 	sourceUrl?: string;
 }
-const { event, controller, contact, privacyHref = '/privacy/', sourceUrl = 'https://github.com/andeyePro/eventsandeye' } = Astro.props;
+const { event, controller, contactHref, privacyHref = '/privacy/', sourceUrl = 'https://github.com/andeyePro/eventsandeye' } = Astro.props;
 const siteKey = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY || (import.meta.env.DEV || import.meta.env.PUBLIC_TURNSTILE_ALLOW_TEST_KEY === 'true' ? '1x00000000000000000000AA' : undefined);
 // A production build without a real site key would ship Cloudflare's always-pass test key and every registration would fail.
 if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production builds (or PUBLIC_TURNSTILE_ALLOW_TEST_KEY=true for local test builds).');
 ---
-<form class="rsvp not-content" id="rsvp-form" data-event={event} data-contact={contact} novalidate>
+<form class="rsvp not-content" id="rsvp-form" data-event={event} data-contact={contactHref} novalidate>
 	<p class="status-line" id="rsvp-availability" aria-live="polite">Checking availability…</p>
 
 	<div class="field">
@@ -71,7 +71,8 @@ if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production buil
 	<p class="help"><span aria-hidden="true">*</span> Required</p>
 	<button type="submit" class="submit">Register</button>
 	<div id="rsvp-result" role="status" aria-live="polite"></div>
-	<p class="help beta">Registrations via <a href={sourceUrl}>Events&amp;I</a> beta – all feedback hugely welcome at <a href={`mailto:${contact}`}>{contact}</a>.</p>
+	<p class="help"><a href={contactHref}>Contact us</a> if you have a problem registering.</p>
+	<p class="help beta">Registrations via <a href={sourceUrl}>Events&amp;I</a> beta – all feedback hugely welcome: <a href={contactHref}>contact us</a>.</p>
 </form>
 
 <script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
@@ -115,7 +116,7 @@ if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production buil
 			}
 		})
 		.catch(() => {
-			avail.textContent = `Could not check availability. You can still try to register, or email ${form.dataset.contact}.`;
+			avail.textContent = `Could not check availability. You can still try to register, or contact us using the link below.`;
 		});
 
 	form.addEventListener('submit', async (e) => {
@@ -141,7 +142,7 @@ if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production buil
 			const h = document.createElement('p');
 			h.innerHTML = '<strong>Nearly there: check your email.</strong>';
 			const p = document.createElement('p');
-			p.textContent = `We have sent an email to ${String(fd.get('email'))}. If this is a new registration, it is not complete until you click the "Complete registration" button in that email, and unconfirmed registrations are deleted automatically. If you had already registered, the email reminds you of your registration and joining instructions. If nothing arrives within a few minutes, check your spam folder or email ${form.dataset.contact}.`;
+			p.textContent = `We have sent an email to ${String(fd.get('email'))}. If this is a new registration, it is not complete until you click the "Complete registration" button in that email, and unconfirmed registrations are deleted automatically. If you had already registered, the email reminds you of your registration and joining instructions. If nothing arrives within a few minutes, check your spam folder or contact us using the link below.`;
 			box.append(h, p);
 			result.append(box);
 			box.setAttribute('tabindex', '-1');
