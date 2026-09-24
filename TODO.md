@@ -3,7 +3,7 @@
 ## Open
 
 - [ ] **Trial at the AMYBO get-together, 13 Nov 2026**, then leave beta: collect feedback from attendees, hosts and organisers.
-- [ ] **Spin out to github.com/andeyePro/eventsandeye** (`git subtree split --prefix=eventsandeye`), then have amybo.org consume it as a submodule or package instead of an in-repo folder.
+- [ ] **Consume from github.com/andeyePro/eventsandeye** as a submodule or package instead of the in-repo copy (the history is already pushed there with `git subtree split --prefix=eventsandeye`; keep the two in step with `git subtree push` until then).
 - [ ] **Generic programmes:** parallel sessions and tracks as well as sequential ones; several choice groups (not just `tour`); per-session attendance for multi-day events; calendar entries per chosen session when attendance is not "the whole day".
 - [ ] **Event set-up front end:** create and edit events, sessions, capacities and joining instructions from the admin page; clone an event.
 - [ ] **Events&I Plus:** fully hosted multi-tenant version (per-organisation Access, billing, custom domains, organisation branding in emails).

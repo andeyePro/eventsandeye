@@ -19,7 +19,7 @@ Made by [andeye Ltd](https://andeye.com). Licensed under the [GNU AGPL-3.0](LICE
 
 ## Using it now
 
-Events&I currently lives inside the [amybo.org website](https://github.com/amy-bo/website) repository, which is the reference integration. To add it to your own Cloudflare Pages site:
+Events&I is developed at [andeyePro/eventsandeye](https://github.com/andeyePro/eventsandeye); the [amybo.org website](https://github.com/amy-bo/website) carries a copy in `eventsandeye/` and is the reference integration. To add it to your own Cloudflare Pages site:
 
 1. **Copy or submodule** this folder into your site's repository as `eventsandeye/`.
 2. **Route the functions.** Pages Functions are file-based, so create one-line wrappers in your site's `functions/` folder, exactly as [amybo.org does](https://github.com/amy-bo/website/tree/main/functions), for example:
