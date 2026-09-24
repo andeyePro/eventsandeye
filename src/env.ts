@@ -24,6 +24,8 @@ export interface Env {
 	ACCESS_TEAM_DOMAIN?: string;
 	/** Cloudflare Access application audience (AUD) tag. */
 	ACCESS_AUD?: string;
+	/** Where people can read the Events&I source and give feedback (AGPL). */
+	EVENTSANDEYE_URL?: string;
 	/** "true" only in local development: enables the dev outbox endpoints and test keys. Never set in production. */
 	DEV_MODE?: string;
 	/** Local development only: JSON Web Key Set used instead of the Access certs URL, for tests. */
@@ -42,3 +44,4 @@ export const privacyUrl = (env: Env) => {
 /** Bare address of the sender, for the calendar ORGANIZER. */
 export const fromAddress = (env: Env) => /<([^>]+)>/.exec(emailFrom(env))?.[1] ?? emailFrom(env);
 export const VERSION = '0.2.0-beta';
+export const sourceUrl = (env: Env) => env.EVENTSANDEYE_URL || 'https://github.com/andeyePro/eventsandeye';

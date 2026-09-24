@@ -27,7 +27,7 @@ const NOTIFY = process.env.E2E_NOTIFY || 'hello@amybo.org';
 const PAGES = (process.env.E2E_PAGES || '/,/privacy/,/events/confirm/,/events/manage/').split(',').filter(Boolean);
 
 if (!existsSync('dist/index.html')) {
-	console.error('Run `npm run build` first.');
+	console.error('Run `npm run build:test` first.');
 	process.exit(1);
 }
 
@@ -172,6 +172,7 @@ try {
 	check('Alice registers', r.status === 200 && r.data.ok, JSON.stringify(r.data));
 	let mails = await mailsTo(alice);
 	check('Alice gets one confirm-your-email message', mails.length === 1 && /Complete your registration/.test(mails[0].subject));
+	check('confirm email states until when the place is held', /We are holding your place until \w+day, \d+ \w+ 2026/.test(mails[0].text_body), mails[0].text_body.slice(0, 400));
 	check('confirm email says registration is not complete, and carries the Events&I beta footer', /NOT COMPLETE YET/.test(mails[0].text_body) && /Complete registration/.test(mails[0].html_body) && /Events&amp;I<\/a> \(beta\)/.test(mails[0].html_body) && /Events&I \(beta\)/.test(mails[0].text_body));
 	const aliceConfirm = tokenFrom(mails[0].text_body, 'confirm');
 	const aliceManage = tokenFrom(mails[0].text_body, 'manage');
@@ -192,7 +193,7 @@ try {
 	check('invitation: METHOD:REQUEST, SEQUENCE:0, Europe/London VTIMEZONE', /METHOD:REQUEST/.test(ics) && /SEQUENCE:0/.test(ics) && /TZID:Europe\/London/.test(ics));
 	check('invitation starts at her 10:30 tour and ends when the talks end', icsProp(ics, 'DTSTART').at(-1)?.endsWith('20261113T103000') && icsProp(ics, 'DTEND').at(-1)?.endsWith('20261113T163000'), icsProp(ics, 'DTSTART').concat(icsProp(ics, 'DTEND')).join(' '));
 	check('in-person reminders: week, day, travel + 15 min, 15 min', ['-P7D', '-P1D', '-PT75M', '-PT15M'].every((t) => ics.includes(`TRIGGER:${t}`)));
-	check('organiser and attendee set, lines folded to 75 octets', /ORGANIZER;CN=AMYBO:mailto:hello@amybo\.org/.test(unfold(ics)) && /ATTENDEE;[^\r\n]*mailto:alice@example\.org/.test(unfold(ics)) && ics.split('\r\n').every((l) => Buffer.byteLength(l) <= 75));
+	check('organiser and attendee set, lines folded to 75 octets', /ORGANIZER;CN="AMYBO":mailto:hello@amybo\.org/.test(unfold(ics)) && /ATTENDEE;[^\r\n]*mailto:alice@example\.org/.test(unfold(ics)) && ics.split('\r\n').every((l) => Buffer.byteLength(l) <= 75));
 	check('email has add-to-calendar links for Google, Outlook, Office 365 and Yahoo plus .ics', /calendar\.google\.com\/calendar\/render/.test(m.html_body) && /outlook\.live\.com/.test(m.html_body) && /outlook\.office\.com/.test(m.html_body) && /calendar\.yahoo\.com/.test(m.html_body) && /\/api\/rsvp\/calendar\?t=/.test(m.html_body));
 	let host1 = await mailsTo('host1@example.org');
 	check('tour host gets the list with Alice in bold and her shared email', host1.length === 1 && /<strong>Alice \(Lab A\) – booked – <a href="mailto:alice@example\.org"/.test(host1[0].html_body) && /\*\*Alice \(Lab A\) – booked – alice@example\.org\*\*/.test(host1[0].text_body), host1[0]?.text_body);
@@ -238,13 +239,14 @@ try {
 	check('freed 10:30 tour place is not offered while someone waits for it', r.data.tours.find((t) => t.id === TOUR1).available === false);
 
 	console.log('\nRemote attendee: one calendar entry per online session');
-	const c = await registerAndConfirm({ name: 'Carol', email: carol, attendance: 'remote' });
+	const c = await registerAndConfirm({ name: 'Carol "CJ" Jones, PhD', email: carol, attendance: 'remote' });
 	m = await last(carol);
 	const remoteIcs = m.att.map((a) => a.content);
 	check('two invitations, one per online session', m.att.length === 2 && m.att[0].filename === 'invite-1.ics', JSON.stringify(m.att.map((a) => a.filename)));
 	check('online reminders: day, hour, 10 minutes', remoteIcs.every((x) => ['-P1D', '-PT1H', '-PT10M'].every((t) => x.includes(`TRIGGER:${t}`)) && !x.includes('TRIGGER:-P7D')));
 	check('sessions at 12:00 and 14:00 with a link-to-follow location', icsProp(remoteIcs[0], 'DTSTART').at(-1)?.endsWith('T120000') && icsProp(remoteIcs[1], 'DTSTART').at(-1)?.endsWith('T140000') && /LOCATION:Online – the link will follow/.test(unfold(remoteIcs[0])));
 	check('distinct stable UIDs', new Set(remoteIcs.map((x) => icsProp(x, 'UID')[0])).size === 2);
+	check('attendee name with comma and quotes is a quoted parameter without escapes', unfold(remoteIcs[0]).includes('ATTENDEE;CN="Carol CJ Jones, PhD";ROLE='), icsProp(remoteIcs[0], 'ATTENDEE')[0]);
 
 	console.log('\nAdmin session edits → calendar updates only where entries change');
 	const meet = 'https://meet.google.com/abc-defg-hij';
@@ -255,10 +257,14 @@ try {
 	m = await last(carol);
 	check('Carol gets one calendar update with the link, SEQUENCE:1', r.data.calendar_updates === 1 && /Calendar update/.test(m.subject) && m.att.length === 1 && /SEQUENCE:1/.test(m.att[0].content) && unfold(m.att[0].content).includes(`LOCATION:${meet}`));
 	check('in-person Alice gets nothing (her entry did not change)', (await mailsTo(alice)).length === n);
+	const pub = seeded.sessions.find((x) => x.kind === 'social');
+	r = await req('POST', '/api/admin/sessions', { event: EVENT, sessions: [{ id: pub.id, location: 'The Broadcaster; 89 Wood Lane, London' }] }, ADMIN);
+	m = await last(alice);
+	check('pub location change updates only the in-person entry, with ; and , escaped', r.data.calendar_updates === 1 && /Calendar update/.test(m.subject) && unfold(m.att[0].content).includes('The Broadcaster\\; 89 Wood Lane\\, London') && /SEQUENCE:2/.test(m.att[0].content), JSON.stringify(r.data));
 	r = await req('POST', '/api/admin/sessions', { event: EVENT, dry_run: true, sessions: [{ id: PM.id, ends_at: '2026-11-13T17:00:00Z' }] }, ADMIN);
 	check('dry run: moving the afternoon end affects in-person and remote (not waitlisted Bob)', r.data.calendar_updates === 2, JSON.stringify(r.data));
 	r = await req('POST', '/api/admin/sessions', { event: EVENT, sessions: [{ id: PM.id, ends_at: '2026-11-13T17:00:00Z' }] }, ADMIN);
-	check('both updated; Alice now ends 17:00 with SEQUENCE:2', r.data.calendar_updates === 2 && icsProp((await last(alice)).att[0].content, 'DTEND')[0]?.endsWith('T170000') && /SEQUENCE:2/.test((await last(alice)).att[0].content));
+	check('both updated; Alice now ends 17:00 with SEQUENCE:3', r.data.calendar_updates === 2 && icsProp((await last(alice)).att[0].content, 'DTEND')[0]?.endsWith('T170000') && /SEQUENCE:3/.test((await last(alice)).att[0].content));
 	check('saving unchanged sessions sends nothing', (await req('POST', '/api/admin/sessions', { event: EVENT, sessions: [{ id: PM.id, ends_at: '2026-11-13T17:00:00Z' }] }, ADMIN)).data.calendar_updates === 0);
 
 	console.log('\nAdmin: promote, instructions versions, messages');
@@ -362,6 +368,8 @@ try {
 	m = await last(carol);
 	check('cancellation confirmation cancels both calendar entries', /Registration cancelled/.test(m.subject) && m.att.length === 2 && m.att.every((a) => /METHOD:CANCEL/.test(a.content) && /STATUS:CANCELLED/.test(a.content)) && /SEQUENCE:2/.test(m.att.find((a) => a.content.includes(AM.id))?.content ?? ''));
 	check('organiser notified of the cancellation', (await mailsTo(NOTIFY)).some((x) => /Cancellation/.test(x.subject) && /Carol/.test(x.text_body)));
+	r = await req('POST', '/api/rsvp/manage', { t: bobManage, name: 'Bob', attendance: 'remote', tour_id: 'none' });
+	check('switching to remote drops a tour whose booking has closed', r.data.ok && r.data.registration.attendance === 'remote' && r.data.registration.tour_id === null, JSON.stringify(r.data));
 	r = await req('DELETE', '/api/rsvp/manage', { t: aliceManage });
 	check('Alice cancels; 11:15 host sees her struck through', r.data.ok && /~~Alice A – booked~~/.test((await last('host2@example.org')).text_body));
 	check('Alice\'s row is gone', (await req('GET', `/api/rsvp/manage?t=${encodeURIComponent(aliceManage)}`)).status === 404);

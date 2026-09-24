@@ -29,8 +29,11 @@ const LONDON_VTIMEZONE = [
 ];
 
 export function escapeText(s: string): string {
-	return s.replace(/\\/g, '\\\\').replace(/;/g, '\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+	return s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
 }
+
+/** Parameter values (RFC 5545 §3.2) cannot contain escapes: drop quotes and line breaks, then always quote. */
+export const paramValue = (v: string) => `"${v.replace(/["\r\n]/g, '').replace(/[\u0000-\u001f]/g, '')}"`;
 
 /** Fold to 75 octets per line (RFC 5545 §3.1) without splitting UTF-8 characters. */
 export function fold(line: string): string {
@@ -94,8 +97,8 @@ export function buildIcs(opts: {
 	);
 	if (entry.url) lines.push(`URL:${entry.url}`);
 	if (method !== 'PUBLISH') {
-		lines.push(`ORGANIZER;CN=${escapeText(organizer.name).replace(/[:;]/g, ' ')}:mailto:${organizer.email}`);
-		if (attendee) lines.push(`ATTENDEE;CN=${escapeText(attendee.name).replace(/[:;"]/g, ' ')};ROLE=REQ-PARTICIPANT;PARTSTAT=${method === 'CANCEL' ? 'DECLINED' : 'NEEDS-ACTION'};RSVP=FALSE:mailto:${attendee.email}`);
+		lines.push(`ORGANIZER;CN=${paramValue(organizer.name)}:mailto:${organizer.email}`);
+		if (attendee) lines.push(`ATTENDEE;CN=${paramValue(attendee.name)};ROLE=REQ-PARTICIPANT;PARTSTAT=${method === 'CANCEL' ? 'DECLINED' : 'NEEDS-ACTION'};RSVP=FALSE:mailto:${attendee.email}`);
 	}
 	if (method !== 'CANCEL') {
 		for (const a of entry.alarms) {

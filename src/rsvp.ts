@@ -1,6 +1,6 @@
 // Events&I – Copyright (C) 2026 andeye Ltd. AGPL-3.0, see ../LICENSE.
 import { attachments, entriesFor, parseState, plan, saveState } from './calendar';
-import { type Env, notifyEmail, orgName, privacyUrl, siteUrl } from './env';
+import { type Env, notifyEmail, orgName, privacyUrl, siteUrl, sourceUrl } from './env';
 import { sendBatch, sendEmail, type OutgoingEmail } from './email';
 import { syncHosts } from './hosts';
 import { buildIcs } from './ics';
@@ -22,6 +22,7 @@ export class UserError extends Error {
 
 export const brand = (env: Env): Brand => ({
 	org: orgName(env),
+	source: sourceUrl(env),
 	footer: env.ORG_FOOTER || '',
 	privacyUrl: privacyUrl(env),
 	notify: notifyEmail(env),
@@ -196,10 +197,24 @@ export async function register(env: Env, eventId: string, input: RegistrationInp
 			consent_at, created_at, updated_at, hold_expires_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 	).bind(id, ev.id, c.name, email, c.attendance, c.affiliation, c.needs, c.share_contact, 'pending', place, c.tour_id, tour_place,
 		nowS, nowS, nowS, new Date(now + holdMs(ev, now)).toISOString()).run();
+	// D1 has no row locks: if two people took the last place at the same moment, the later one moves to the waiting list.
+	const after = await capacity(env, ev, sessions, nowS);
+	if (place === 'place' && after.inPerson.held > ev.in_person_max) await demoteIfLatest(env, id, 'place');
+	const tourAfter = tour ? after.tours.find((t) => t.id === tour.id)! : null;
+	if (tour && tour_place === 'place' && tourAfter && tour.capacity != null && tourAfter.held > tour.capacity) await demoteIfLatest(env, id, 'tour_place', tour.id);
 	const reg = (await getRegistration(env, id))!;
 	const pid = await sendEmail(env, confirmEmail(brand(env), ev, reg, await confirmUrl(env, id), await manageUrl(env, id)));
 	await recordDelivery(env, id, 'confirm_email', pid);
 	return { ok: true as const };
+}
+
+/** Moves this registration to the waiting list if it is the newest of those over capacity. */
+async function demoteIfLatest(env: Env, id: string, field: 'place' | 'tour_place', tourId?: string) {
+	const reg = (await getRegistration(env, id))!;
+	const newer = await env.DB.prepare(
+		`SELECT COUNT(*) AS n FROM registrations WHERE event_id = ? AND ${field} = 'place' AND created_at > ? ${tourId ? 'AND tour_id = ?' : `AND attendance = 'in_person'`}`,
+	).bind(...[reg.event_id, reg.created_at, ...(tourId ? [tourId] : [])]).first<{ n: number }>();
+	if ((newer?.n ?? 0) === 0) await env.DB.prepare(`UPDATE registrations SET ${field} = 'waitlist' WHERE id = ?`).bind(id).run();
 }
 
 /**
@@ -330,7 +345,8 @@ export async function updateRegistration(env: Env, id: string, input: Registrati
 	let tour_place = reg.tour_place, tour_waitlist_since = reg.tour_waitlist_since;
 	if (c.tour_id !== reg.tour_id) {
 		const old = reg.tour_id ? sessions.find((s) => s.id === reg.tour_id) : null;
-		if (old && !sessionBookingOpen(old)) throw new UserError(`The ${old.label} has started or its booking has closed, so it can no longer be changed.`, 409);
+		// Switching to remote drops the tour even after its booking has closed; otherwise a closed tour cannot be changed.
+		if (old && !sessionBookingOpen(old) && c.attendance !== 'remote') throw new UserError(`The ${old.label} has started or its booking has closed, so it can no longer be changed.`, 409);
 		if (c.tour_id) {
 			const t = sessions.find((s) => s.id === c.tour_id)!;
 			if (!sessionBookingOpen(t)) throw new UserError(`Booking for the ${t.label} has closed.`, 409);

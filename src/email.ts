@@ -19,6 +19,31 @@ export interface OutgoingEmail {
 }
 
 const RESEND_URL = 'https://api.resend.com';
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * POST to Resend, pacing to its default limit of 2 requests a second and retrying on 429 or 5xx
+ * (honouring retry-after), so a calendar update to everyone does not fail part way.
+ */
+async function resendPost(env: Env, path: string, body: unknown): Promise<Response> {
+	for (let attempt = 0; ; attempt++) {
+		const res = await fetch(`${RESEND_URL}${path}`, {
+			method: 'POST',
+			headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, 'content-type': 'application/json' },
+			body: JSON.stringify(body),
+		});
+		if (res.ok) {
+			await sleep(550);
+			return res;
+		}
+		if ((res.status === 429 || res.status >= 500) && attempt < 5) {
+			const after = Number(res.headers.get('retry-after'));
+			await sleep(Number.isFinite(after) && after > 0 ? after * 1000 : 1000 * 2 ** attempt);
+			continue;
+		}
+		throw new Error(`Resend error ${res.status}: ${(await res.text()).slice(0, 300)}`);
+	}
+}
 
 const toBase64 = (s: string) => {
 	const bytes = new TextEncoder().encode(s);
@@ -67,22 +92,12 @@ export async function sendBatch(env: Env, emails: OutgoingEmail[]): Promise<stri
 	const out: string[] = new Array(emails.length);
 	for (let i = 0; i < plain.length; i += 100) {
 		const chunk = plain.slice(i, i + 100);
-		const res = await fetch(`${RESEND_URL}/emails/batch`, {
-			method: 'POST',
-			headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, 'content-type': 'application/json' },
-			body: JSON.stringify(chunk.map((x) => one(x.e))),
-		});
-		if (!res.ok) throw new Error(`Resend error ${res.status}: ${(await res.text()).slice(0, 300)}`);
+		const res = await resendPost(env, '/emails/batch', chunk.map((x) => one(x.e)));
 		const body = (await res.json()) as { data?: { id: string }[] };
 		(body.data ?? []).forEach((d, k) => (out[chunk[k].i] = d.id));
 	}
 	for (const x of withFiles) {
-		const res = await fetch(`${RESEND_URL}/emails`, {
-			method: 'POST',
-			headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, 'content-type': 'application/json' },
-			body: JSON.stringify(one(x.e)),
-		});
-		if (!res.ok) throw new Error(`Resend error ${res.status}: ${(await res.text()).slice(0, 300)}`);
+		const res = await resendPost(env, '/emails', one(x.e));
 		out[x.i] = ((await res.json()) as { id: string }).id;
 	}
 	for (const id of out) ids.push(id);

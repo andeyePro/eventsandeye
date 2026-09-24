@@ -1,5 +1,5 @@
 // Events&I – Copyright (C) 2026 andeye Ltd. AGPL-3.0, see ../LICENSE.
-import type { Env } from './env';
+import { type Env, notifyEmail } from './env';
 import { UserError } from './rsvp';
 import { bad, json } from './util';
 
@@ -14,7 +14,7 @@ export function handle(fn: (ctx: Ctx) => Promise<Response | unknown>) {
 		} catch (e) {
 			if (e instanceof UserError) return bad(e.message, e.status);
 			console.error(e);
-			return bad('Something went wrong. Please try again, or email hello@amybo.org.', 500);
+			return bad(`Something went wrong. Please try again, or email ${notifyEmail(ctx.env)}.`, 500);
 		}
 	};
 }

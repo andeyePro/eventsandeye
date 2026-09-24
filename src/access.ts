@@ -10,11 +10,13 @@ import { base64urlDecode } from './util';
 interface Jwk { kid: string; kty: string; n: string; e: string; alg?: string }
 let cache: { url: string; keys: Jwk[]; at: number } | null = null;
 
-async function keys(env: Env): Promise<Jwk[]> {
+async function keys(env: Env, force = false): Promise<Jwk[]> {
 	if (isDev(env) && env.ACCESS_JWKS_JSON) return (JSON.parse(env.ACCESS_JWKS_JSON) as { keys: Jwk[] }).keys;
 	if (!env.ACCESS_TEAM_DOMAIN) return [];
 	const url = `https://${env.ACCESS_TEAM_DOMAIN}/cdn-cgi/access/certs`;
-	if (cache && cache.url === url && Date.now() - cache.at < 3600_000) return cache.keys;
+	if (!force && cache && cache.url === url && Date.now() - cache.at < 3600_000) return cache.keys;
+	// After a key rotation, refetch at most once a minute.
+	if (force && cache && cache.url === url && Date.now() - cache.at < 60_000) return cache.keys;
 	const res = await fetch(url);
 	if (!res.ok) return cache?.keys ?? [];
 	const body = (await res.json()) as { keys: Jwk[] };
@@ -35,7 +37,7 @@ export async function verifyAccess(env: Env, request: Request): Promise<string |
 		return null;
 	}
 	if (header.alg !== 'RS256') return null;
-	const jwk = (await keys(env)).find((k) => k.kid === header.kid);
+	const jwk = (await keys(env)).find((k) => k.kid === header.kid) ?? (await keys(env, true)).find((k) => k.kid === header.kid);
 	if (!jwk) return null;
 	const key = await crypto.subtle.importKey('jwk', { kty: jwk.kty, n: jwk.n, e: jwk.e, alg: 'RS256', ext: true }, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify']);
 	const ok = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', key, base64urlDecode(parts[2]), new TextEncoder().encode(`${parts[0]}.${parts[1]}`));

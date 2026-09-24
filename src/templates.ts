@@ -63,6 +63,7 @@ export interface RegistrationRow {
 /** Organisation details for email chrome. */
 export interface Brand {
 	org: string;
+	source: string;
 	footer: string;
 	privacyUrl: string;
 	notify: string;
@@ -76,7 +77,7 @@ export interface CalendarBlock {
 const BLUE = '#0069a0'; // AA contrast with white text
 
 const poweredBy = (b: Brand) =>
-	`Registrations via <a href="https://github.com/andeyePro/eventsandeye">Events&amp;I</a> (beta) – all feedback hugely welcome at <a href="mailto:${escapeHtml(b.notify)}">${escapeHtml(b.notify)}</a>.`;
+	`Registrations via <a href="${escapeHtml(b.source)}">Events&amp;I</a> (beta) – all feedback hugely welcome at <a href="mailto:${escapeHtml(b.notify)}">${escapeHtml(b.notify)}</a>.`;
 const poweredByText = (b: Brand) => `Registrations via Events&I (beta) – all feedback hugely welcome: ${b.notify}`;
 
 function layout(b: Brand, title: string, bodyHtml: string, extraFooter = ''): string {
@@ -132,7 +133,7 @@ export function confirmEmail(b: Brand, ev: EventRow, reg: RegistrationRow, confi
 <h1 style="font-size:22px;margin-top:0">Please complete your registration</h1>
 <p>Hello ${escapeHtml(reg.name)},</p>
 <p>Thanks for registering for the <strong>${escapeHtml(ev.title)}</strong> on ${escapeHtml(ukDateTime(ev.starts_at, ev.timezone))}.</p>
-<p><strong>Your registration is not complete yet.</strong> Please confirm your email address by clicking the button below. Until you do, we are holding your place, and unconfirmed registrations are deleted automatically.</p>
+<p><strong>Your registration is not complete yet.</strong> Please confirm your email address by clicking the button below. We are holding your place until ${escapeHtml(ukDateTime(reg.hold_expires_at ?? ev.deadline, ev.timezone))}; after that, an unconfirmed registration is deleted automatically.</p>
 ${button(confirmUrl, 'Complete registration')}
 <p style="font-size:14px">If the button does not work, copy this link into your browser:<br><a href="${escapeHtml(confirmUrl)}">${escapeHtml(confirmUrl)}</a></p>
 <p style="font-size:14px">You can view, change or cancel your registration at any time: <a href="${escapeHtml(manageUrl)}">manage my registration</a>.</p>
@@ -144,7 +145,7 @@ Thanks for registering for the ${ev.title} on ${ukDateTime(ev.starts_at, ev.time
 YOUR REGISTRATION IS NOT COMPLETE YET. Please confirm your email address by opening this link and clicking "Complete registration":
 ${confirmUrl}
 
-Until you do, we are holding your place, and unconfirmed registrations are deleted automatically.
+We are holding your place until ${ukDateTime(reg.hold_expires_at ?? ev.deadline, ev.timezone)}; after that, an unconfirmed registration is deleted automatically.
 
 View, change or cancel your registration: ${manageUrl}
 

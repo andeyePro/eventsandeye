@@ -35,6 +35,6 @@ Events&I Plus and other terms where the AGPL cannot reach. The numbered clauses 
 `CLA.md` are what actually binds; the summary box at the top of that file is
 friendly, not authoritative.
 
-The CLA Assistant check runs on every pull request and will ask you to agree
-once. Please read `CLA.md` before you do.
+To agree, add your name to `CONTRIBUTORS.md` in your first pull request, or say
+so in the pull request description. Please read `CLA.md` before you do.
 

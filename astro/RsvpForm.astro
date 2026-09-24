@@ -7,9 +7,13 @@ interface Props {
 	/** Contact address shown for problems. */
 	contact: string;
 	privacyHref?: string;
+	/** Where Events&I's source and feedback live. */
+	sourceUrl?: string;
 }
-const { event, controller, contact, privacyHref = '/privacy/' } = Astro.props;
-const siteKey = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY || '1x00000000000000000000AA';
+const { event, controller, contact, privacyHref = '/privacy/', sourceUrl = 'https://github.com/andeyePro/eventsandeye' } = Astro.props;
+const siteKey = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY || (import.meta.env.DEV || import.meta.env.PUBLIC_TURNSTILE_ALLOW_TEST_KEY === 'true' ? '1x00000000000000000000AA' : undefined);
+// A production build without a real site key would ship Cloudflare's always-pass test key and every registration would fail.
+if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production builds (or PUBLIC_TURNSTILE_ALLOW_TEST_KEY=true for local test builds).');
 ---
 <form class="rsvp not-content" id="rsvp-form" data-event={event} data-contact={contact} novalidate>
 	<p class="status-line" id="rsvp-availability" aria-live="polite">Checking availability…</p>
@@ -67,7 +71,7 @@ const siteKey = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY || '1x0000000000000000
 	<p class="help"><span aria-hidden="true">*</span> Required</p>
 	<button type="submit" class="submit">Register</button>
 	<div id="rsvp-result" role="status" aria-live="polite"></div>
-	<p class="help beta">Registrations via <a href="https://github.com/andeyePro/eventsandeye">Events&amp;I</a> beta – all feedback hugely welcome at <a href={`mailto:${contact}`}>{contact}</a>.</p>
+	<p class="help beta">Registrations via <a href={sourceUrl}>Events&amp;I</a> beta – all feedback hugely welcome at <a href={`mailto:${contact}`}>{contact}</a>.</p>
 </form>
 
 <script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
