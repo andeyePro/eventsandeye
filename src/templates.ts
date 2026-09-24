@@ -237,11 +237,11 @@ export function hostListEmail(b: Brand, ev: EventRow, s: SessionRow, current: Ho
 <p><strong>${current.length}</strong> registered${s.capacity != null ? ` of ${s.capacity} places` : ''}:</p>
 <ol>${current.map(row).join('')}</ol>
 ${removed.length ? `<p>Removed:</p><ul>${removed.map((l) => `<li><s>${escapeHtml(l.name)} – ${escapeHtml(l.detail)}</s></li>`).join('')}</ul>` : ''}
-<p style="font-size:13px">Emails are shown only for people who agreed to share them with session hosts. Please use this list only for this session, and delete it afterwards.</p>`);
+<p style="font-size:13px">Emails are shown only for people who agreed to share them with session hosts. If plans change at the last minute, please tell the organisers at ${escapeHtml(b.notify)} so they can reach everyone else. Please use this list only for this session, and delete it afterwards.</p>`);
 	const text = `The list for ${s.label} (${ukDateTime(s.starts_at, ev.timezone)}) has changed. Added or changed people are marked **like this**, removed people ~~like this~~.\n\n${current.length} registered${s.capacity != null ? ` of ${s.capacity} places` : ''}:\n${current.map((l, i) => {
 		const t = `${l.name} – ${l.detail}${l.email ? ` – ${l.email}` : ''}`;
 		return `${i + 1}. ${added.has(l.id) || changedDetail.has(l.id) ? `**${t}**` : t}`;
-	}).join('\n')}${removed.length ? `\n\nRemoved:\n${removed.map((l) => `- ~~${l.name} – ${l.detail}~~`).join('\n')}` : ''}\n\nEmails are shown only for people who agreed to share them with session hosts. Please use this list only for this session, and delete it afterwards.${textFooter(b)}`;
+	}).join('\n')}${removed.length ? `\n\nRemoved:\n${removed.map((l) => `- ~~${l.name} – ${l.detail}~~`).join('\n')}` : ''}\n\nEmails are shown only for people who agreed to share them with session hosts. If plans change at the last minute, please tell the organisers at ${b.notify} so they can reach everyone else. Please use this list only for this session, and delete it afterwards.${textFooter(b)}`;
 	return { to: s.host_email!, subject, html, text };
 }
 
