@@ -15,6 +15,8 @@ export interface EventRow {
 	deadline: string;
 	travel_minutes: number;
 	page_path: string;
+	/** Optional free-text question shown on the booking form (null = none). */
+	extra_question?: string | null;
 }
 
 export interface SessionRow {
@@ -43,6 +45,7 @@ export interface RegistrationRow {
 	attendance: 'in_person' | 'remote';
 	affiliation: string | null;
 	needs: string | null;
+	extra_answer?: string | null;
 	share_contact: number;
 	status: 'pending' | 'confirmed';
 	place: 'place' | 'waitlist' | null;

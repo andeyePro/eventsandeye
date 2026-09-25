@@ -49,6 +49,10 @@ if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production buil
 		<label for="rsvp-needs">Dietary or access needs (optional)</label>
 		<textarea id="rsvp-needs" name="needs" rows="3" maxlength="1000"></textarea>
 	</div>
+	<div class="field" id="rsvp-extra-field" hidden>
+		<label for="rsvp-extra" id="rsvp-extra-label">Anything else (optional)</label>
+		<textarea id="rsvp-extra" name="extra_answer" rows="2" maxlength="500"></textarea>
+	</div>
 
 	<div class="hp" aria-hidden="true">
 		<label for="rsvp-website">Leave this field empty</label>
@@ -100,6 +104,10 @@ if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production buil
 				avail.textContent = 'Registration for this event has closed.';
 				form.querySelectorAll('input,textarea,button').forEach((el) => ((el as HTMLInputElement).disabled = true));
 				return;
+			}
+			if (s.event.extra_question) {
+				(document.getElementById('rsvp-extra-label') as HTMLElement).textContent = `${s.event.extra_question} (optional)`;
+				(document.getElementById('rsvp-extra-field') as HTMLElement).hidden = false;
 			}
 			const deadline = new Date(s.event.deadline).toLocaleString('en-GB', { dateStyle: 'full', timeStyle: 'short', timeZone: 'Europe/London' });
 			avail.textContent = `${s.in_person_available ? 'In-person places are available.' : 'In-person places are full: new in-person registrations join the waiting list.'} Remote places are unlimited. Registration closes ${deadline} (UK time).`;

@@ -143,7 +143,7 @@ try {
 	const TOUR1 = tours[0].id, TOUR2 = tours[1].id;
 	const core = seeded.sessions.filter((s) => !s.choice_group && s.kind !== 'social');
 	const AM = core[0], PM = core[1];
-	check('seeded in-person maximum and tour capacities', seeded.event.in_person_max === 20 && tours.every((t) => t.capacity === 6), JSON.stringify({ max: seeded.event.in_person_max, tours: tours.map((t) => t.capacity) }));
+	check('seeded in-person maximum and tour capacities', seeded.event.in_person_max === 20 && tours.every((t) => t.capacity === 10), JSON.stringify({ max: seeded.event.in_person_max, tours: tours.map((t) => t.capacity) }));
 	check('summary without an event id falls back to the latest event', (await req('GET', '/api/admin/summary', undefined, ADMIN)).data.event?.id === EVENT);
 	r = await req('POST', '/api/admin/settings', { event: EVENT, in_person_max: 1 }, ADMIN);
 	check('in-person maximum set to 1', r.data.ok, JSON.stringify(r.data));
@@ -168,7 +168,7 @@ try {
 
 	console.log('\nConfirm → place, joining instructions and calendar invitation');
 	const alice = 'alice@example.org', bob = 'bob@example.org', carol = 'carol@example.org';
-	r = await register({ name: 'Alice', email: alice, tour_id: TOUR1, affiliation: 'Lab A', needs: 'Vegan', share_contact: true });
+	r = await register({ name: 'Alice', email: alice, tour_id: TOUR1, affiliation: 'Lab A', needs: 'Vegan', share_contact: true, extra_answer: 'A walk on Saturday' });
 	check('Alice registers', r.status === 200 && r.data.ok, JSON.stringify(r.data));
 	let mails = await mailsTo(alice);
 	check('Alice gets one confirm-your-email message', mails.length === 1 && /Complete your registration/.test(mails[0].subject));

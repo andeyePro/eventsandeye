@@ -10,7 +10,7 @@ export const onRequestGet = handle(async ({ env, request }) => {
 	const cap = await capacity(env, ev, sessions);
 	return {
 		ok: true,
-		event: { id: ev.id, title: ev.title, starts_at: ev.starts_at, deadline: ev.deadline, open: registrationOpen(ev) },
+		event: { id: ev.id, title: ev.title, starts_at: ev.starts_at, deadline: ev.deadline, open: registrationOpen(ev), extra_question: ev.extra_question ?? null },
 		in_person_available: cap.inPerson.available,
 		tours: cap.tours.map((t) => ({ id: t.id, label: t.label, available: t.available, open: t.open })),
 	};
