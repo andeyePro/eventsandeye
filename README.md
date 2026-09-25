@@ -2,7 +2,7 @@
 
 Free, open source event registration for small community events, running entirely on your own Cloudflare account: Cloudflare Pages Functions, a D1 database and a small cron Worker, with emails sent through [Resend](https://resend.com).
 
-> **Beta.** Events&I is in use for the first time for the [AMYBO get-together on 13 November 2026](https://amybo.org/events/2026-11-13-london/). It stays in beta until it has been through that event. All feedback is hugely welcome: [open an issue](https://github.com/andeyePro/eventsandeye/issues) or email hello@amybo.org.
+> **Beta.** Events&I is in use for the first time for the [AMYBO get-together on 13 November 2026](https://amybo.org/events/2026-11-13-london/). It stays in beta until it has been through that event. All feedback is hugely welcome: [open an issue](https://github.com/andeyePro/eventsandeye/issues) or [send a message](https://contact.andeye.com/?source=eventsandeye&subject=Events%26I%20feedback).
 
 Made by [andeye Ltd](https://andeye.com). Licensed under the [GNU AGPL-3.0](LICENSE); contributions under the [andeye CLA](CLA.md).
 
@@ -44,7 +44,7 @@ The amybo.org [README](https://github.com/amy-bo/website#setting-up-cloudflare-f
 
 ## Coming soon – contact us if you need it sooner
 
-Email hello@amybo.org or [open an issue](https://github.com/andeyePro/eventsandeye/issues) if you need any of these before they arrive:
+[Send a message](https://contact.andeye.com/?source=eventsandeye&subject=Events%26I%20request) or [open an issue](https://github.com/andeyePro/eventsandeye/issues) if you need any of these before they arrive:
 
 - **Any programme shape:** parallel sessions and tracks as well as sequential ones, several optional choice groups, per-session registration for multi-day events.
 - **An event set-up front end:** create events, sessions and joining instructions in the admin page instead of SQL.

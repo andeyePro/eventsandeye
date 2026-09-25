@@ -12,7 +12,6 @@
 - [ ] **Waiting lists:** optional auto-promotion with an expiry window, as a per-event setting (off by default).
 - [ ] **Accessibility review** of the Astro components in a real browser, including colour contrast (the axe scan in jsdom cannot check contrast).
 - [ ] **Host changes:** when a session's host email changes, tell the previous host to delete the list they were sent.
-- [ ] **Sitemap:** exclude `/events/confirm/` and `/events/manage/` (they are `noindex`).
 - [ ] **Framework-neutral components:** plain HTML/JS versions of the booking, confirm and manage panels for non-Astro sites.
 - [ ] **Packaging:** publish to npm with typed exports for the route handlers.
 
