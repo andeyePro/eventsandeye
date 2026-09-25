@@ -25,6 +25,9 @@ async function keys(env: Env, force = false): Promise<Jwk[]> {
 }
 
 export async function verifyAccess(env: Env, request: Request): Promise<string | null> {
+	// Local development only, with no Access keys configured: let the admin page open in a browser for a demo.
+	// The e2e tests set ACCESS_JWKS_JSON, so they still exercise the JWT path. Never set DEV_MODE on the live site.
+	if (isDev(env) && !env.ACCESS_JWKS_JSON) return 'dev@localhost';
 	const token = request.headers.get('cf-access-jwt-assertion');
 	if (!token || !env.ACCESS_AUD) return null;
 	const parts = token.split('.');
