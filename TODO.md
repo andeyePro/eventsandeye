@@ -7,6 +7,7 @@
 - [ ] **Event set-up front end:** create and edit events, sessions, capacities and joining instructions from the admin page; clone an event.
 - [ ] **Time zones:** VTIMEZONE blocks for zones other than Europe/London (currently other zones fall back to UTC times).
 - [ ] **Calendar delivery:** test the invitation rendering in Gmail, Outlook (web and desktop), Apple Mail and Thunderbird with real Resend sends; consider a `text/calendar` alternative MIME part if Resend adds support.
+- [ ] **Events&I Plus:** fully hosted multi-tenant version (per-organisation Access, billing, custom domains, organisation branding in emails).
 - [ ] **Waiting lists:** optional auto-promotion with an expiry window, as a per-event setting (off by default).
 - [ ] **Accessibility review** of the Astro components in a real browser, including colour contrast (the axe scan in jsdom cannot check contrast).
 - [ ] **Host changes:** when a session's host email changes, tell the previous host to delete the list they were sent.

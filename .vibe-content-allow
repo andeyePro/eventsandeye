@@ -5,3 +5,5 @@
 TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
 # A file name, not an mDNS host name.
 \.claude/settings\.local\.json
+# AMYBO's public contact address (the worked example and the e2e defaults)
+.*hello@amybo\.org.*

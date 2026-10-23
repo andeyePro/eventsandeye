@@ -11,51 +11,51 @@ hero:
   cta_setup_label: Set it up from GitHub
   cta_setup_href: "https://github.com/andeyePro/eventsandeye#set-it-up"
   cta_inuse_label: See it in use
-  cta_inuse_href: "https://amybo.org/events/"
+  cta_inuse_href: "https://amy.bo/event"
   cta_andeye_label: More from andeye
   sub_default: Built for meetups, open days, workshops and lab tours with tens of people, not thousands.
   sub_setup: Free and open source. The README walks you through Cloudflare, Resend and the admin page, step by step.
-  sub_inuse: AMYBO, a non-profit sustainable protein community, uses Events&I for its events.
+  sub_inuse: "AMYBO, a non-profit sustainable protein community, takes registrations for its 13 November event with Events&I."
   sub_andeye: From the makers of Time&I and Vibe&I.
   fineprint: Free and open source under the AGPL-3.0. Early release, and feedback is very welcome.
   see_journey_label: "▾ follow a registration from sign-up to the day"
 journey:
   eyebrow: How it works
   h2: From sign-up to the day
-  lede: Click a step to see what your attendee gets. Every email is short, has their personal link, and only goes out when something has actually changed for them.
+  lede: Click a step to see what an attendee gets, using AMYBO's event as the example. Every email is short, has their personal link, and only goes out when something has actually changed for them.
   window_title: Inbox
   steps:
     - id: register
       label: Register
       who: Attendee
-      desc: On your event page, they choose in person or remote, pick a lab tour, tick the dinner and agree to the privacy notice.
-      from: Example Organisers
-      subject: "Complete your registration: Example Community Day"
+      desc: On the event page, they choose in person or remote, pick a lab tour, tick the dinner and agree to the privacy notice.
+      from: AMYBO
+      subject: "Complete your registration: AMYBO Event, London"
       body:
-        - "Someone, hopefully you, registered this address for the Example Community Day on Friday, 5 March 2027 at 10:00."
+        - "Someone, hopefully you, registered this address for the AMYBO Event, London on Friday, 13 November 2026 at 10:30."
         - "Your registration is not complete yet. Please click the button below now to confirm your email address."
-        - "You are confirming: an in-person place is held for you; a place is held for you on the 10:00 workshop tour; you would like to join us for dinner."
+        - "You are confirming: an in-person place is held for you; a place is held for you on the 10:30 lab tour; you would like to join us for dinner."
       button: Complete registration
     - id: confirm
       label: Confirm
       who: Attendee
       desc: Double opt-in. The place is held until they click, then their joining instructions arrive with calendar invitations.
-      from: Example Organisers
-      subject: "Joining instructions: Example Community Day, 5 March 2027"
+      from: AMYBO
+      subject: "Joining instructions: AMYBO Event, 13 November 2026"
       body:
-        - "Thank you for registering for the Example Community Day, on Friday 5 March 2027."
-        - "You have an in-person place. You are booked on the 10:00 workshop tour. You would like to join us for dinner."
-        - "Where: Example Hall, 1 Example Street, Glasgow. Please sign in at reception."
-        - "Your calendar: Example Community Day, and Dinner at The Example Arms. Add to Google, Outlook, Office 365, Yahoo or Apple."
+        - "Thank you for registering for the AMYBO Event, London, on Friday 13 November 2026."
+        - "You have an in-person place. You are booked on the 10:30 lab tour. You would like to join us for dinner."
+        - "Where: Room 516, the I-HUB, Imperial College White City campus, 84 Wood Lane, London W12 0BZ. Please sign in at reception, then come up to Room 516."
+        - "Your calendar: AMYBO Event, London, and Dinner at The Hawk's Nest. Add to Google, Outlook, Office 365, Yahoo or Apple."
       button: Manage my registration
     - id: waitlist
       label: Waiting list
       who: Attendee
       desc: When the room, a tour or the dinner is full, they join its waiting list, and you decide who gets a freed place.
-      from: Example Organisers
-      subject: "Your registration: Example Community Day"
+      from: AMYBO
+      subject: "Your registration: AMYBO Event, London"
       body:
-        - "Thank you for confirming your registration for the Example Community Day."
+        - "Thank you for confirming your registration for the AMYBO Event, London."
         - "You will receive joining instructions if a place becomes available."
         - "You are joining us for dinner only."
         - "You are on the waiting list for dinner. We will email you if a place becomes available."
@@ -64,23 +64,23 @@ journey:
       label: A change
       who: Organiser
       desc: Move a session or change a room on the admin page. Only the people whose calendar entries change hear about it.
-      from: Example Organisers
-      subject: "Calendar update: Example Community Day"
+      from: AMYBO
+      subject: "Calendar update: AMYBO Event, London"
       body:
-        - "Your calendar entries for the Example Community Day have changed:"
-        - "Example Community Day: Dinner: now Friday, 5 March 2027 at 18:00, The Example Arms, 2 Example Street, Glasgow."
+        - "Your calendar entries for the AMYBO Event, London have changed:"
+        - "AMYBO Event, London: Dinner: now Friday, 13 November 2026 at 17:30, The Hawk's Nest, Goldhawk Road, Shepherd's Bush Market, London W12 8DF."
         - "The attached invitations update your calendar."
       button: Manage my registration
     - id: host
       label: Session hosts
       who: Host
       desc: Whoever leads a tour gets the list of who is coming whenever it changes, with additions in bold and removals struck through.
-      from: Example Organisers
-      subject: "Attendee list changed: 10:00 workshop tour, Example Community Day"
+      from: AMYBO
+      subject: "Attendee list changed: 10:30 lab tour, AMYBO Event, London"
       body:
-        - "The list for 10:00 workshop tour (Friday, 5 March 2027 at 10:00) has changed. Changes are in bold (added or changed) or struck through (removed)."
-        - "7 registered of 8 places: 1. Robin Example – booked … 7. **Sam Example – booked** (new)"
-        - "Removed: ~~Alex Example – booked~~"
+        - "The list for 10:30 lab tour (Friday, 13 November 2026 at 10:30) has changed. Changes are in bold (added or changed) or struck through (removed)."
+        - "7 registered of 10 places: 1. Robin A. – booked … 7. **Sam K. – booked** (new)"
+        - "Removed: ~~Alex M. – booked~~"
       button: null
 features:
   eyebrow: What you get

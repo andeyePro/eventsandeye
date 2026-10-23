@@ -5,11 +5,15 @@
  * Emails go to the dev outbox (DEV_MODE), Turnstile uses Cloudflare's always-pass test secret, and the admin
  * tests mint their own Access JWTs with a throwaway RSA key.
  *
- * Run it from the site that hosts Events&I (in `eventsandeye/`), after building the site. Settings:
- *   E2E_DB      D1 database name in your wrangler.toml       (events)
+ * Configure with environment variables (defaults suit the amybo.org site):
+ *   E2E_DB      D1 database name in wrangler.toml          (amybo-rsvp-eu)
+ *   E2E_SEED    SQL file that creates the event under test  (seed/2026-11-13-london.sql)
+ *   E2E_EVENT   event id                                    (2026-11-13-london)
+ *   E2E_NOTIFY  NOTIFY_EMAIL configured in wrangler.toml    (hello@amybo.org)
  *   E2E_PAGES   comma-separated site pages that must load   (/,/privacy/,/events/confirm/,/events/manage/)
- * The test creates its own fictional event from eventsandeye/tests/seed.e2e.sql, and sets the organiser's name and
- * address itself, so it never touches your real events or settings.
+ * The checks expect AMYBO's event and organiser name. From another site, set E2E_SEED=eventsandeye/examples/seed.example.sql
+ * (a copy of that event), E2E_DB and E2E_NOTIFY to your own, and ORG_NAME=AMYBO in .dev.vars.
+ * The seed must define a 'tour' choice group with at least two sessions, and hybrid core sessions.
  */
 import { spawn, execFileSync } from 'node:child_process';
 import { generateKeyPairSync, sign, randomUUID, randomBytes, createHmac } from 'node:crypto';
@@ -18,11 +22,10 @@ import { existsSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 const PORT = 8788;
 const BASE = `http://127.0.0.1:${PORT}`;
 const PERSIST = '.wrangler/e2e-state';
-const DB = process.env.E2E_DB || 'events';
-const SEED = new URL('./seed.e2e.sql', import.meta.url).pathname;
-const EVENT = '2030-11-13-example';
-const ORG = 'Example Organisers';
-const NOTIFY = 'organisers@example.org';
+const DB = process.env.E2E_DB || 'amybo-rsvp-eu';
+const SEED = process.env.E2E_SEED || 'seed/2026-11-13-london.sql';
+const EVENT = process.env.E2E_EVENT || '2026-11-13-london';
+const NOTIFY = process.env.E2E_NOTIFY || 'hello@amybo.org';
 const PAGES = (process.env.E2E_PAGES || '/,/privacy/,/events/confirm/,/events/manage/').split(',').filter(Boolean);
 
 if (!existsSync('dist/index.html')) {
@@ -38,9 +41,6 @@ const devVarsBackup = existsSync('.dev.vars') ? readFileSync('.dev.vars', 'utf8'
 const TOKEN_SECRET = randomBytes(32).toString('hex');
 writeFileSync('.dev.vars', [
 	'DEV_MODE=true',
-	`ORG_NAME=${ORG}`,
-	`NOTIFY_EMAIL=${NOTIFY}`,
-	`EMAIL_FROM=${ORG} <${NOTIFY}>`,
 	`SITE_URL=${BASE}`,
 	`TOKEN_SECRET=${TOKEN_SECRET}`,
 	'TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA',
@@ -223,8 +223,8 @@ try {
 	r = await req('POST', '/api/rsvp/confirm', { t: tokenFrom(dm.text_body, 'confirm') });
 	check('confirm page result knows it is dinner only', r.data.ok && r.data.registration.mode === 'extras' && r.data.registration.place === null, JSON.stringify(r.data));
 	dm = await last(dina);
-	check('dinner-only instructions: the dinner section, not the day (no room, no tour)', /Joining instructions/.test(dm.subject) && /The Example Arms/.test(dm.text_body) && !/Room 12|Closed shoes/.test(dm.text_body) && !/lab tour/.test(dm.text_body), dm.text_body.slice(0, 900));
-	check('one calendar invitation, for the dinner, at the dinner\'s place', dm.att.length === 1 && /SUMMARY:[^\r\n]*Dinner/.test(dm.att[0].content) && /LOCATION:[^\r\n]*Example Arms/.test(dm.att[0].content), dm.att.map((x) => (/SUMMARY:[^\r\n]*/.exec(x.content) || [''])[0]).join(' | '));
+	check('dinner-only instructions: the dinner section, not the day (no room, no tour)', /Joining instructions/.test(dm.subject) && /The Hawk's Nest/.test(dm.text_body) && !/Room 516|Closed shoes/.test(dm.text_body) && !/lab tour/.test(dm.text_body), dm.text_body.slice(0, 900));
+	check('one calendar invitation, for the dinner, at the dinner\'s place', dm.att.length === 1 && /SUMMARY:[^\r\n]*Dinner/.test(dm.att[0].content) && /LOCATION:[^\r\n]*Hawk/.test(dm.att[0].content), dm.att.map((x) => (/SUMMARY:[^\r\n]*/.exec(x.content) || [''])[0]).join(' | '));
 	let sumD = (await req('GET', `/api/admin/summary?event=${EVENT}`, undefined, ADMIN)).data;
 	check('dinner only takes no room place and joins no waiting list', sumD.capacity.inPerson.held === heldBefore && sumD.registrations.find((x) => x.email === dina).place === null && sumD.registrations.find((x) => x.email === dina).tour_id === null);
 	const dinaManage = await manageOf(dina);
@@ -308,17 +308,17 @@ try {
 	  check('the same link before its expiry works', (await req('GET', `/api/rsvp/manage?t=${encodeURIComponent(tokenWithExpiry('manage', aid, Math.floor(Date.now() / 1000) + 3600))}`)).status === 200); }
 	let m = await last(alice);
 	check('Alice receives joining instructions', /Joining instructions/.test(m.subject) && /You have an in-person place/.test(m.text_body));
-	check('instructions open with thanks, then her status, including dinner', /Thank you for registering for the [^\n]+, on \w+day \d+ \w+ 2030\.\n\nYou have an in-person place\.\nYou are booked on the 10:30 lab tour\.\nYou would like to join us for dinner\./.test(m.text_body), JSON.stringify(m.text_body.slice(0, 400)));
-	check('in-person instructions carry the in-person section only', /Room 12/.test(m.text_body) && !/Joining remotely/.test(m.text_body) && !/:::/.test(m.text_body));
-	check('…with a calendar invitation for the day, and one for the dinner she signed up for', m.att.length === 2 && m.att.every((a) => /method=REQUEST/.test(a.content_type)) && m.att.some((a) => /SUMMARY:[^\r\n]*Dinner/.test(a.content) && /LOCATION:[^\r\n]*Example Arms/.test(a.content)), JSON.stringify(m.att.map((a) => a.filename)));
+	check('instructions open with thanks, then her status, including dinner', /Thank you for registering for the [^\n]+, on \w+day \d+ \w+ 2026\.\n\nYou have an in-person place\.\nYou are booked on the 10:30 lab tour\.\nYou would like to join us for dinner\./.test(m.text_body), JSON.stringify(m.text_body.slice(0, 400)));
+	check('in-person instructions carry the in-person section only', /Room 516/.test(m.text_body) && !/Joining remotely/.test(m.text_body) && !/:::/.test(m.text_body));
+	check('…with a calendar invitation for the day, and one for the dinner she signed up for', m.att.length === 2 && m.att.every((a) => /method=REQUEST/.test(a.content_type)) && m.att.some((a) => /SUMMARY:[^\r\n]*Dinner/.test(a.content) && /LOCATION:[^\r\n]*Hawk/.test(a.content)), JSON.stringify(m.att.map((a) => a.filename)));
 	let ics = m.att.find((a) => !/SUMMARY:[^\r\n]*Dinner/.test(a.content)).content;
 	check('invitation: METHOD:REQUEST, SEQUENCE:0, Europe/London VTIMEZONE', /METHOD:REQUEST/.test(ics) && /SEQUENCE:0/.test(ics) && /TZID:Europe\/London/.test(ics));
 	check('calendar entries never carry the manage link', !/\/events\/manage\//.test(unfold(ics)) && !/events\/manage/.test(decodeURIComponent(m.html_body.match(/calendar\.google\.com[^"]*/)?.[0] ?? '')));
 	{ const icsT = decodeURIComponent((/\/api\/rsvp\/calendar\?t=([^&"]+)/.exec(m.html_body) || [])[1] ?? '');
 	  check('the .ics download token cannot open or change the registration', !!icsT && (await req('GET', `/api/rsvp/manage?t=${encodeURIComponent(icsT)}`)).status === 404); }
-	check('invitation starts at her 10:30 tour and ends when the talks end', icsProp(ics, 'DTSTART').at(-1)?.endsWith('20301113T103000') && icsProp(ics, 'DTEND').at(-1)?.endsWith('20301113T163000'), icsProp(ics, 'DTSTART').concat(icsProp(ics, 'DTEND')).join(' '));
+	check('invitation starts at her 10:30 tour and ends when the talks end', icsProp(ics, 'DTSTART').at(-1)?.endsWith('20261113T103000') && icsProp(ics, 'DTEND').at(-1)?.endsWith('20261113T163000'), icsProp(ics, 'DTSTART').concat(icsProp(ics, 'DTEND')).join(' '));
 	check('in-person reminders: week, day, travel + 15 min, 15 min', ['-P7D', '-P1D', '-PT75M', '-PT15M'].every((t) => ics.includes(`TRIGGER:${t}`)));
-	check('organiser and attendee set, lines folded to 75 octets', unfold(ics).includes(`ORGANIZER;CN="${ORG}":mailto:${NOTIFY}`) && /ATTENDEE;[^\r\n]*mailto:alice@example\.org/.test(unfold(ics)) && ics.split('\r\n').every((l) => Buffer.byteLength(l) <= 75));
+	check('organiser and attendee set, lines folded to 75 octets', /ORGANIZER;CN="AMYBO":mailto:hello@amybo\.org/.test(unfold(ics)) && /ATTENDEE;[^\r\n]*mailto:alice@example\.org/.test(unfold(ics)) && ics.split('\r\n').every((l) => Buffer.byteLength(l) <= 75));
 	check('email has add-to-calendar links for Google, Outlook, Office 365 and Yahoo plus .ics', /calendar\.google\.com\/calendar\/render/.test(m.html_body) && /outlook\.live\.com/.test(m.html_body) && /outlook\.office\.com/.test(m.html_body) && /calendar\.yahoo\.com/.test(m.html_body) && /\/api\/rsvp\/calendar\?t=/.test(m.html_body));
 	let host1 = await mailsTo('host1@example.org');
 	check('tour host gets the list with Alice in bold and her shared email', host1.length === 1 && /<strong>Alice \(Lab A\) – booked – <a href="mailto:alice@example\.org"/.test(host1[0].html_body) && /\*\*Alice \(Lab A\) – booked – alice@example\.org\*\*/.test(host1[0].text_body), host1[0]?.text_body);
@@ -373,7 +373,7 @@ try {
 	r = await req('POST', '/api/rsvp/manage', { t: aliceManage, name: 'Alice A', attendance: 'in_person', tour_id: TOUR2, affiliation: 'Lab A', needs: 'Vegan, step-free access', share_contact: true });
 	check('Alice moves to the free 11:15 tour', r.data.ok && r.data.registration.tour_id === TOUR2 && r.data.registration.tour_place === 'place', JSON.stringify(r.data));
 	m = await last(alice);
-	check('…and gets a calendar update: SEQUENCE:1, new start time', /Calendar update/.test(m.subject) && m.att.length === 1 && /SEQUENCE:1/.test(m.att[0].content) && icsProp(m.att[0].content, 'DTSTART').at(-1)?.endsWith('20301113T111500'), m.subject + ' ' + (m.att[0] ? icsProp(m.att[0].content, 'DTSTART') : ''));
+	check('…and gets a calendar update: SEQUENCE:1, new start time', /Calendar update/.test(m.subject) && m.att.length === 1 && /SEQUENCE:1/.test(m.att[0].content) && icsProp(m.att[0].content, 'DTSTART').at(-1)?.endsWith('20261113T111500'), m.subject + ' ' + (m.att[0] ? icsProp(m.att[0].content, 'DTSTART') : ''));
 	host1 = await mailsTo('host1@example.org');
 	check('10:30 host sees Alice struck through (removed)', /~~Alice \(Lab A\) – booked~~/.test(host1.at(-1).text_body) && /<s>Alice \(Lab A\) – booked<\/s>/.test(host1.at(-1).html_body), host1.at(-1)?.text_body);
 	check('11:15 host gets a list with Alice A in bold', /\*\*Alice A \(Lab A\) – booked – alice@example\.org\*\*/.test((await last('host2@example.org'))?.text_body ?? ''));
@@ -383,12 +383,13 @@ try {
 	console.log('\nRemote attendee: one calendar entry per online session');
 	const c = await registerAndConfirm({ name: 'Carol "CJ" Jones, PhD', email: carol, attendance: 'remote', optins: [DINNER] });
 	{ const cm = (await mailsTo(carol)).find((x) => /Joining instructions/.test(x.subject));
-	  check('remote instructions carry the remote section only, and no dinner sign-up', !!cm && /Joining remotely/.test(cm.text_body) && !/Room 12/.test(cm.text_body) && !/join us for dinner/.test(cm.text_body), cm?.text_body.slice(0, 600)); }
+	  check('remote instructions carry the remote section only, and no dinner sign-up', !!cm && /Joining remotely/.test(cm.text_body) && !/Room 516/.test(cm.text_body) && !/join us for dinner/.test(cm.text_body), cm?.text_body.slice(0, 600)); }
 	m = await last(carol);
 	const remoteIcs = m.att.map((a) => a.content);
 	check('two invitations, one per online session', m.att.length === 2 && m.att[0].filename === 'invite-1.ics', JSON.stringify(m.att.map((a) => a.filename)));
 	check('online reminders: day, hour, 10 minutes', remoteIcs.every((x) => ['-P1D', '-PT1H', '-PT10M'].every((t) => x.includes(`TRIGGER:${t}`)) && !x.includes('TRIGGER:-P7D')));
-	check('sessions at 12:00 and 14:00 with a link-to-follow location', icsProp(remoteIcs[0], 'DTSTART').at(-1)?.endsWith('T120000') && icsProp(remoteIcs[1], 'DTSTART').at(-1)?.endsWith('T140000') && /LOCATION:Online – the link will follow/.test(unfold(remoteIcs[0])));
+	const hhmm = (s) => s.starts_at.replace(/[-:]/g, '').slice(8, 15);
+	check('one entry per talk session, at its start time, with a link-to-follow location', icsProp(remoteIcs[0], 'DTSTART').at(-1)?.endsWith(hhmm(AM)) && icsProp(remoteIcs[1], 'DTSTART').at(-1)?.endsWith(hhmm(PM)) && /LOCATION:Online – the link will follow/.test(unfold(remoteIcs[0])));
 	check('distinct stable UIDs', new Set(remoteIcs.map((x) => icsProp(x, 'UID')[0])).size === 2);
 	check('attendee name with comma and quotes is a quoted parameter without escapes', unfold(remoteIcs[0]).includes('ATTENDEE;CN="Carol CJ Jones, PhD";ROLE='), icsProp(remoteIcs[0], 'ATTENDEE')[0]);
 
@@ -402,16 +403,16 @@ try {
 	check('Carol gets one calendar update with the link, SEQUENCE:1', r.data.calendar_updates === 1 && /Calendar update/.test(m.subject) && m.att.length === 1 && /SEQUENCE:1/.test(m.att[0].content) && unfold(m.att[0].content).includes(`LOCATION:${meet}`));
 	check('in-person Alice gets nothing (her entry did not change)', (await mailsTo(alice)).length === n);
 	const pub = seeded.sessions.find((x) => x.kind === 'social');
-	r = await req('POST', '/api/admin/sessions', { event: EVENT, sessions: [{ id: pub.id, location: 'The Example Tap; 3 Example Lane, Glasgow' }] }, ADMIN);
+	r = await req('POST', '/api/admin/sessions', { event: EVENT, sessions: [{ id: pub.id, location: 'The Broadcaster; 89 Wood Lane, London' }] }, ADMIN);
 	m = await last(alice);
-	check('pub location change updates only the in-person entry, with ; and , escaped', r.data.calendar_updates === 1 && /Calendar update/.test(m.subject) && unfold(m.att[0].content).includes('The Example Tap\\; 3 Example Lane\\, Glasgow') && /SEQUENCE:2/.test(m.att[0].content), JSON.stringify(r.data));
-	r = await req('POST', '/api/admin/sessions', { event: EVENT, dry_run: true, sessions: [{ id: PM.id, ends_at: '2030-11-13T17:00:00Z' }] }, ADMIN);
+	check('pub location change updates only the in-person entry, with ; and , escaped', r.data.calendar_updates === 1 && /Calendar update/.test(m.subject) && unfold(m.att[0].content).includes('The Broadcaster\\; 89 Wood Lane\\, London') && /SEQUENCE:2/.test(m.att[0].content), JSON.stringify(r.data));
+	r = await req('POST', '/api/admin/sessions', { event: EVENT, dry_run: true, sessions: [{ id: PM.id, ends_at: '2026-11-13T17:00:00Z' }] }, ADMIN);
 	check('dry run: moving the afternoon end affects in-person and remote (not waitlisted Bob)', r.data.calendar_updates === 2, JSON.stringify(r.data));
-	r = await req('POST', '/api/admin/sessions', { event: EVENT, sessions: [{ id: PM.id, ends_at: '2030-11-13T17:00:00Z' }] }, ADMIN);
+	r = await req('POST', '/api/admin/sessions', { event: EVENT, sessions: [{ id: PM.id, ends_at: '2026-11-13T17:00:00Z' }] }, ADMIN);
 	check('both updated; Alice now ends 17:00 with SEQUENCE:3', r.data.calendar_updates === 2 && icsProp((await last(alice)).att[0].content, 'DTEND')[0]?.endsWith('T170000') && /SEQUENCE:3/.test((await last(alice)).att[0].content));
-	check('saving unchanged sessions sends nothing', (await req('POST', '/api/admin/sessions', { event: EVENT, sessions: [{ id: PM.id, ends_at: '2030-11-13T17:00:00Z' }] }, ADMIN)).data.calendar_updates === 0);
+	check('saving unchanged sessions sends nothing', (await req('POST', '/api/admin/sessions', { event: EVENT, sessions: [{ id: PM.id, ends_at: '2026-11-13T17:00:00Z' }] }, ADMIN)).data.calendar_updates === 0);
 	n = (await outbox()).length;
-	r = await req('POST', '/api/admin/sessions', { event: EVENT, sessions: [{ id: DINNER, location: 'provisionally at The Example Tap, 3 Example Lane, Glasgow G1 1AB (about £20 a head)' }], quiet: true }, ADMIN);
+	r = await req('POST', '/api/admin/sessions', { event: EVENT, sessions: [{ id: DINNER, location: 'provisionally at The Broadcaster, 89 Wood Lane, London W12 7FX (~£45 a head)' }], quiet: true }, ADMIN);
 	check('save without emailing: saved, nobody emailed', r.data.ok && r.data.calendar_updates === 0 && (await outbox()).length === n, JSON.stringify(r.data));
 
 	console.log('\nAdmin: promote, instructions versions, messages');
@@ -444,7 +445,7 @@ try {
 	m = await last(alice);
 	check('each recipient gets a personal copy with their manage link and the beta footer', /Hello Alice A/.test(m.text_body) && /<strong>G01<\/strong>/.test(m.html_body) && m.text_body.includes('/events/manage/?t=') && /Events&I \(beta\)/.test(m.text_body));
 	check('with "include the latest joining instructions", the message opens a full copy of them under its own subject', m.subject === 'Room confirmed' && /Room \*\*G01\*\*|Room G01/.test(m.text_body) && /Bring ID/.test(m.text_body) && /What's changed/.test(m.text_body), m.subject + ' | ' + m.text_body.slice(0, 300));
-	check('…and carries calendar changes saved quietly earlier (the new dinner location)', m.att.some((x) => /METHOD:REQUEST/.test(x.content) && /provisionally at The Example Tap/.test(x.content.replace(/\r\n /g, ''))), m.att.map((x) => (/LOCATION:[^\r\n]*/.exec(x.content) || [''])[0]).join(' | '));
+	check('…and carries calendar changes saved quietly earlier (the new dinner location)', m.att.some((x) => /METHOD:REQUEST/.test(x.content) && /provisionally at The Broadcaster/.test(x.content.replace(/\r\n /g, ''))), m.att.map((x) => (/LOCATION:[^\r\n]*/.exec(x.content) || [''])[0]).join(' | '));
 	check('recipients now recorded as having the new version', (await req('POST', '/api/admin/messages', { event: EVENT, dry_run: true, audience: { below_version: V } }, ADMIN)).data.count === 0);
 	check('filter by tour: 11:15 → 1 person', (await req('POST', '/api/admin/messages', { event: EVENT, dry_run: true, audience: { tour_id: TOUR2 } }, ADMIN)).data.count === 1);
 	check('HTML in messages is escaped', !/<script>/.test((await req('POST', '/api/admin/preview', { body_md: '<script>alert(1)</script>' }, ADMIN)).data.html));

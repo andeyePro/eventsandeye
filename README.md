@@ -65,10 +65,10 @@ These steps assume your site's repository is checked out locally and Events&I go
      ---
      import RsvpForm from '../eventsandeye/astro/RsvpForm.astro';
      ---
-     <RsvpForm event="2027-03-05-example" controller="Example Organisers Ltd" contactHref="mailto:events@example.org" />
+     <RsvpForm event="2026-11-13-london" controller="AMYBO (andeye Ltd)" contactHref="mailto:hello@amybo.org" />
      ```
 
-     `event` is the event id from your seed (step 5) and `controller` is who is responsible for the data, named in the consent text. Set the build variable `PUBLIC_TURNSTILE_SITE_KEY` (step 6); the build fails without it, so a test key can never reach your live site.
+     This is AMYBO's form, live at [amy.bo/event](https://amy.bo/event). `event` is the event id from your seed (step 5) and `controller` is who is responsible for the data, named in the consent text. Set the build variable `PUBLIC_TURNSTILE_SITE_KEY` (step 6); the build fails without it, so a test key can never reach your live site.
    - **`/events/check-email/`**, where the form sends people after registering. Include `eventsandeye/astro/SentTo.astro` to show the address the email went to, and ask them to click "Complete registration" in it.
    - **`/events/confirm/`** with `<ConfirmPanel contactHref="…" />` and **`/events/manage/`** with `<ManagePanel />`, both from `eventsandeye/astro/`. Give these two pages a `noindex` robots tag.
    - **A privacy notice** (at `/privacy/` unless you set `PRIVACY_URL`) that covers registrations, session hosts and the 30-day retention.
@@ -82,7 +82,7 @@ These steps assume your site's repository is checked out locally and Events&I go
    npx wrangler d1 create events --jurisdiction eu   # omit --jurisdiction to let Cloudflare choose
    ```
 
-   Put the printed `database_id` into `wrangler.toml`. Copy [`examples/seed.example.sql`](examples/seed.example.sql) to, say, `seed/my-event.sql`, change it to describe your event (its comments explain each part), then:
+   Put the printed `database_id` into `wrangler.toml`. Copy [`examples/seed.example.sql`](examples/seed.example.sql) to, say, `seed/my-event.sql`. It describes AMYBO's event of 13 November 2026 ([amy.bo/event](https://amy.bo/event)) as a worked example: change it to describe yours (its comments explain each part), then:
 
    ```sh
    npx wrangler d1 migrations apply events --remote
@@ -144,11 +144,13 @@ npx wrangler pages dev ./dist --port 8788
 
 Open http://localhost:8788. With `DEV_MODE=true`, emails (with their calendar attachments) are printed to the console and kept in a local outbox at `/api/dev/outbox` instead of being sent, and the admin page opens without Cloudflare Access.
 
-**End-to-end test.** [`tests/e2e.mjs`](tests/e2e.mjs) runs the whole flow against a local D1 database with `wrangler pages dev`, using a fictional event of its own ([`tests/seed.e2e.sql`](tests/seed.e2e.sql)): registration, confirmation, waiting lists, promotion, calendar invitations and updates, host lists, scheduled messages, holds, deadlines, cancellation, retention and the Access checks. From your site, after building it with `PUBLIC_TURNSTILE_ALLOW_TEST_KEY=true`:
+**End-to-end test.** [`tests/e2e.mjs`](tests/e2e.mjs) runs the whole flow against a local D1 database with `wrangler pages dev`, using AMYBO's event as its example: registration, confirmation, waiting lists, promotion, calendar invitations and updates, host lists, scheduled messages, holds, deadlines, cancellation, retention and the Access checks. From your site, after building it with `PUBLIC_TURNSTILE_ALLOW_TEST_KEY=true`, with `ORG_NAME=AMYBO` in `.dev.vars`:
 
 ```sh
-E2E_DB=events node eventsandeye/tests/e2e.mjs
+E2E_DB=events E2E_SEED=eventsandeye/examples/seed.example.sql E2E_NOTIFY=<your NOTIFY_EMAIL> node eventsandeye/tests/e2e.mjs
 ```
+
+The comment at the top of the test lists every setting.
 
 **Calendar caveat.** How an invitation is shown depends on the recipient's email app: Gmail, Outlook and Apple Mail usually show it as an invitation and add it to the calendar, but some apps only offer the file. The add-to-calendar links and `.ics` download cover the rest. Many calendar apps also apply their own reminder settings instead of the ones in the invitation.
 
@@ -190,9 +192,10 @@ Migrations only ever add; they never change one that has shipped. Redeploy the c
 - **Any programme shape:** parallel sessions and tracks as well as sequential ones, several optional choice groups, per-session registration for multi-day events.
 - **An event set-up front end:** create events, sessions and joining instructions in the admin page instead of SQL.
 - **Framework-neutral components:** plain HTML and JavaScript versions of the form, confirm and manage panels.
+- **Events&I Plus:** a fully hosted version, so you do not need your own Cloudflare account.
 
 See [TODO.md](TODO.md) for the full list.
 
 ## Licence
 
-GNU Affero General Public License v3.0: see [LICENSE](LICENSE). If you run a modified version for others, the AGPL requires you to offer them its source. Contributions are made under the [andeye Contributor Licence Agreement](CLA.md); see [CONTRIBUTING.md](CONTRIBUTING.md).
+GNU Affero General Public License v3.0: see [LICENSE](LICENSE). If you run a modified version for others, the AGPL requires you to offer them its source. Contributions are made under the [andeye Contributor Licence Agreement](CLA.md): a bot asks you to sign it on your first pull request. See [CONTRIBUTING.md](CONTRIBUTING.md).

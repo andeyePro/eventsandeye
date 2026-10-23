@@ -1,13 +1,13 @@
 # Contributing to Events&I
 
-Thanks for looking. Events&I is small on purpose: registration for community events, on the organiser's own Cloudflare account, with as few emails and as little personal data as possible. That shapes what follows.
+Thanks for looking. Agents and humans alike: [AGENTS.md](AGENTS.md) is the short orientation map. Events&I is small on purpose: registration for community events, on the organiser's own Cloudflare account, with as few emails and as little personal data as possible. That shapes what follows.
 
 ## The short version
 
 - Open an issue before a large change, so nobody builds the same thing twice.
 - Run the end-to-end test before you open a pull request: from a site that hosts Events&I, build it with `PUBLIC_TURNSTILE_ALLOW_TEST_KEY=true`, then `E2E_DB=<your database> node eventsandeye/tests/e2e.mjs` (see the README).
 - Add a check to `tests/e2e.mjs` for every behaviour you add or change.
-- Add your name to `CONTRIBUTORS.md` in your first pull request, in your own commit.
+- Sign the CLA when the bot asks on your first pull request, and add your name to `CONTRIBUTORS.md` in your own commit.
 - Everything you contribute is released under AGPL-3.0 and, separately, licensed to andeye Ltd under `CLA.md`. Both are explained under **Licensing** below.
 
 ## What the project will and will not take
@@ -31,10 +31,16 @@ Contributions are additionally covered by the **andeye Contributor Licence
 Agreement** (`CLA.md`, version 1.0). In plain terms: you keep your copyright,
 your contribution stays available under AGPL-3.0 and that cannot be taken back,
 and you additionally allow andeye Ltd to relicense it — which is what lets andeye offer the
-code under other terms where the AGPL cannot reach. The numbered clauses in
+code under other terms where the AGPL cannot reach, such as Events&I Plus, a hosted version. The numbered clauses in
 `CLA.md` are what actually binds; the summary box at the top of that file is
 friendly, not authoritative.
 
-To agree, add your name to `CONTRIBUTORS.md` in your first pull request, or say
-so in the pull request description. Please read `CLA.md` before you do.
+Please read `CLA.md` before you open a pull request. The CLA Assistant bot
+checks every pull request: on your first, it asks you to sign by commenting
+
+> I have read the CLA Document and I hereby sign the CLA
+
+and records your signature in `signatures/version1/cla.json`. Pull requests
+cannot be merged until the author has signed. Please also add your name to
+`CONTRIBUTORS.md` in that first pull request.
 
