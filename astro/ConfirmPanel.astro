@@ -11,14 +11,38 @@ const { contactHref } = Astro.props;
 	<p class="help"><a href={contactHref}>Contact us</a> if something is not right.</p>
 </div>
 <script>
-	const t = new URLSearchParams(location.search).get('t');
+	const q = new URLSearchParams(location.search);
+	const t = q.get('t');
+	const notMe = q.get('not-me') === '1';
+	if (t) history.replaceState(null, '', location.pathname);
 	const btn = document.getElementById('confirm-btn') as HTMLButtonElement;
 	const out = document.getElementById('confirm-result')!;
+	if (t && notMe) {
+		// "I did not register": a button (POST), so link scanners cannot delete anything.
+		document.getElementById('confirm-intro')!.textContent = "Didn't register? Delete the registration made with your address.";
+		const del = btn.cloneNode(true) as HTMLButtonElement;
+		del.textContent = 'Delete the registration';
+		btn.replaceWith(del);
+		del.addEventListener('click', async () => {
+			del.disabled = true;
+			try {
+				const res = await fetch('/api/rsvp/decline', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ t }) });
+				const d = await res.json();
+				if (!d.ok) throw new Error(d.error);
+				del.hidden = true;
+				document.getElementById('confirm-intro')!.hidden = true;
+				out.innerHTML = '<p><strong>Deleted.</strong> We have sent you a final email to confirm your registration has been deleted.</p>';
+			} catch (e) {
+				out.textContent = (e as Error).message || 'Something went wrong. Please contact us using the link below.';
+				del.disabled = false;
+			}
+		});
+	}
 	if (!t) {
 		btn.hidden = true;
 		document.getElementById('confirm-intro')!.textContent = 'This link is incomplete. Please use the full link from your email.';
 	}
-	btn.addEventListener('click', async () => {
+	if (!notMe) btn.addEventListener('click', async () => {
 		btn.disabled = true;
 		out.textContent = 'Confirming…';
 		try {
@@ -29,10 +53,13 @@ const { contactHref } = Astro.props;
 			btn.hidden = true;
 			document.getElementById('confirm-intro')!.hidden = true;
 			const lines: string[] = [d.already ? 'Your registration was already confirmed.' : 'Thank you, your registration is complete.'];
-			if (r.attendance === 'remote') lines.push('You are registered to join the talks remotely. We have emailed you the joining instructions, with calendar invitations.');
+			const waitingFor: string[] = r.optin_waiting_labels ?? [];
+			if (r.mode === 'extras') lines.push(`You are joining us for ${(r.optin_labels ?? []).join(' and ').toLowerCase()} only.${waitingFor.length < (r.optin_labels ?? []).length ? ' We have emailed you the details, with a calendar invitation.' : ''}`);
+			else if (r.attendance === 'remote') lines.push('You are registered to join the talks remotely. We have emailed you the joining instructions, with calendar invitations.');
 			else if (r.place === 'waitlist') lines.push('In-person places are currently full, so you are on the waiting list. We will email you if a place becomes available.');
 			else lines.push('You have an in-person place. We have emailed you the joining instructions, with calendar invitations.');
 			if (r.tour_label) lines.push(r.tour_place === 'waitlist' ? `You are on the waiting list for the ${r.tour_label}.` : `You are booked on the ${r.tour_label}.`);
+			for (const l of waitingFor) lines.push(`${l} is currently full, so you are on its waiting list. We will email you if a place becomes available.`);
 			lines.push('To change or cancel, use the "Manage my registration" link in your emails.');
 			out.replaceChildren(...lines.map((l, i) => { const p = document.createElement('p'); if (i === 0) { const s = document.createElement('strong'); s.textContent = l; p.append(s); } else p.textContent = l; return p; }));
 		} catch (e) {

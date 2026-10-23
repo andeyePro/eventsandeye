@@ -1,12 +1,13 @@
 // Events&I – Copyright (C) 2026 andeye Ltd. AGPL-3.0, see ../../LICENSE.
+import { isLocalRequest } from '../access';
 import { isDev } from '../env';
 import { handle } from '../http';
 import { runScheduled } from '../rsvp';
 import { json } from '../util';
 
-/** Local development only: emails that would have been sent. 404 on the live site. */
+/** Local development only (DEV_MODE and a localhost request): emails that would have been sent. 404 anywhere else. */
 export const outbox = handle(async ({ env, request }) => {
-	if (!isDev(env)) return new Response('Not found', { status: 404 });
+	if (!isDev(env) || !isLocalRequest(request)) return new Response('Not found', { status: 404 });
 	const emails = (await env.DB.prepare('SELECT * FROM dev_outbox ORDER BY id DESC').all()).results as Record<string, unknown>[];
 	if (!(request.headers.get('accept') ?? '').includes('text/html')) return json({ ok: true, emails: [...emails].reverse() });
 	// A browser gets a readable page: newest first, links clickable, so a local demo can walk through the emails.
@@ -27,9 +28,9 @@ export const outbox = handle(async ({ env, request }) => {
 	return new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
 });
 
-/** Local development only: run the scheduled jobs now, optionally as if at ?at=<ISO time>. 404 on the live site. */
+/** Local development only (DEV_MODE and a localhost request): run the scheduled jobs now, optionally as if at ?at=<ISO time>. */
 export const cron = handle(async ({ env, request }) => {
-	if (!isDev(env)) return new Response('Not found', { status: 404 });
+	if (!isDev(env) || !isLocalRequest(request)) return new Response('Not found', { status: 404 });
 	const at = new URL(request.url).searchParams.get('at');
 	return { ok: true, report: await runScheduled(env, at ? Date.parse(at) : Date.now()) };
 });

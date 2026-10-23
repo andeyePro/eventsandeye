@@ -5,7 +5,7 @@ Thanks for looking. Events&I is small on purpose: registration for community eve
 ## The short version
 
 - Open an issue before a large change, so nobody builds the same thing twice.
-- Run the end-to-end test before you open a pull request: from the site that hosts Events&I, `npm run build && npm run test:e2e` (see `tests/e2e.mjs`).
+- Run the end-to-end test before you open a pull request: from a site that hosts Events&I, build it with `PUBLIC_TURNSTILE_ALLOW_TEST_KEY=true`, then `E2E_DB=<your database> node eventsandeye/tests/e2e.mjs` (see the README).
 - Add a check to `tests/e2e.mjs` for every behaviour you add or change.
 - Add your name to `CONTRIBUTORS.md` in your first pull request, in your own commit.
 - Everything you contribute is released under AGPL-3.0 and, separately, licensed to andeye Ltd under `CLA.md`. Both are explained under **Licensing** below.
@@ -20,7 +20,7 @@ Thanks for looking. Events&I is small on purpose: registration for community eve
 
 - `src/` – server logic (`rsvp.ts` flows, `calendar.ts` and `ics.ts` invitations, `hosts.ts` host lists, `templates.ts` emails) and `routes/` handlers.
 - `migrations/` – D1 schema. Add a new numbered migration; never edit one that has shipped.
-- `worker/` – the cron Worker. `astro/` – booking, confirm and manage components.
+- `worker/` – the cron Worker. `astro/` – booking, confirm and manage components. `examples/` – config, seed and function wrappers for a new site. `site/` (upstream repository only) – events.andeye.com.
 - Code comments explain why, not what. User-facing text is plain, short and in British English.
 
 ## Licensing — what you are agreeing to
@@ -30,8 +30,8 @@ Events&I is licensed under **AGPL-3.0**.
 Contributions are additionally covered by the **andeye Contributor Licence
 Agreement** (`CLA.md`, version 1.0). In plain terms: you keep your copyright,
 your contribution stays available under AGPL-3.0 and that cannot be taken back,
-and you additionally allow andeye Ltd to relicense it — which is what lets andeye offer a hosted
-Events&I Plus and other terms where the AGPL cannot reach. The numbered clauses in
+and you additionally allow andeye Ltd to relicense it — which is what lets andeye offer the
+code under other terms where the AGPL cannot reach. The numbered clauses in
 `CLA.md` are what actually binds; the summary box at the top of that file is
 friendly, not authoritative.
 

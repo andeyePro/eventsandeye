@@ -4,16 +4,22 @@ import type { Env } from './env';
 import { type Brand, type EventRow, type HostLine, hostListEmail, type RegistrationRow, type SessionRow } from './templates';
 import { nowIso } from './util';
 
-/** Who belongs on a session host's list. Only confirmed registrations appear; emails only with the registrant's consent. */
+/**
+ * Who belongs on a session host's list: confirmed registrations only, each with whether they have a place. The
+ * registrant's email and affiliation appear only if they agreed to share their contact details with hosts.
+ */
 export function hostLines(s: SessionRow, regs: RegistrationRow[]): HostLine[] {
 	const confirmed = regs.filter((r) => r.status === 'confirmed').sort((a, b) => (a.confirmed_at ?? '').localeCompare(b.confirmed_at ?? ''));
-	const line = (r: RegistrationRow, detail: string): HostLine => ({ id: r.id, name: `${r.name}${r.affiliation ? ` (${r.affiliation})` : ''}`, detail, ...(r.share_contact ? { email: r.email } : {}) });
+	const line = (r: RegistrationRow, detail: string): HostLine => ({ id: r.id, name: `${r.name}${r.share_contact && r.affiliation ? ` (${r.affiliation})` : ''}`, detail, ...(r.share_contact ? { email: r.email } : {}) });
 	if (s.choice_group) {
 		return confirmed.filter((r) => r.tour_id === s.id && r.attendance === 'in_person').map((r) => line(r, r.tour_place === 'waitlist' ? 'waiting list' : r.place === 'waitlist' ? 'booked, but waiting for an in-person place' : 'booked'));
 	}
 	const out: HostLine[] = [];
 	for (const r of confirmed) {
-		if (r.attendance === 'remote') {
+		if (!r.place && r.attendance === 'in_person') {
+			// Just the opt-in sessions: listed only on the ones they signed up for.
+			if (s.optin && (r.optins ?? '').split(',').includes(s.id)) out.push(line(r, (r.optins_waiting ?? '').split(',').includes(s.id) ? 'this session only, waiting list' : 'this session only'));
+		} else if (r.attendance === 'remote') {
 			if (s.mode !== 'in_person' && s.kind !== 'social') out.push(line(r, 'remote'));
 		} else if (s.mode !== 'online') {
 			out.push(line(r, r.place === 'waitlist' ? 'in-person waiting list' : 'in person'));

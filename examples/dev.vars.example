@@ -1,0 +1,8 @@
+# Local development only: copy to your site's root as .dev.vars (and gitignore it). Never set DEV_MODE on the live site.
+DEV_MODE=true
+SITE_URL=http://localhost:8788
+# Generate your own: openssl rand -hex 32
+TOKEN_SECRET=
+# Cloudflare Turnstile's test secret: always passes.
+TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
+ACCESS_AUD=dev-audience

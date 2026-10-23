@@ -1,0 +1,7 @@
+# Content-guard allowlist (one ERE per line, matched against the whole flagged line).
+# Made-up addresses on the reserved example.org domain, in docs, examples and tests.
+.*[A-Za-z0-9._%+-]+@example\.org.*
+# Cloudflare Turnstile's published always-pass test secret, for local development only.
+TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
+# A file name, not an mDNS host name.
+\.claude/settings\.local\.json

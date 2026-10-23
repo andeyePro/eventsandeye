@@ -1,0 +1,22 @@
+# Example config for the scheduled-jobs Worker (scheduled messages, unconfirmed holds, retention).
+# Copy to e.g. workers/cron/wrangler.toml in your site; keep [vars] and the database the same as the Pages site.
+name = "example-site-cron"
+main = "../../eventsandeye/worker/index.ts"
+compatibility_date = "2026-09-01"
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+[vars]
+SITE_URL = "https://example.org"
+NOTIFY_EMAIL = "events@example.org"
+EMAIL_FROM = "Example Organisers <events@example.org>"
+ORG_NAME = "Example Organisers"
+ORG_FOOTER = "Example Organisers Ltd, registered in Scotland, company number SC000000."
+PRIVACY_URL = "/privacy/"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "events"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "../../eventsandeye/migrations"

@@ -64,7 +64,7 @@ const HTML = /* html */ `<!doctype html>
 				<div><label for="s-travel">Assumed travel time for the "time to leave" reminder (minutes)</label><input id="s-travel" type="number" min="0" required /></div>
 			</div>
 			<button type="submit">Save settings</button>
-			<p class="small">Raising a maximum does not move anyone off a waiting list: use "Promote" below, which sends that person the latest joining instructions.</p>
+			<p class="small">Raising a maximum does not move anyone off the waiting list by itself: use "Promote" on a person below, or <button type="button" id="promote-all" hidden>Promote all who fit</button> to give places to the waiting list in order, up to the maximum. Each person promoted is emailed the latest joining instructions.</p>
 		</form>
 	</section>
 
@@ -74,6 +74,8 @@ const HTML = /* html */ `<!doctype html>
 		<form id="sessions-form"><div id="sessions-box"></div>
 			<button type="button" class="secondary" id="sess-dry">How many people would get a calendar update?</button>
 			<button type="submit">Save sessions</button>
+			<button type="button" class="secondary" id="sess-quiet">Save without emailing anyone</button>
+			<p class="small">"Save without emailing anyone" changes calendar entries only when each person is next sent their joining instructions (for example a message with "Include the latest joining instructions" ticked), so several changes reach them in one email.</p>
 		</form>
 	</section>
 
@@ -85,7 +87,7 @@ const HTML = /* html */ `<!doctype html>
 
 	<section aria-labelledby="h-instr">
 		<h2 id="h-instr">Joining instructions</h2>
-		<p class="small">The latest version is emailed automatically, with calendar invitations, to each person when they confirm (or are promoted from the in-person waiting list), and to anyone who registers again. Saving a new version does <strong>not</strong> email anyone already registered: to update them, compose a message below to "people on an older version" and tick "counts as this version".</p>
+		<p class="small">The latest version is emailed automatically, with calendar invitations, to each person when they confirm (or are promoted from the in-person waiting list), and to anyone who registers again. Saving a new version does <strong>not</strong> email anyone already registered: to update them, write a short message below to "people on an older version" and tick "Include the latest joining instructions".</p>
 		<div id="instr-versions"></div>
 		<form id="instr-form">
 			<label for="i-subject">Subject</label><input id="i-subject" type="text" required maxlength="200" />
@@ -106,7 +108,7 @@ const HTML = /* html */ `<!doctype html>
 				<div><label for="m-att">Attendance</label><select id="m-att"><option value="all">Everyone</option><option value="in_person">In person</option><option value="remote">Remote</option></select></div>
 				<div><label for="m-tour">Tour</label><select id="m-tour"><option value="">Any</option><option value="none">No tour</option></select></div>
 				<div><label for="m-below">Only people whose joining instructions are older than version</label><input id="m-below" type="number" min="1" placeholder="(everyone)" /></div>
-				<div><label for="m-marks">Counts as joining instructions version</label><input id="m-marks" type="number" min="1" placeholder="(no)" /></div>
+				<div><label><input type="checkbox" id="m-instr" style="width:auto" /> Include the latest joining instructions</label><p class="small">Your message comes first, then the full joining instructions with any calendar changes. Everyone sent it counts as having the latest version.</p></div>
 			</div>
 			<label><input type="checkbox" id="m-wait" style="width:auto" /> Include people on the in-person waiting list</label>
 			<label for="m-when">Send at (UK time; leave empty to send now)</label><input id="m-when" type="datetime-local" />
@@ -184,8 +186,11 @@ async function load() {
 		stat('remote confirmed', c.remote),
 		stat('unconfirmed', c.pending),
 		...c.tours.map((t) => stat(t.label + ' (waiting ' + t.waiting + ')' + (t.open ? '' : ' – booking closed'), t.confirmed + ' / ' + (t.capacity ?? '∞'))),
+		...c.optins.map((o) => stat(o.label + ' signed up (waiting ' + o.waiting + ')', o.confirmed + ' / ' + (o.capacity ?? '∞'))),
 		stat('registration closes', uk(s.event.deadline)),
 	].join('');
+	$('promote-all').hidden = !(c.inPerson.waiting > 0 && c.inPerson.held < c.inPerson.max);
+	$('promote-all').dataset.fit = String(Math.min(c.inPerson.waiting, c.inPerson.max - c.inPerson.held));
 	$('s-max').value = s.event.in_person_max; $('s-deadline').value = isoToUkLocal(s.event.deadline); $('s-travel').value = s.event.travel_minutes;
 
 	$('sessions-box').innerHTML = sessions.map((x) => {
@@ -210,12 +215,16 @@ async function load() {
 	$('regs').querySelector('tbody').innerHTML = s.registrations.map((r) => {
 		const tour = tours.find((t) => t.id === r.tour_id);
 		const pend = r.status === 'pending' ? '<span class="tag pending">unconfirmed</span> ' : '';
-		const where = r.attendance === 'remote' ? 'Remote' : r.place === 'waitlist' ? '<span class="tag wait">in person: waiting since ' + esc(uk(r.waitlist_since)) + '</span>' : '<span class="tag ok">in person</span>';
-		const tourCell = tour ? (r.tour_place === 'waitlist' ? '<span class="tag wait">' + esc(tour.label) + ': waiting</span>' : esc(tour.label)) : '';
+		const where = r.attendance === 'remote' ? 'Remote' : !r.place ? '<span class="tag ok">' + esc(s.sessions.filter((x) => x.optin && (r.optins || '').split(',').includes(x.id)).map((x) => x.label).join(', ') || 'Opt-in') + ' only</span>' : r.place === 'waitlist' ? '<span class="tag wait">in person: waiting since ' + esc(uk(r.waitlist_since)) + '</span>' : '<span class="tag ok">in person</span>';
+		const waitingFor = (r.optins_waiting || '').split(',');
+		const optSessions = r.attendance === 'in_person' && r.optins ? s.sessions.filter((x) => x.optin && r.optins.split(',').includes(x.id)) : [];
+		const opts = optSessions.map((x) => waitingFor.includes(x.id) ? '<span class="tag wait">' + esc(x.label) + ': waiting</span>' : esc(x.label));
+		const tourCell = (tour ? (r.tour_place === 'waitlist' ? '<span class="tag wait">' + esc(tour.label) + ': waiting</span>' : esc(tour.label)) : '') + (opts.length ? (tour ? '<br>' : '') + 'Signed up: ' + opts.join(', ') : '');
 		const actions = [
 			r.status === 'confirmed' && r.place === 'waitlist' ? '<button data-promote="event" data-id="' + esc(r.id) + '">Promote to place</button>' : '',
 			r.status === 'confirmed' && r.tour_place === 'waitlist' ? '<button data-promote="tour" data-id="' + esc(r.id) + '">Promote to tour</button>' : '',
-			'<button class="danger" data-delete="' + esc(r.id) + '" data-name="' + esc(r.name) + '">Remove</button>',
+			...(r.status === 'confirmed' ? optSessions.filter((x) => waitingFor.includes(x.id)).map((x) => '<button data-promote="optin" data-session="' + esc(x.id) + '" data-id="' + esc(r.id) + '">Promote to ' + esc(x.label.toLowerCase()) + '</button>') : []),
+			'<button class="danger" data-delete="' + esc(r.id) + '" data-name="' + esc(r.name) + '" data-confirmed="' + (r.status === 'confirmed' ? '1' : '0') + '">Remove</button>',
 		].join(' ');
 		return '<tr><td>' + esc(r.name) + '</td><td>' + esc(r.email) + '</td><td>' + pend + where + '</td><td>' + tourCell + '</td><td>' + esc(r.affiliation) + '</td><td>' + esc(r.needs) + '</td><td>' + esc(r.extra_answer) + '</td><td>' + (r.share_contact ? 'yes' : 'no') + '</td><td>' + esc(r.instructions_version) + '</td><td>' + actions + '</td></tr>';
 	}).join('') || '<tr><td colspan="10">No registrations yet.</td></tr>';
@@ -226,7 +235,7 @@ async function load() {
 	const latest = iv.versions[0];
 	$('instr-versions').innerHTML = iv.versions.map((v) => '<details><summary>Version ' + esc(v.version) + ' – ' + esc(uk(v.created_at)) + ' – ' + esc(v.subject) + (v.change_note ? ' – <em>' + esc(v.change_note) + '</em>' : '') + '</summary><pre style="white-space:pre-wrap">' + esc(v.body_md) + '</pre></details>').join('');
 	if (latest && !$('i-subject').value) { $('i-subject').value = latest.subject; $('i-body').value = latest.body_md; }
-	$('m-marks').placeholder = '(no) latest is ' + latestVersion;
+	$('m-instr').parentElement.lastChild.textContent = ' Include the latest joining instructions (version ' + latestVersion + ')';
 
 	const ms = await api('/api/admin/messages?event=' + encodeURIComponent(eventId));
 	$('msgs').querySelector('tbody').innerHTML = ms.messages.map((m) => '<tr><td>' + esc(uk(m.sent_at || m.scheduled_at || m.created_at)) + '</td><td>' + esc(m.subject) + '</td><td>' + esc(m.status) + (m.error ? ': ' + esc(m.error) : '') + '</td><td>' + esc(m.recipients_count ?? '') + '</td><td><code>' + esc(m.audience) + '</code></td><td>' + (m.status === 'scheduled' ? '<button class="danger" data-cancel="' + esc(m.id) + '">Cancel</button>' : '') + '</td></tr>').join('') || '<tr><td colspan="6">Nothing sent yet.</td></tr>';
@@ -252,14 +261,20 @@ document.body.addEventListener('click', async (e) => {
 	const b = e.target.closest('button');
 	if (!b) return;
 	try {
-		if (b.id === 'sess-dry') {
+		if (b.id === 'sess-quiet') {
+			if (!confirm('Save sessions without emailing anyone? Calendars update with each person\'s next joining-instructions email.')) return;
+			await api('/api/admin/sessions', 'POST', { event: eventId, sessions: sessionEdits(), quiet: true }); toast('Sessions saved. Nobody was emailed.'); load();
+		} else if (b.id === 'sess-dry') {
 			const d = await api('/api/admin/sessions', 'POST', { event: eventId, sessions: sessionEdits(), dry_run: true });
 			toast(d.calendar_updates + ' person(s) would get updated calendar invitations.');
+		} else if (b.id === 'promote-all') {
+			if (!confirm('Promote ' + b.dataset.fit + ' person(s) from the waiting list? Each will be emailed the latest joining instructions.')) return;
+			const d = await api('/api/admin/promote-all', 'POST', { event: eventId }); toast('Promoted and emailed ' + d.promoted + (d.still_waiting ? '; ' + d.still_waiting + ' still waiting.' : '.')); load();
 		} else if (b.dataset.promote) {
 			if (!confirm('Promote this person? They will be emailed the latest joining instructions.')) return;
-			await api('/api/admin/promote', 'POST', { id: b.dataset.id, what: b.dataset.promote }); toast('Promoted and emailed.'); load();
+			await api('/api/admin/promote', 'POST', { id: b.dataset.id, what: b.dataset.promote, session: b.dataset.session }); toast('Promoted and emailed.'); load();
 		} else if (b.dataset.delete) {
-			if (!confirm('Remove ' + b.dataset.name + '? No email is sent to them. Use this for spam or duplicates.')) return;
+			if (!confirm(b.dataset.confirmed === '1' ? 'Remove ' + b.dataset.name + '? They have confirmed, so they will be emailed that their registration has been cancelled, and their calendar entries removed.' : 'Remove ' + b.dataset.name + '? They never confirmed, so no email is sent (use this for spam, typos or duplicates).')) return;
 			await api('/api/admin/registration', 'DELETE', { id: b.dataset.delete }); toast('Removed.'); load();
 		} else if (b.dataset.cancel) {
 			await api('/api/admin/messages/cancel', 'POST', { id: b.dataset.cancel }); toast('Scheduled message cancelled.'); load();
@@ -287,7 +302,7 @@ $('msg-form').addEventListener('submit', async (e) => {
 	try {
 		const count = (await api('/api/admin/messages', 'POST', { event: eventId, dry_run: true, audience: audience() })).count;
 		if (!confirm((when ? 'Schedule for ' + uk(when) : 'Send now') + ' to ' + count + ' recipient(s)?')) return;
-		await api('/api/admin/messages', 'POST', { event: eventId, subject: $('m-subject').value, body_md: $('m-body').value, audience: audience(), scheduled_at: when, marks_instructions_version: $('m-marks').value ? Number($('m-marks').value) : undefined });
+		await api('/api/admin/messages', 'POST', { event: eventId, subject: $('m-subject').value, body_md: $('m-body').value, audience: audience(), scheduled_at: when, marks_instructions_version: $('m-instr').checked ? latestVersion : undefined });
 		toast(when ? 'Scheduled.' : 'Sent.'); e.target.reset(); load();
 	} catch (err) { toast(err.message); }
 });

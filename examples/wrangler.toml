@@ -1,0 +1,23 @@
+# Example wrangler.toml for a Cloudflare Pages site that hosts Events&I in ./eventsandeye.
+# Copy it to your site's root and replace every example value.
+name = "example-site"
+pages_build_output_dir = "./dist"
+compatibility_date = "2026-09-01"
+
+[vars]
+SITE_URL = "https://example.org"                     # public origin used in email links
+NOTIFY_EMAIL = "events@example.org"                  # admin notifications, and the reply-to address
+EMAIL_FROM = "Example Organisers <events@example.org>" # sender and calendar organiser (a domain verified in Resend)
+ORG_NAME = "Example Organisers"                      # shown in emails and calendar entries
+ORG_FOOTER = "Example Organisers Ltd, registered in Scotland, company number SC000000."
+PRIVACY_URL = "/privacy/"                            # your privacy notice
+ACCESS_TEAM_DOMAIN = "example.cloudflareaccess.com"  # Zero Trust team domain
+ACCESS_AUD = "REPLACE_WITH_ACCESS_APPLICATION_AUD_TAG"
+ADMIN_EMAILS = "events@example.org"                  # comma-separated; only these can use the admin page
+# ACCESS_MFA = "application"                         # see the README: Cloudflare Access and two-factor sign-in
+
+[[d1_databases]]
+binding = "DB"
+database_name = "events"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "eventsandeye/migrations"

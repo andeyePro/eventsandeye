@@ -1,0 +1,14 @@
+---
+// Events&I – Copyright (C) 2026 andeye Ltd. AGPL-3.0, see ../LICENSE.
+// "We've sent an email to <address>": the form keeps the address in sessionStorage for this page only.
+---
+
+<p id="sent-to">We've sent you an email.</p>
+
+<script>
+	try {
+		const e = sessionStorage.getItem('rsvp-email');
+		const p = document.getElementById('sent-to');
+		if (e && p) p.textContent = `We've sent an email to ${e}.`;
+	} catch {}
+</script>

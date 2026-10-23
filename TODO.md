@@ -2,11 +2,9 @@
 
 ## Open
 
-- [ ] **Trial at the AMYBO get-together, 13 Nov 2026**, then leave beta: collect feedback from attendees, hosts and organisers.
-- [ ] **Consume from github.com/andeyePro/eventsandeye** as a submodule or package instead of the in-repo copy (the history is already pushed there with `git subtree split --prefix=eventsandeye`; keep the two in step with `git subtree push` until then).
+- [ ] **Leave early release** after the first events: collect feedback from attendees, hosts and organisers.
 - [ ] **Generic programmes:** parallel sessions and tracks as well as sequential ones; several choice groups (not just `tour`); per-session attendance for multi-day events; calendar entries per chosen session when attendance is not "the whole day".
 - [ ] **Event set-up front end:** create and edit events, sessions, capacities and joining instructions from the admin page; clone an event.
-- [ ] **Events&I Plus:** fully hosted multi-tenant version (per-organisation Access, billing, custom domains, organisation branding in emails).
 - [ ] **Time zones:** VTIMEZONE blocks for zones other than Europe/London (currently other zones fall back to UTC times).
 - [ ] **Calendar delivery:** test the invitation rendering in Gmail, Outlook (web and desktop), Apple Mail and Thunderbird with real Resend sends; consider a `text/calendar` alternative MIME part if Resend adds support.
 - [ ] **Waiting lists:** optional auto-promotion with an expiry window, as a per-event setting (off by default).

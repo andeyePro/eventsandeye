@@ -52,13 +52,21 @@ export function mdToHtml(md: string): string {
 	return out.join('\n');
 }
 
-function inline(text: string): string {
-	let s = escapeHtml(text);
+function emphasis(s: string): string {
 	s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
 	s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-	s = s.replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>');
-	s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)/g, (_m, label, href) => `<a href="${href}">${label}</a>`);
-	return s;
+	return s.replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>');
+}
+
+function inline(text: string): string {
+	// NUL marks link placeholders below, so none may come from the text itself.
+	let s = escapeHtml(text.replace(/\u0000/g, ''));
+	// Each link becomes one atomic placeholder with its label rendered on its own, so a * or ` inside a URL cannot
+	// become markup and emphasis can never open inside a link and close outside it.
+	const links: string[] = [];
+	s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)/g, (_m, label, href) => `\u0000${links.push(`<a href="${href}">${emphasis(label)}</a>`) - 1}\u0000`);
+	s = emphasis(s);
+	return s.replace(/\u0000(\d+)\u0000/g, (_m, i) => links[Number(i)] ?? '');
 }
 
 /** Plain-text version: markdown is already readable; just turn [label](url) into "label (url)". */

@@ -1,0 +1,405 @@
+---
+// events.andeye.com: a single page, sibling of andeye.com and vibe.andeye.com, in the same treatment.
+// The centrepiece is a registration journey: a deck of steps driving a mail window that shows what the attendee
+// (or host) actually receives. The visitor drives, nothing autoplays, and with JS off every email shows in full.
+// Hover states change colour only (nothing moves), and swapped text sits in fixed-height boxes.
+// All visible copy comes from content/home.md.
+import AndeyeEye from '../components/AndeyeEye.astro';
+import { frontmatter as copy, Content } from '../content/home.md';
+
+// Body lines may carry **bold** and ~~struck~~ spans, as the host list email does.
+const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const fmt = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/~~(.+?)~~/g, '<s>$1</s>');
+const steps = copy.journey.steps;
+---
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{copy.title} – {copy.tagline}</title>
+<meta name="description" content={copy.description} />
+<link rel="canonical" href="https://events.andeye.com/" />
+<meta property="og:title" content={`${copy.title} – ${copy.tagline}`} />
+<meta property="og:description" content={copy.description} />
+<meta property="og:url" content="https://events.andeye.com/" />
+<style>
+  :root {
+    --bg: #0c0f16;
+    --bg-deep: #090b11;
+    --panel: #131826;
+    --panel-2: #161c2c;
+    --line: #232b40;
+    --line-soft: #1b2233;
+    --text: #eef1f6;
+    --muted: #98a0b3;
+    --faint: #6f7888;
+    --accent: #7fd69e;
+    --accent-soft: rgba(127, 214, 158, 0.14);
+    --radius: 14px;
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "SF Pro Display", "Segoe UI", sans-serif;
+    line-height: 1.55;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection { background: var(--accent); color: #07140c; }
+  a { color: var(--text); }
+  a:hover { color: var(--accent); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 0 24px; }
+
+  /* ---------- type ---------- */
+
+  .eyebrow { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em; color: var(--accent); margin: 0; }
+  .eyebrow-row { display: flex; align-items: center; gap: 10px; margin: 0 0 0.9rem; }
+  :global(svg.andeye-eye) { aspect-ratio: 365 / 235; }
+  .eyebrow-row :global(svg.andeye-eye) { display: block; flex: none; width: 34px; height: auto; }
+  .hero .eyebrow { margin-bottom: 0.9rem; }
+
+  h1 { font-size: clamp(2.5rem, 6.2vw, 4.4rem); font-weight: 800; letter-spacing: -0.025em; line-height: 1.04; margin: 0 0 1.1rem; }
+  h2 { font-size: clamp(1.8rem, 3.6vw, 2.7rem); font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; margin: 0 0 1rem; }
+  h3 { font-size: 1.08rem; font-weight: 700; margin: 0 0 0.4rem; }
+  p { margin: 0 0 1rem; }
+  .lede { font-size: clamp(1.05rem, 1.8vw, 1.25rem); color: var(--muted); }
+
+  /* ---------- hero ---------- */
+
+  .hero { position: relative; padding: clamp(56px, 9vh, 96px) 0 40px; text-align: center; }
+  .hero::before {
+    content: "";
+    position: absolute;
+    top: -140px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(820px, 120vw);
+    height: 620px;
+    background: radial-gradient(closest-side, rgba(238, 241, 246, 0.07), rgba(238, 241, 246, 0) 72%);
+    pointer-events: none;
+  }
+  .eyewrap { position: relative; display: flex; justify-content: center; margin: 0 auto 2.2rem; }
+  .eyewrap :global(svg.andeye-eye) { display: block; width: clamp(170px, 24vw, 230px); height: auto; }
+  .hero .sub { max-width: 680px; margin: 0 auto 1.9rem; }
+
+  .ctas { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-bottom: 0.7rem; }
+  .btn {
+    display: inline-block;
+    font: inherit;
+    font-size: 1rem;
+    font-weight: 700;
+    text-decoration: none;
+    padding: 0.85rem 1.6rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    transition: background 0.25s ease, border-color 0.25s ease, color 0.25s ease;
+  }
+  .btn-primary { background: var(--accent); color: #07140c; }
+  .btn-primary:hover { background: #9be6b5; color: #07140c; }
+  .btn-ghost { background: transparent; color: var(--text); border-color: var(--line); }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* hover-reactive CTA subtext: fixed height, sized to the longest string */
+  .cta-sub { height: 3.2em; margin: 0 auto 0.7rem; max-width: 560px; font-size: 0.92rem; color: var(--muted); transition: color 0.25s ease; }
+  .cta-sub.setup { color: #b7c0d4; }
+  .cta-sub.inuse { color: #9fd8b4; }
+  .cta-sub.andeye { color: #9fd3f2; }
+  .fineprint { font-size: 0.85rem; color: var(--faint); margin: 0; }
+  .see-journey { margin: 1.4rem 0 0; font-size: 0.9rem; }
+  .see-journey a { color: var(--muted); text-decoration: none; }
+  .see-journey a:hover { color: var(--accent); }
+
+  .reveal { opacity: 0; transform: translateY(14px); transition: opacity 0.7s ease, transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1); transition-delay: var(--d, 0s); }
+  .reveal.in { opacity: 1; transform: none; }
+
+  /* ---------- sections ---------- */
+
+  section { padding: clamp(64px, 11vh, 120px) 0; }
+
+  .what { background: var(--bg-deep); border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
+  .what .wrap { max-width: 860px; }
+  .what-prose :global(p) { font-size: clamp(1.25rem, 2.4vw, 1.7rem); line-height: 1.5; letter-spacing: -0.01em; color: var(--muted); max-width: 800px; margin: 0; }
+  .what-prose :global(strong) { color: var(--text); font-weight: 800; }
+
+  /* ---------- the journey: step deck + mail window ---------- */
+
+  .journey .lede { max-width: 760px; margin-bottom: 1.8rem; }
+  .jgrid { display: grid; grid-template-columns: 330px 1fr; gap: 26px; align-items: start; }
+  .deck { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+  .chip {
+    display: block;
+    width: 100%;
+    text-align: left;
+    font: inherit;
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid var(--line-soft);
+    border-radius: 10px;
+    padding: 11px 14px;
+    cursor: pointer;
+    transition: border-color 0.25s, background 0.25s, color 0.25s;
+  }
+  .chip:hover { border-color: rgba(127, 214, 158, 0.45); }
+  .chip[aria-pressed="true"] { border-color: var(--accent); background: var(--panel-2); }
+  .chip-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .chip-label { font-weight: 700; font-size: 0.98rem; }
+  .chip-who { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .chip-desc { display: block; margin-top: 0.3rem; font-size: 0.84rem; color: var(--muted); }
+
+  .mailcol { position: sticky; top: 24px; }
+  .mail { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--panel); box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5); }
+  .chrome { display: flex; align-items: center; gap: 6px; padding: 9px 12px; background: #1a2131; border-bottom: 1px solid var(--line-soft); }
+  .traffic { display: flex; align-items: center; gap: 7px; flex: none; }
+  .traffic i { width: 11px; height: 11px; border-radius: 50%; display: block; }
+  .traffic .tl-c { background: #ff5f57; }
+  .traffic .tl-m { background: #febc2e; }
+  .traffic .tl-z { background: #28c840; }
+  .wtitle { margin-left: 7px; font-size: 0.72rem; color: #8b93a8; }
+  /* every message is the same fixed height, so switching steps never moves the page */
+  .msg { height: 400px; overflow-y: auto; padding: 20px 22px; background: #f4f7f2; color: #111; font-family: Arial, Helvetica, sans-serif; }
+  .msg-head { border-bottom: 1px solid #d9dfd5; padding-bottom: 10px; margin-bottom: 14px; font-size: 0.84rem; color: #444; }
+  .msg-head b { color: #111; }
+  .msg-subject { display: block; font-size: 1.02rem; font-weight: 700; color: #111; margin-top: 2px; }
+  .msg-org { font-size: 1.05rem; font-weight: 700; color: #0069a0; margin: 0 0 10px; }
+  .msg-card { background: #fff; border-radius: 8px; padding: 16px 18px; }
+  .msg-card p { font-size: 0.9rem; line-height: 1.5; margin: 0 0 0.7rem; }
+  .msg-btn { display: inline-block; margin-top: 6px; background: #0069a0; color: #fff; font-weight: 700; font-size: 0.92rem; padding: 9px 16px; border-radius: 6px; }
+  .caption { margin: 14px 0 0; font-size: 0.8rem; color: var(--faint); }
+  /* without JS every message shows, one after another */
+  .nojs-label { display: none; }
+
+  /* ---------- features ---------- */
+
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 2rem; }
+  .card { background: var(--panel); border: 1px solid var(--line-soft); border-radius: var(--radius); padding: 20px 22px; }
+  .card p { color: var(--muted); font-size: 0.95rem; margin: 0; }
+
+  /* ---------- setup ---------- */
+
+  .setup { background: var(--bg-deep); border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
+  .setup .lede { max-width: 760px; }
+  .needs { list-style: none; padding: 0; margin: 1.4rem 0 2rem; display: grid; gap: 8px; }
+  .needs li { display: grid; grid-template-columns: 1.4em 1fr; color: var(--text); }
+  .needs li::before { content: "✓"; color: var(--accent); font-weight: 700; }
+
+  .who-wrap { display: flex; align-items: center; gap: 48px; }
+  .who-text { flex: 1; min-width: 0; }
+  .who-text .lede { max-width: 640px; }
+  .who-wrap :global(svg.who-mark) { flex: none; width: clamp(96px, 14vw, 150px); height: auto; opacity: 0.9; }
+
+  footer { border-top: 1px solid var(--line-soft); padding: 40px 0 56px; color: var(--faint); font-size: 0.88rem; }
+  footer .wrap { display: flex; justify-content: space-between; align-items: center; gap: 18px; flex-wrap: wrap; }
+  footer nav { display: flex; gap: 22px; flex-wrap: wrap; }
+  footer a { color: var(--muted); text-decoration: none; }
+  footer a:hover { color: var(--accent); }
+  footer p { margin: 0; }
+
+  @media (max-width: 860px) {
+    .jgrid { grid-template-columns: 1fr; }
+    /* mail window first and sticky, so a tap on the deck always has it in view */
+    .mailcol { order: -1; top: 0; z-index: 3; padding: 8px 0; background: var(--bg); }
+    .msg { height: min(300px, calc(100dvh - 140px)); }
+    .caption { display: none; }
+    .grid { grid-template-columns: 1fr; }
+  }
+  @media (min-width: 861px) and (max-width: 1000px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 640px) { .who-wrap :global(svg.who-mark) { display: none; } .who-wrap { gap: 0; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    .reveal { opacity: 1; transform: none; }
+  }
+</style>
+<noscript><style>
+  .reveal { opacity: 1; transform: none; }
+  .msg[hidden] { display: block !important; }
+  .msg { height: auto; border-top: 1px solid #d9dfd5; }
+  .nojs-label { display: block; }
+  .mailcol { position: static; }
+</style></noscript>
+</head>
+<body>
+
+<header class="hero" id="top">
+  <div class="wrap">
+    <div class="eyewrap" role="img" aria-label="The Events&amp;I mark: a single-stroke ampersand that closes into an eye, with a tick as its iris">
+      <AndeyeEye variant="events" weight="fill" background="#0c0f16" />
+    </div>
+    <p class="eyebrow reveal" style="--d:0s">{copy.hero.eyebrow}</p>
+    <h1 class="reveal" style="--d:0.08s">{copy.hero.h1[0]}<br>{copy.hero.h1[1]}</h1>
+    <p class="sub lede reveal" style="--d:0.16s">{copy.hero.lede}</p>
+    <div class="ctas reveal" style="--d:0.26s">
+      <a class="btn btn-primary" id="ctaSetup" href={copy.hero.cta_setup_href}>{copy.hero.cta_setup_label}</a>
+      <a class="btn btn-ghost" id="ctaInuse" href={copy.hero.cta_inuse_href}>{copy.hero.cta_inuse_label}</a>
+      <a class="btn btn-ghost" id="ctaAndeye" href="https://andeye.com">{copy.hero.cta_andeye_label}</a>
+    </div>
+    <p class="cta-sub reveal" id="ctaSub" style="--d:0.3s" aria-live="polite">{copy.hero.sub_default}</p>
+    <p class="fineprint reveal" style="--d:0.34s">{copy.hero.fineprint}</p>
+    <p class="see-journey reveal" style="--d:0.4s"><a href="#journey">{copy.hero.see_journey_label}</a></p>
+  </div>
+</header>
+
+<section class="what" id="what">
+  <div class="wrap">
+    <div class="eyebrow-row">
+      <AndeyeEye variant="events" weight="fill" background="#090b11" />
+      <p class="eyebrow">{copy.title}</p>
+    </div>
+    <div class="what-prose"><Content /></div>
+  </div>
+</section>
+
+<section class="journey" id="journey">
+  <div class="wrap">
+    <div class="eyebrow-row">
+      <AndeyeEye variant="events" weight="fill" background="#0c0f16" />
+      <p class="eyebrow">{copy.journey.eyebrow}</p>
+    </div>
+    <h2>{copy.journey.h2}</h2>
+    <p class="lede">{copy.journey.lede}</p>
+    <div class="jgrid">
+      <ul class="deck">
+        {steps.map((s, i) => (
+          <li>
+            <button type="button" class="chip" data-step={s.id} aria-controls={`msg-${s.id}`} aria-pressed={i === 0 ? 'true' : 'false'}>
+              <span class="chip-top"><span class="chip-label">{s.label}</span><span class="chip-who">{s.who}</span></span>
+              <span class="chip-desc">{s.desc}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      <div class="mailcol">
+        <div class="mail">
+          <div class="chrome">
+            <span class="traffic" aria-hidden="true"><i class="tl-c"></i><i class="tl-m"></i><i class="tl-z"></i></span>
+            <span class="wtitle">{copy.journey.window_title}</span>
+          </div>
+          {steps.map((s, i) => (
+            <article class="msg" id={`msg-${s.id}`} hidden={i !== 0} aria-label={`Example email: ${s.subject}`}>
+              <p class="nojs-label eyebrow">{s.label}</p>
+              <div class="msg-head">From <b>{s.from}</b><span class="msg-subject">{s.subject}</span></div>
+              <p class="msg-org">{s.from}</p>
+              <div class="msg-card">
+                {s.body.map((l) => <p set:html={fmt(l)} />)}
+                {s.button && <span class="msg-btn">{s.button}</span>}
+              </div>
+            </article>
+          ))}
+        </div>
+        <p class="caption">Examples of the real emails, for a made-up event.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <div class="eyebrow-row">
+      <AndeyeEye variant="events" weight="fill" background="#0c0f16" />
+      <p class="eyebrow">{copy.features.eyebrow}</p>
+    </div>
+    <h2>{copy.features.h2}</h2>
+    <div class="grid">
+      {copy.features.items.map((f) => (
+        <div class="card"><h3>{f.title}</h3><p>{f.text}</p></div>
+      ))}
+    </div>
+  </div>
+</section>
+
+<section class="setup" id="setup">
+  <div class="wrap">
+    <div class="eyebrow-row">
+      <AndeyeEye variant="events" weight="fill" background="#090b11" />
+      <p class="eyebrow">{copy.setup.eyebrow}</p>
+    </div>
+    <h2>{copy.setup.h2}</h2>
+    <p class="lede">{copy.setup.lede}</p>
+    <ul class="needs">
+      {copy.setup.items.map((n) => <li>{n}</li>)}
+    </ul>
+    <a class="btn btn-primary" href={copy.setup.cta_href}>{copy.setup.cta_label}</a>
+  </div>
+</section>
+
+<section id="who">
+  <div class="wrap who-wrap">
+    <div class="who-text">
+      <div class="eyebrow-row">
+        <AndeyeEye variant="events" weight="fill" background="#0c0f16" />
+        <p class="eyebrow">{copy.who.eyebrow}</p>
+      </div>
+      <h2>{copy.who.h2}</h2>
+      <p class="lede">{copy.who.lede}</p>
+    </div>
+    <AndeyeEye variant="events" weight="fill" background="#0c0f16" class="who-mark" />
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>© {new Date().getFullYear()} {copy.footer}</p>
+    <nav>
+      <a href="https://andeye.com">andeye.com</a>
+      <a href="https://github.com/andeyePro/eventsandeye">GitHub</a>
+      <a href="https://andeye.com/terms/">Terms</a>
+      <a href="https://andeye.com/privacy/">Privacy</a>
+      <a href="#top">{copy.title}</a>
+    </nav>
+  </div>
+</footer>
+
+<script is:inline define:vars={{ SUBS: {
+  default: copy.hero.sub_default, setup: copy.hero.sub_setup, inuse: copy.hero.sub_inuse, andeye: copy.hero.sub_andeye,
+} }}>
+window.SUBS = SUBS;
+</script>
+<script is:inline>
+// Failsafe: if the main script dies, reveal everything anyway.
+(function () {
+  function show() { document.querySelectorAll('.reveal:not(.in)').forEach(function (el) { el.classList.add('in'); }); }
+  window.addEventListener('error', function () { setTimeout(show, 0); });
+  window.addEventListener('load', function () { setTimeout(show, 3200); });
+})();
+</script>
+<script is:inline>
+(function () {
+'use strict';
+var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+function revealAll() { document.querySelectorAll('.reveal').forEach(function (el) { el.classList.add('in'); }); }
+if (reduced) revealAll(); else requestAnimationFrame(function () { requestAnimationFrame(revealAll); });
+
+// hover-reactive CTA subtext: the text swaps in a fixed-height box, and colour is the only other change
+var ctaSub = document.getElementById('ctaSub');
+function sub(kind) {
+  ctaSub.textContent = window.SUBS[kind];
+  ['setup', 'inuse', 'andeye'].forEach(function (k) { ctaSub.classList.toggle(k, k === kind); });
+}
+[['ctaSetup', 'setup'], ['ctaInuse', 'inuse'], ['ctaAndeye', 'andeye']].forEach(function (pair) {
+  var el = document.getElementById(pair[0]);
+  ['mouseenter', 'focus'].forEach(function (ev) { el.addEventListener(ev, function () { sub(pair[1]); }); });
+  ['mouseleave', 'blur'].forEach(function (ev) { el.addEventListener(ev, function () { sub('default'); }); });
+});
+
+// the journey: one message shows at a time, chosen from the deck
+var chips = document.querySelectorAll('.chip');
+chips.forEach(function (chip) {
+  chip.addEventListener('click', function () {
+    var id = chip.getAttribute('data-step');
+    chips.forEach(function (c) { c.setAttribute('aria-pressed', c === chip ? 'true' : 'false'); });
+    document.querySelectorAll('.msg').forEach(function (m) { m.hidden = m.id !== 'msg-' + id; m.scrollTop = 0; });
+  });
+});
+})();
+</script>
+</body>
+</html>

@@ -3,7 +3,7 @@ import { handle, readJson } from '../../http';
 import { mdToHtml } from '../../markdown';
 import {
 	addInstructions, adminDelete, adminSummary, audienceRecipients, cancelMessage, createMessage, listInstructions, listMessages, parseAudience,
-	promote, registrationsCsv, sentLogMarkdown, updateSessions, updateSettings,
+	promote, promoteAll, registrationsCsv, sentLogMarkdown, updateSessions, updateSettings,
 } from '../../rsvp';
 
 const ev = (request: Request) => new URL(request.url).searchParams.get('event') || '';
@@ -22,8 +22,10 @@ export const sessions = handle(async ({ env, request }) => {
 
 export const promoteHandler = handle(async ({ env, request }) => {
 	const body = await readJson(request);
-	return promote(env, String(body.id || ''), body.what === 'tour' ? 'tour' : 'event');
+	return promote(env, String(body.id || ''), body.what === 'tour' ? 'tour' : body.what === 'optin' ? 'optin' : 'event', String(body.session || ''));
 });
+
+export const promoteAllHandler = handle(async ({ env, request }) => promoteAll(env, String((await readJson(request)).event || '')));
 
 /** Admin removal (e.g. spam). Sends no email to the person. */
 export const removeRegistration = handle(async ({ env, request }) => adminDelete(env, String((await readJson(request)).id || '')));

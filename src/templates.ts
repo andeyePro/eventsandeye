@@ -1,8 +1,9 @@
 // Events&I – Copyright (C) 2026 andeye Ltd. AGPL-3.0, see ../LICENSE.
+import { type Mode, modeOf } from './mode';
 import type { Attachment, OutgoingEmail } from './email';
 import { type CalEntry, addLinks } from './ics';
 import { mdToHtml, mdToText } from './markdown';
-import { escapeHtml, ukDateTime } from './util';
+import { escapeHtml, ukDate, ukDateTime } from './util';
 
 export interface EventRow {
 	id: string;
@@ -35,6 +36,8 @@ export interface SessionRow {
 	capacity: number | null;
 	booking_deadline: string | null;
 	sort: number;
+	/** 1 for an optional session people sign up to (e.g. dinner), so numbers are known; with a capacity, it has a waiting list. */
+	optin?: number;
 }
 
 export interface RegistrationRow {
@@ -46,6 +49,11 @@ export interface RegistrationRow {
 	affiliation: string | null;
 	needs: string | null;
 	extra_answer?: string | null;
+	/** Comma-separated ids of the opt-in sessions this person signed up to, whether they have a place or are waiting. */
+	optins?: string | null;
+	/** The subset of optins they are on the waiting list for. */
+	optins_waiting?: string | null;
+	optins_waitlist_since?: string | null;
 	share_contact: number;
 	status: 'pending' | 'confirmed';
 	place: 'place' | 'waitlist' | null;
@@ -100,8 +108,57 @@ function button(href: string, label: string): string {
 	return `<p style="margin:24px 0"><a href="${escapeHtml(href)}" style="background:${BLUE};color:#fff;text-decoration:none;font-weight:bold;font-size:18px;padding:14px 24px;border-radius:6px;display:inline-block">${escapeHtml(label)}</a></p>`;
 }
 
+/**
+ * Joining instructions can carry sections for one kind of attendee only:
+ *   :::in-person            :::remote
+ *   …markdown…              …markdown…
+ *   :::                     :::
+ * Everything outside such a block goes to everyone.
+ */
+export function forAudience(md: string, mode: Mode): string {
+	const out: string[] = [];
+	let keep = true;
+	const tag = { in_person: 'in-person', remote: 'remote', extras: 'extras' }[mode];
+	for (const line of md.split('\n')) {
+		const m = /^:::\s*(in-person|remote|extras)?\s*$/.exec(line.trim());
+		if (m) { keep = !m[1] || m[1] === tag; continue; }
+		if (keep) out.push(line);
+	}
+	return out.join('\n').replace(/\n{3,}/g, '\n\n');
+}
+
+/** The opt-in sessions (e.g. dinner) this registration signed up to, with a place or waiting. Only in-person registrations can. */
+export function optedIn(reg: Pick<RegistrationRow, 'attendance' | 'optins'>, sessions: SessionRow[]): SessionRow[] {
+	if (reg.attendance !== 'in_person' || !reg.optins) return [];
+	const ids = reg.optins.split(',');
+	return sessions.filter((s) => s.optin && ids.includes(s.id));
+}
+
+export const optinWaiting = (reg: Pick<RegistrationRow, 'optins_waiting'>, id: string) => (reg.optins_waiting ?? '').split(',').includes(id);
+
+/** The opt-in sessions this registration has a place at (not just waiting for). */
+export const optinPlaces = (reg: Pick<RegistrationRow, 'attendance' | 'optins' | 'optins_waiting'>, sessions: SessionRow[]) =>
+	optedIn(reg, sessions).filter((s) => !optinWaiting(reg, s.id));
+
+/** Just the opt-in sessions, and waiting for every one of them: like the in-person waiting list, no joining instructions yet. */
+export const onlyWaiting = (reg: Pick<RegistrationRow, 'attendance' | 'place' | 'optins' | 'optins_waiting'>, sessions: SessionRow[]) =>
+	modeOf(reg) === 'extras' && optedIn(reg, sessions).length > 0 && !optinPlaces(reg, sessions).length;
+
+/** Waiting for a place: in person, or (for someone coming only to the opt-in sessions) for all of those. */
+export const waitingForPlace = (reg: Pick<RegistrationRow, 'attendance' | 'place' | 'optins' | 'optins_waiting'>, sessions: SessionRow[]) =>
+	(reg.attendance === 'in_person' && reg.place === 'waitlist') || onlyWaiting(reg, sessions);
+
+const lower = (s: SessionRow) => s.label.charAt(0).toLowerCase() + s.label.slice(1);
+const waitingLines = (reg: RegistrationRow, sessions: SessionRow[]) =>
+	optedIn(reg, sessions).filter((s) => optinWaiting(reg, s.id)).map((s) => `You are on the waiting list for ${lower(s)}. We will email you if a place becomes available.`);
+
 export function statusLines(reg: RegistrationRow, sessions: SessionRow[]): string[] {
 	const lines: string[] = [];
+	const mode = modeOf(reg);
+	if (mode === 'extras') {
+		const what = optedIn(reg, sessions).map(lower).join(' and ') || 'the optional sessions';
+		return [`You are joining us for ${what} only.`, ...waitingLines(reg, sessions)];
+	}
 	if (reg.attendance === 'remote') lines.push('You are registered to join the talks remotely.');
 	else if (reg.place === 'waitlist') lines.push('You are on the waiting list for an in-person place. We will email you if a place becomes available.');
 	else lines.push('You have an in-person place.');
@@ -109,6 +166,8 @@ export function statusLines(reg: RegistrationRow, sessions: SessionRow[]): strin
 		const t = sessions.find((x) => x.id === reg.tour_id);
 		if (t) lines.push(reg.tour_place === 'waitlist' ? `You are on the waiting list for the ${t.label}.` : `You are booked on the ${t.label}.`);
 	}
+	for (const s of optinPlaces(reg, sessions)) lines.push(`You would like to join us for ${lower(s)}.`);
+	lines.push(...waitingLines(reg, sessions));
 	return lines;
 }
 
@@ -119,40 +178,59 @@ function calendarHtml(cal: CalendarBlock | undefined, tz: string): string {
 		return `<li><strong>${escapeHtml(e.summary)}</strong>, ${escapeHtml(ukDateTime(e.start, tz))}<br>
 <span style="font-size:14px">Add to: <a href="${escapeHtml(l.google)}">Google</a> · <a href="${escapeHtml(l.outlook)}">Outlook.com</a> · <a href="${escapeHtml(l.office365)}">Office 365</a> · <a href="${escapeHtml(l.yahoo)}">Yahoo</a> · <a href="${escapeHtml(cal.icsUrl(e.key))}">Apple and others (.ics)</a></span></li>`;
 	}).join('');
-	return `<h2 style="font-size:18px">Your calendar</h2><p style="font-size:14px">Calendar invitations are attached; most email apps add them to your calendar automatically. Or use these links:</p><ul>${items}</ul>`;
+	return `<h2 style="font-size:18px">Your calendar</h2><p style="font-size:14px">If the event wasn't added to your calendar automatically, try opening the attachment or using one of these links:</p><ul>${items}</ul>`;
 }
 
 function calendarText(cal: CalendarBlock | undefined, tz: string): string {
 	if (!cal || !cal.entries.length) return '';
-	return '\n\nYOUR CALENDAR (invitations attached)\n' + cal.entries.map((e) => {
+	return '\n\nYOUR CALENDAR (if the event wasn\'t added automatically, open the attachment or use one of these links)\n' + cal.entries.map((e) => {
 		const l = addLinks(e);
 		return `- ${e.summary}, ${ukDateTime(e.start, tz)}\n  Google: ${l.google}\n  Outlook.com: ${l.outlook}\n  Office 365: ${l.office365}\n  Yahoo: ${l.yahoo}\n  Apple and others (.ics): ${cal.icsUrl(e.key)}`;
 	}).join('\n');
 }
 
-export function confirmEmail(b: Brand, ev: EventRow, reg: RegistrationRow, confirmUrl: string, manageUrl: string): OutgoingEmail {
+/**
+ * The double opt-in email. It goes to an address nobody has verified yet, so it carries no manage link, does not
+ * repeat the name typed into the form, and lists only the choices the recipient is about to confirm.
+ */
+export function confirmEmail(b: Brand, ev: EventRow, reg: RegistrationRow, sessions: SessionRow[], confirmUrl: string): OutgoingEmail {
 	const subject = `Complete your registration: ${ev.title}`;
+	const choices = [
+		...statusLines(reg, sessions).map((l) => l.replace('You have an in-person place.', 'An in-person place is held for you.').replace('You are booked on', 'A place is held for you on').replace('You are on the waiting list for an in-person place. We will email you if a place becomes available.', 'You are joining the waiting list for an in-person place.').replace(/^You are on the waiting list for (.*)\. We will email you if a place becomes available\.$/, 'You are joining the waiting list for $1.')),
+		reg.share_contact ? 'You chose to share your email address with the hosts of the sessions you attend.' : 'Session hosts will see only your name and whether you have a place.',
+	];
+	const waiting = waitingForPlace(reg, sessions);
+	const held = modeOf(reg) === 'in_person' && !waiting ? 'your place will be released' : 'it will be deleted';
+	// On the waiting list there's no place to lose: the point of confirming is to stay on the list.
+	const why = !waiting ? '' : reg.place === 'waitlist' ? ' and join the waiting list: we will email you if a place comes up, for example if we can book a bigger room' : ' and join the waiting list: we will email you if a place comes up';
+	const notMeUrl = `${confirmUrl}${confirmUrl.includes('?') ? '&' : '?'}not-me=1`;
+	const holdUntil = ukDateTime(reg.hold_expires_at ?? ev.deadline, ev.timezone);
 	const html = layout(b, subject, `
 <h1 style="font-size:22px;margin-top:0">Please complete your registration</h1>
-<p>Hello ${escapeHtml(reg.name)},</p>
-<p>Thanks for registering for the <strong>${escapeHtml(ev.title)}</strong> on ${escapeHtml(ukDateTime(ev.starts_at, ev.timezone))}.</p>
-<p><strong>Your registration is not complete yet.</strong> Please confirm your email address by clicking the button below. We are holding your place until ${escapeHtml(ukDateTime(reg.hold_expires_at ?? ev.deadline, ev.timezone))}; after that, an unconfirmed registration is deleted automatically.</p>
+<p>Hello,</p>
+<p>Someone, hopefully you, registered this address for the <strong>${escapeHtml(ev.title)}</strong> on ${escapeHtml(ukDateTime(ev.starts_at, ev.timezone))}.</p>
+<p><strong>Your registration is not complete yet.</strong> Please click the button below now to confirm your email address${why}. If you don't complete your registration, ${held} on ${escapeHtml(holdUntil)}.</p>
+<p>You are confirming:</p><ul>${choices.map((l) => `<li>${escapeHtml(l)}</li>`).join('')}</ul>
 ${button(confirmUrl, 'Complete registration')}
 <p style="font-size:14px">If the button does not work, copy this link into your browser:<br><a href="${escapeHtml(confirmUrl)}">${escapeHtml(confirmUrl)}</a></p>
-<p style="font-size:14px">You can view, change or cancel your registration at any time: <a href="${escapeHtml(manageUrl)}">manage my registration</a>.</p>
-<p style="font-size:14px">If you did not register, ignore this email and the registration will be deleted.</p>`);
-	const text = `Hello ${reg.name},
+<p style="font-size:14px">To change anything, register again with the same address: the newest registration replaces this one. Once you have confirmed, every email has a link to view, change or cancel your registration.</p>
+<p style="font-size:14px">If you did not register, please <a href="${escapeHtml(notMeUrl)}">click here to delete the registration</a>.</p>`);
+	const text = `Hello,
 
-Thanks for registering for the ${ev.title} on ${ukDateTime(ev.starts_at, ev.timezone)}.
+Someone, hopefully you, registered this address for the ${ev.title} on ${ukDateTime(ev.starts_at, ev.timezone)}.
 
-YOUR REGISTRATION IS NOT COMPLETE YET. Please confirm your email address by opening this link and clicking "Complete registration":
+YOUR REGISTRATION IS NOT COMPLETE YET. Please open this link now and click "Complete registration" to confirm your email address${why}:
 ${confirmUrl}
 
-We are holding your place until ${ukDateTime(reg.hold_expires_at ?? ev.deadline, ev.timezone)}; after that, an unconfirmed registration is deleted automatically.
+If you don't complete your registration, ${held} on ${holdUntil}.
 
-View, change or cancel your registration: ${manageUrl}
+You are confirming:
+${choices.map((l) => `- ${l}`).join('\n')}
 
-If you did not register, ignore this email and the registration will be deleted.${textFooter(b)}`;
+To change anything, register again with the same address: the newest registration replaces this one. Once you have confirmed, every email has a link to view, change or cancel your registration.
+
+If you did not register, please open this link to delete the registration:
+${notMeUrl}${textFooter(b)}`;
 	return { to: reg.email, subject, html, text };
 }
 
@@ -161,14 +239,17 @@ export function instructionsEmail(
 	cal?: CalendarBlock, attachments?: Attachment[], intro?: { html: string; text: string },
 ): OutgoingEmail {
 	const st = statusLines(reg, sessions);
+	const thanks = `Thank you for registering for the ${ev.title}, on ${ukDate(ev.starts_at, ev.timezone)}.`;
+	const body = forAudience(instr.body_md, modeOf(reg));
 	const html = layout(b, instr.subject, `
 <p>Hello ${escapeHtml(reg.name)},</p>
 ${intro?.html ?? ''}
+<p>${escapeHtml(thanks)}</p>
 ${st.map((l) => `<p><strong>${escapeHtml(l)}</strong></p>`).join('')}
-${mdToHtml(instr.body_md)}
+${mdToHtml(body)}
 ${calendarHtml(cal, ev.timezone)}
 ${button(manageUrl, 'Manage my registration')}`);
-	const text = `Hello ${reg.name},\n\n${intro ? `${intro.text}\n\n` : ''}${st.join('\n')}\n\n${mdToText(instr.body_md)}${calendarText(cal, ev.timezone)}\n\nView, change or cancel your registration: ${manageUrl}${textFooter(b)}`;
+	const text = `Hello ${reg.name},\n\n${intro ? `${intro.text}\n\n` : ''}${thanks}\n\n${st.join('\n')}\n\n${mdToText(body)}${calendarText(cal, ev.timezone)}\n\nView, change or cancel your registration: ${manageUrl}${textFooter(b)}`;
 	return { to: reg.email, subject: instr.subject, html, text, attachments };
 }
 
@@ -183,8 +264,10 @@ export function alreadyRegisteredIntro(ev: EventRow, reg: RegistrationRow) {
 	return { html: lines.map((l) => `<p>${escapeHtml(l)}</p>`).join(''), text: lines.join('\n') };
 }
 
-export function waitlistReminderEmail(b: Brand, ev: EventRow, reg: RegistrationRow, sessions: SessionRow[], manageUrl: string): OutgoingEmail {
-	const intro = alreadyRegisteredIntro(ev, reg);
+export function waitlistReminderEmail(b: Brand, ev: EventRow, reg: RegistrationRow, sessions: SessionRow[], manageUrl: string, justConfirmed = false): OutgoingEmail {
+	const intro = justConfirmed
+		? { html: `<p>Thank you for confirming your registration for the ${escapeHtml(ev.title)}.</p><p>Your latest joining instructions follow.</p>`, text: `Thank you for confirming your registration for the ${ev.title}.\nYour latest joining instructions follow.` }
+		: alreadyRegisteredIntro(ev, reg);
 	const st = statusLines(reg, sessions);
 	const subject = `Your registration: ${ev.title}`;
 	const html = layout(b, subject, `<p>Hello ${escapeHtml(reg.name)},</p>${intro.html.replace('Your latest joining instructions follow.', 'You will receive joining instructions if a place becomes available.')}${st.map((l) => `<p><strong>${escapeHtml(l)}</strong></p>`).join('')}${button(manageUrl, 'Manage my registration')}`);
@@ -210,14 +293,29 @@ export function messageEmail(b: Brand, reg: RegistrationRow, msg: { subject: str
 	return { to: reg.email, subject: msg.subject, html, text };
 }
 
-export function cancellationEmail(b: Brand, ev: EventRow, reg: Pick<RegistrationRow, 'name' | 'email'>, eventUrl: string, attachments: Attachment[]): OutgoingEmail {
+export function cancellationEmail(b: Brand, ev: EventRow, reg: Pick<RegistrationRow, 'name' | 'email'>, eventUrl: string, attachments: Attachment[], byOrganiser = false): OutgoingEmail {
 	const subject = `Registration cancelled: ${ev.title}`;
+	const who = byOrganiser ? 'has been cancelled by the organisers' : 'has been cancelled';
+	const ask = byOrganiser ? 'If you think this is a mistake, please reply to this email.' : 'If this was a mistake, you are welcome to';
 	const html = layout(b, subject, `
 <p>Hello ${escapeHtml(reg.name)},</p>
-<p>Your registration for the <strong>${escapeHtml(ev.title)}</strong> has been cancelled and your details have been deleted.${attachments.length ? ' The attached cancellations remove the entries from your calendar.' : ''}</p>
-<p>If this was a mistake, you are welcome to <a href="${escapeHtml(eventUrl)}">register again</a> while registration is open.</p>`);
-	const text = `Hello ${reg.name},\n\nYour registration for the ${ev.title} has been cancelled and your details have been deleted.${attachments.length ? ' The attached cancellations remove the entries from your calendar.' : ''}\n\nIf this was a mistake, you are welcome to register again while registration is open: ${eventUrl}${textFooter(b)}`;
+<p>Your registration for the <strong>${escapeHtml(ev.title)}</strong> ${who} and your details have been deleted.${attachments.length ? ' The attached cancellations remove the entries from your calendar.' : ''}</p>
+<p>${byOrganiser ? escapeHtml(ask) : `If this was a mistake, you are welcome to <a href="${escapeHtml(eventUrl)}">register again</a> while registration is open.`}</p>`);
+	const text = `Hello ${reg.name},\n\nYour registration for the ${ev.title} ${who} and your details have been deleted.${attachments.length ? ' The attached cancellations remove the entries from your calendar.' : ''}\n\n${byOrganiser ? ask : `If this was a mistake, you are welcome to register again while registration is open: ${eventUrl}`}${textFooter(b)}`;
 	return { to: reg.email, subject, html, text, attachments };
+}
+
+/** After "I did not register": one last email, so the address owner knows it worked. Names nobody (the name was typed
+ * by whoever registered the address) and invites nothing. */
+export function declinedEmail(b: Brand, ev: EventRow, email: string): OutgoingEmail {
+	const subject = `Registration deleted: ${ev.title}`;
+	const html = layout(b, subject, `
+<p>Hello,</p>
+<p>The registration made with this address for the <strong>${escapeHtml(ev.title)}</strong> has been deleted, as you asked. You won't hear from us about it again.</p>
+<p>Best regards</p>
+<p>${escapeHtml(b.org)}</p>`);
+	const text = `Hello,\n\nThe registration made with this address for the ${ev.title} has been deleted, as you asked. You won't hear from us about it again.\n\nBest regards\n\n${b.org}${textFooter(b)}`;
+	return { to: email, subject, html, text };
 }
 
 export interface HostLine {

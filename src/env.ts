@@ -5,11 +5,11 @@ export interface Env {
 	DB: D1Database;
 	/** Resend API key. Required on the live site; without it emails go to the dev outbox and console (DEV_MODE only). */
 	RESEND_API_KEY?: string;
-	/** Sender and calendar organiser, e.g. "AMYBO <hello@amybo.org>". */
+	/** Sender and calendar organiser, e.g. "Example Organisers <events@example.org>". */
 	EMAIL_FROM?: string;
 	/** Where admin notifications go; also the reply-to address. */
 	NOTIFY_EMAIL?: string;
-	/** Public origin used in email links, e.g. https://amybo.org. */
+	/** Public origin used in email links, e.g. https://example.org. */
 	SITE_URL?: string;
 	/** Organisation name shown in emails and calendar entries. */
 	ORG_NAME?: string;
@@ -27,6 +27,17 @@ export interface Env {
 	/** Where people can read the Events&I source and give feedback (AGPL). */
 	EVENTSANDEYE_URL?: string;
 	/** "true" only in local development: enables the dev outbox endpoints and test keys. Never set in production. */
+	/** "false" turns off the two-factor check on admin sign-ins (on by default). */
+	ACCESS_REQUIRE_MFA?: string;
+	/** Comma-separated `amr` values accepted as a second factor; see access.ts. */
+	ACCESS_MFA_METHODS?: string;
+	/** "application": the Access application itself requires MFA (Cloudflare's independent MFA), which its tokens
+	 * don't report in `amr`; the code then relies on that setting instead of the claim. See access.ts. */
+	ACCESS_MFA?: string;
+	/** Comma-separated admin email addresses; when set, no other Access identity is admitted. */
+	ADMIN_EMAILS?: string;
+	/** Maximum age of an admin sign-in in hours (default 12). */
+	ACCESS_MAX_AGE_HOURS?: string;
 	DEV_MODE?: string;
 	/** Local development only: JSON Web Key Set used instead of the Access certs URL, for tests. */
 	ACCESS_JWKS_JSON?: string;

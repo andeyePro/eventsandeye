@@ -13,5 +13,6 @@ export const onRequestGet = handle(async ({ env, request }) => {
 		event: { id: ev.id, title: ev.title, starts_at: ev.starts_at, deadline: ev.deadline, open: registrationOpen(ev), extra_question: ev.extra_question ?? null },
 		in_person_available: cap.inPerson.available,
 		tours: cap.tours.map((t) => ({ id: t.id, label: t.label, available: t.available, open: t.open })),
+		optins: sessions.filter((s) => s.optin).map((s) => ({ id: s.id, label: s.label, starts_at: s.starts_at, location: s.location, available: !!cap.optins.find((o) => o.id === s.id)?.available })),
 	};
 });
