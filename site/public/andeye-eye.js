@@ -12,7 +12,7 @@
 // andeyeEye(el, opts) mounts into an <svg> element:
 //   colour : stroke colour (default the brand blue #56C1FF)
 //   iris   : 'none' | 'fill' | 'stroke'   (stroke = same 17px line width)
-//   glyph  : null | 'clock' | 'code' | 'tick'   (drawn inside the iris)
+//   glyph  : null | 'clock' | 'code' | 'tick' | 'people' | 'calendar'   (drawn inside the iris)
 //   blink  : true = natural periodic blink (respects prefers-reduced-motion)
 (function (global) {
   'use strict';
@@ -155,6 +155,33 @@
                        + ' L' + (g.cx + g.r * 0.48) + ',' + (g.cy - g.r * 0.34),
                      stroke: tickCol, 'stroke-width': W * 0.85, 'stroke-linecap': 'round',
                      'stroke-linejoin': 'round', fill: 'none' }, irisGroup);
+      } else if (glyph === 'people') {
+        // A small group: two people behind, one in front, cut out in the page colour on a filled iris.
+        // Each is a head and rounded shoulders; the front one is outlined in the iris colour so the
+        // three stay distinct at favicon size.
+        var pc = iris === 'fill' ? (opts.background || '#0c0f16') : colour;
+        var gap = iris === 'fill' ? colour : (opts.background || '#0c0f16');
+        var person = function (x, headY, headR, w, top, bottom, ring) {
+          var attrs = ring ? { fill: pc, stroke: gap, 'stroke-width': g.r * 0.07 } : { fill: pc };
+          el('path', Object.assign({ d: 'M' + (x - w) + ',' + bottom + ' V' + (top + w * 0.75)
+                       + ' A' + w + ',' + (w * 0.75) + ' 0 0 1 ' + (x + w) + ',' + (top + w * 0.75)
+                       + ' V' + bottom + ' Z' }, attrs), irisGroup);
+          el('circle', Object.assign({ cx: x, cy: headY, r: headR }, attrs), irisGroup);
+        };
+        var b = g.cy + g.r * 0.52;
+        person(g.cx - g.r * 0.4, g.cy - g.r * 0.2, g.r * 0.14, g.r * 0.22, g.cy + g.r * 0.02, b, false);
+        person(g.cx + g.r * 0.4, g.cy - g.r * 0.2, g.r * 0.14, g.r * 0.22, g.cy + g.r * 0.02, b, false);
+        person(g.cx, g.cy - g.r * 0.3, g.r * 0.18, g.r * 0.3, g.cy - g.r * 0.02, b + g.r * 0.04, true);
+      } else if (glyph === 'calendar') {
+        // A calendar page: outline, header rule and two binder rings, in the page colour on a filled iris.
+        var cc = iris === 'fill' ? (opts.background || '#0c0f16') : colour;
+        var cw = W * 0.6, x0 = g.cx - g.r * 0.46, x1 = g.cx + g.r * 0.46, y0 = g.cy - g.r * 0.36, y1 = g.cy + g.r * 0.44;
+        el('rect', { x: x0, y: y0, width: x1 - x0, height: y1 - y0, rx: g.r * 0.1,
+                     stroke: cc, 'stroke-width': cw, fill: 'none' }, irisGroup);
+        el('path', { d: 'M' + x0 + ',' + (g.cy - g.r * 0.1) + ' H' + x1
+                       + ' M' + (g.cx - g.r * 0.22) + ',' + (g.cy - g.r * 0.52) + ' V' + (g.cy - g.r * 0.24)
+                       + ' M' + (g.cx + g.r * 0.22) + ',' + (g.cy - g.r * 0.52) + ' V' + (g.cy - g.r * 0.24),
+                     stroke: cc, 'stroke-width': cw, 'stroke-linecap': 'round', fill: 'none' }, irisGroup);
       } else if (glyph === 'code') {
         // A ">" FILLING the circle: two strokes spanning the iris interior.
         var inset = iris === 'fill' ? 0.62 : 0.66;

@@ -1,13 +1,13 @@
 ---
 // The andeye mark: original brand geometry + the app's eyelid wink.
 // Rendered client-side by /andeye-eye.js (one shared engine per page).
-// variant: main (blue, empty) | time (orange, clock iris) | vibe (white, > iris) | events (green, tick iris)
+// variant: main (blue, empty) | time (orange, clock iris) | vibe (white, > iris) | events (green, people iris)
 // weight: fill | stroke — the iris treatment (ignored for main).
 // background: the page colour behind the mark — the glyph inside a FILLED
 // iris is drawn in this colour, so it must match where the eye sits.
-const { variant = 'main', weight = 'fill', background = '#131826', class: cls = '' } = Astro.props;
+const { variant = 'main', weight = 'fill', background = '#131826', glyph = '', class: cls = '' } = Astro.props;
 ---
-<svg class={`andeye-eye ${cls}`} data-variant={variant} data-weight={weight} data-background={background}></svg>
+<svg class={`andeye-eye ${cls}`} data-variant={variant} data-weight={weight} data-background={background} data-glyph={glyph || undefined}></svg>
 <script src="/andeye-eye.js" is:inline></script>
 <script is:inline>
   (function () {
@@ -17,7 +17,7 @@ const { variant = 'main', weight = 'fill', background = '#131826', class: cls = 
       var bg = svg.getAttribute('data-background') || '#131826';
       var opts = v === 'time' ? { colour: '#f0a13a', iris: w, glyph: 'clock', background: bg }
                : v === 'vibe' ? { colour: '#eef1f6', iris: w, glyph: 'code', background: bg }
-               : v === 'events' ? { colour: '#7fd69e', iris: w, glyph: 'tick', background: bg }
+               : v === 'events' ? { colour: '#7fd69e', iris: w, glyph: svg.getAttribute('data-glyph') || 'people', background: bg }
                : { iris: 'none' };
       opts.drawOn = true;   // hand-draw the mark on load; iris fades in at the end
       window.andeyeEye(svg, opts);
