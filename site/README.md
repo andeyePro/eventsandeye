@@ -1,7 +1,7 @@
 # events.andeye.com
 
 The single-page website for Events&I, in the same treatment as andeye.com and vibe.andeye.com. All visible copy is in
-[`src/content/home.md`](src/content/home.md); the layout is [`src/pages/index.astro`](src/pages/index.astro), and the
+[`src/home.md`](src/home.md); the layout is [`src/pages/index.astro`](src/pages/index.astro), and the
 animated andeye mark is [`public/andeye-eye.js`](public/andeye-eye.js) (Events&I's variant is green, with a small group of people as its iris; `glyph="calendar"` on `AndeyeEye` shows the alternative).
 
 ```sh

@@ -1,9 +1,19 @@
 ---
 // Events&I – Copyright (C) 2026 andeye Ltd. AGPL-3.0, see ../LICENSE.
 /** Self-service view/change/cancel page, driven by the signed token in ?t=. */
+interface Props {
+	/** Label for the in-person attendance choice, e.g. "In person at White City". */
+	inPersonLabel?: string;
+	/** Label for the remote attendance choice. */
+	remoteLabel?: string;
+	/** Legend for the tour choices, shown only when the event has tours. */
+	tourLegend?: string;
+}
+const { inPersonLabel = 'In person', remoteLabel = 'Remotely (online sessions only)', tourLegend = 'Optional tour (in person only)' } = Astro.props;
 ---
 <div class="not-content" id="manage">
 	<p id="manage-loading" role="status">Loading your registration…</p>
+	<noscript><p>Managing your registration needs JavaScript. Please turn it on, or contact the organisers.</p></noscript>
 	<form id="manage-form" hidden novalidate>
 		<p id="manage-summary" class="summary"></p>
 		<div class="field">
@@ -13,12 +23,13 @@
 		<p class="help">Email: <span id="m-email"></span>. To use a different address, cancel and register again.</p>
 		<fieldset class="field">
 			<legend>How will you attend?</legend>
-			<label class="choice"><input type="radio" name="attendance" value="in_person" /> In person at White City</label>
-			<label class="choice"><input type="radio" name="attendance" value="remote" /> Remotely, talks only, on Google Meet</label>
+			<label class="choice"><input type="radio" name="attendance" value="in_person" /> {inPersonLabel}</label>
+			<label class="choice"><input type="radio" name="attendance" value="remote" /> {remoteLabel}</label>
 			<label class="choice" id="m-extras-choice" hidden><input type="radio" name="attendance" value="extras" /> <span id="m-extras-label">Just the optional sessions</span></label>
+			<p class="help" id="m-closed" hidden>Registration has closed: you can still switch to remote or cancel.</p>
 		</fieldset>
-		<fieldset class="field" id="m-tour-fs">
-			<legend>Optional lab tour (in person only)</legend>
+		<fieldset class="field" id="m-tour-fs" hidden>
+			<legend>{tourLegend}</legend>
 			<label class="choice"><input type="radio" name="tour_id" value="none" /> No tour, thanks</label>
 			<div id="m-tours"></div>
 		</fieldset>
@@ -33,14 +44,16 @@
 		<div class="field">
 			<label for="m-needs">Dietary or access needs (optional)</label>
 			<textarea id="m-needs" name="needs" rows="3" maxlength="1000"></textarea>
-			<label for="m-extra">Anything else for the organisers, for example plans for the day after (optional)</label>
+		</div>
+		<div class="field" id="m-extra-field" hidden>
+			<label for="m-extra" id="m-extra-label">Anything else (optional)</label>
 			<textarea id="m-extra" name="extra_answer" rows="2" maxlength="500"></textarea>
 		</div>
-		<label class="choice"><input type="checkbox" name="share_contact" id="m-share" /> Share my email address with the hosts of the sessions I attend (otherwise hosts see only your name and whether you have a place, so if plans change at the last minute they may not be able to reach you directly)</label>
+		<label class="choice"><input type="checkbox" name="share_contact" id="m-share" /> Share my email address and organisation with the hosts of the sessions I attend (otherwise hosts see only your name and whether you have a place, so if plans change at the last minute they may not be able to reach you directly)</label>
 		<div id="m-calendar"></div>
 		<p class="help">Moving to a different tour, or from remote to in person, is subject to availability: if it is full you join the waiting list.</p>
 		<div class="actions">
-			<button type="submit" class="primary">Save changes</button>
+			<button type="submit" id="m-save" class="primary">Save changes</button>
 			<button type="button" id="m-cancel" class="danger">Cancel my registration</button>
 		</div>
 		<div id="manage-result" role="status" aria-live="polite"></div>
@@ -54,13 +67,16 @@
 	const loading = document.getElementById('manage-loading')!;
 	const out = document.getElementById('manage-result')!;
 	const tourFs = document.getElementById('m-tour-fs') as HTMLFieldSetElement;
+	const buttons = [document.getElementById('m-save'), document.getElementById('m-cancel')] as HTMLButtonElement[];
+	const busy = (on: boolean) => buttons.forEach((b) => (b.disabled = on));
+	const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 
-	type View = { ok: boolean; error?: string; event: { title: string; page_path: string }; tours: { id: string; label: string; available: boolean; open: boolean }[]; optins?: { id: string; label: string; starts_at: string; location: string | null; available?: boolean }[]; registration: Record<string, string | null | boolean | string[]>; calendar: { key: string; summary: string; start: string; url: string }[] };
+	type View = { ok: boolean; error?: string; event: { title: string; page_path: string; open: boolean; extra_question?: string | null }; tours: { id: string; label: string; available: boolean; open: boolean }[]; optins?: { id: string; label: string; starts_at: string; location: string | null; available?: boolean }[]; registration: Record<string, string | null | boolean | string[]>; calendar: { key: string; summary: string; start: string; url: string }[] };
 
 	function describe(r: View['registration']) {
 		const parts: string[] = [];
-		parts.push(r.status === 'pending' ? 'Not yet confirmed: please click the "Complete registration" button in your email.' : 'Confirmed.');
-		if (r.mode === 'extras') parts.push(`Joining us for ${Array.isArray(r.optin_labels) ? r.optin_labels.join(' and ').toLowerCase() : 'the optional sessions'} only.`);
+		parts.push('Confirmed.');
+		if (r.mode === 'extras') parts.push(`Joining us for ${Array.isArray(r.optin_labels) ? r.optin_labels.map(lowerFirst).join(' and ') : 'the optional sessions'} only.`);
 		else if (r.attendance === 'remote') parts.push('Attending remotely.');
 		else parts.push(r.place === 'waitlist' ? 'On the in-person waiting list.' : 'In-person place.');
 		if (r.tour_label) parts.push(r.tour_place === 'waitlist' ? `Waiting list for the ${r.tour_label}.` : `Booked on the ${r.tour_label}.`);
@@ -90,6 +106,9 @@
 		(form.elements.namedItem('affiliation') as HTMLInputElement).value = String(r.affiliation ?? '');
 		(form.elements.namedItem('needs') as HTMLTextAreaElement).value = String(r.needs ?? '');
 		(form.elements.namedItem('extra_answer') as HTMLTextAreaElement).value = String(r.extra_answer ?? '');
+		document.getElementById('m-extra-field')!.hidden = !v.event.extra_question;
+		if (v.event.extra_question) document.getElementById('m-extra-label')!.textContent = `${v.event.extra_question} (optional)`;
+		tourFs.hidden = !v.tours.length;
 		const box = document.getElementById('m-tours')!;
 		box.replaceChildren(...v.tours.map((tour) => {
 			const l = document.createElement('label');
@@ -97,10 +116,14 @@
 			const i = document.createElement('input');
 			i.type = 'radio'; i.name = 'tour_id'; i.value = tour.id;
 			i.disabled = !tour.open;
-			l.append(i, ` ${tour.label}${!tour.open ? ' (booking closed)' : tour.available || tour.id === r.tour_id ? '' : ' (full: waiting list)'}`);
+			l.replaceChildren(i, ` ${tour.label}${!tour.open ? ' (booking closed)' : tour.available || tour.id === r.tour_id ? '' : ' (full: waiting list)'}`);
 			return l;
 		}));
-		(form.querySelector(`input[name=attendance][value=${r.mode === 'extras' ? 'extras' : r.attendance}]`) as HTMLInputElement).checked = true;
+		const current = r.mode === 'extras' ? 'extras' : String(r.attendance);
+		(form.querySelector(`input[name=attendance][value=${current}]`) as HTMLInputElement).checked = true;
+		// Once registration closes, nobody new may take an in-person or optional-session place, but anyone can step back.
+		for (const mode of ['in_person', 'extras']) (form.querySelector(`input[name=attendance][value=${mode}]`) as HTMLInputElement).disabled = !v.event.open && mode !== current;
+		document.getElementById('m-closed')!.hidden = v.event.open;
 		(form.querySelector(`input[name=tour_id][value="${r.tour_id ?? 'none'}"]`) as HTMLInputElement).checked = true;
 		(document.getElementById('m-share') as HTMLInputElement).checked = !!r.share_contact;
 		const mine = Array.isArray(r.optins) ? r.optins : [];
@@ -110,12 +133,12 @@
 			const i = document.createElement('input');
 			i.type = 'checkbox'; i.name = 'optins'; i.value = o.id; i.checked = mine.includes(o.id);
 			const time = new Date(o.starts_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' });
-			l.append(i, ` ${o.label}, ${time}${o.location ? `, ${o.location}` : ''}${o.available === false && !mine.includes(o.id) ? ' (full: waiting list)' : ''}`);
+			l.replaceChildren(i, ` ${o.label}, ${time}${o.location ? `, ${o.location}` : ''}${o.available === false && !mine.includes(o.id) ? ' (full: waiting list)' : ''}`);
 			return l;
 		}));
 		(document.getElementById('m-optins-fieldset') as HTMLFieldSetElement).hidden = !(v.optins ?? []).length;
 		if ((v.optins ?? []).length) {
-			document.getElementById('m-extras-label')!.textContent = `Just the ${(v.optins ?? []).map((o) => o.label.toLowerCase()).join(' and ')}`;
+			document.getElementById('m-extras-label')!.textContent = `Just the ${(v.optins ?? []).map((o) => lowerFirst(o.label)).join(' and ')}`;
 			document.getElementById('m-extras-choice')!.hidden = false;
 		}
 		const cal = document.getElementById('m-calendar')!;
@@ -130,10 +153,10 @@
 				const a = document.createElement('a');
 				a.href = c.url;
 				a.textContent = `${c.summary} (.ics)`;
-				li.append(a);
-				ul.append(li);
+				li.appendChild(a);
+				ul.appendChild(li);
 			}
-			cal.append(p, ul);
+			cal.replaceChildren(p, ul);
 		}
 		syncTour();
 	}
@@ -141,7 +164,7 @@
 		const res = await fetch(method === 'GET' ? `/api/rsvp/manage?t=${encodeURIComponent(t ?? '')}` : '/api/rsvp/manage', {
 			method, headers: body ? { 'content-type': 'application/json' } : {}, body: body ? JSON.stringify({ t, ...body }) : undefined,
 		});
-		const d = await res.json();
+		const d = (await res.json()) as View;
 		if (!d.ok) throw new Error(d.error);
 		return d;
 	}
@@ -154,17 +177,21 @@
 		const fd: Record<string, unknown> = Object.fromEntries(new FormData(form).entries());
 		fd.share_contact = (document.getElementById('m-share') as HTMLInputElement).checked;
 		fd.optins = new FormData(form).getAll('optins').map(String);
-		try { fill(await call('POST', fd)); out.textContent = 'Your changes have been saved.'; } catch (err) { out.textContent = (err as Error).message; }
+		busy(true);
+		try { fill(await call('POST', fd)); out.textContent = 'Your changes have been saved.'; } catch (err) { out.textContent = (err as Error).message; } finally { busy(false); }
 	});
 	document.getElementById('m-cancel')!.addEventListener('click', async () => {
 		if (!confirm('Cancel your registration? Your details will be deleted.')) return;
+		busy(true);
 		try {
 			await call('DELETE', {});
-			form.replaceChildren();
 			const p = document.createElement('p');
+			p.tabIndex = -1;
 			p.textContent = 'Your registration has been cancelled and your details deleted. We have emailed you a confirmation.';
-			form.append(p);
-		} catch (err) { out.textContent = (err as Error).message; }
+			form.replaceChildren(p);
+			// The button that had focus is gone; move focus to the outcome so it isn't lost to the page body.
+			p.focus();
+		} catch (err) { out.textContent = (err as Error).message; busy(false); }
 	});
 </script>
 <style>
@@ -176,10 +203,11 @@
 	#manage-form :global(.choice) { display: flex; gap: 0.5rem; align-items: flex-start; }
 	#manage-form :global(.choice input) { margin-top: 0.3rem; }
 	#m-tours, #m-optins { display: grid; gap: 0.35rem; }
-	input[type='text'], textarea { padding: 0.5rem; border: 1px solid var(--sl-color-gray-3); border-radius: 0.3rem; background: var(--sl-color-bg); color: var(--sl-color-text); font: inherit; }
+	input[type='text'], textarea { padding: 0.5rem; border: 1px solid var(--sl-color-gray-3, #8b8f98); border-radius: 0.3rem; background: var(--sl-color-bg, #fff); color: var(--sl-color-text, inherit); font: inherit; }
 	fieldset:disabled { opacity: 0.6; }
-	.help { font-size: var(--sl-text-sm); color: var(--sl-color-gray-2); margin: 0; }
+	.help { font-size: var(--sl-text-sm, 0.875rem); color: var(--sl-color-gray-2, #4b5563); margin: 0; }
 	.actions { display: flex; gap: 1rem; flex-wrap: wrap; }
+	.actions button:disabled { opacity: 0.6; cursor: wait; }
 	.primary { background: #0069a0; color: #fff; border: 0; border-radius: 999px; padding: 0.6rem 1.4rem; font-weight: 700; cursor: pointer; }
-	.danger { background: transparent; color: var(--sl-color-text); border: 2px solid #b3261e; border-radius: 999px; padding: 0.5rem 1.2rem; font-weight: 700; cursor: pointer; }
+	.danger { background: transparent; color: var(--sl-color-text, inherit); border: 2px solid #b3261e; border-radius: 999px; padding: 0.5rem 1.2rem; font-weight: 700; cursor: pointer; }
 </style>

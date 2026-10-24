@@ -11,13 +11,19 @@ interface Props {
 	sourceUrl?: string;
 	/** The page shown after a successful registration. */
 	next?: string;
+	/** Label for the in-person attendance choice, e.g. "In person at White City". */
+	inPersonLabel?: string;
+	/** Label for the remote attendance choice. */
+	remoteLabel?: string;
+	/** Legend for the tour choices, shown only when the event has tours. */
+	tourLegend?: string;
 }
-const { event, controller, contactHref, privacyHref = '/privacy/', sourceUrl = 'https://github.com/andeyePro/eventsandeye', next = '/events/check-email/' } = Astro.props;
+const { event, controller, contactHref, privacyHref = '/privacy/', sourceUrl = 'https://github.com/andeyePro/eventsandeye', next = '/events/check-email/', inPersonLabel = 'In person', remoteLabel = 'Remotely (online sessions only)', tourLegend = 'Optional tour (in person only)' } = Astro.props;
 const siteKey = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY || (import.meta.env.DEV || import.meta.env.PUBLIC_TURNSTILE_ALLOW_TEST_KEY === 'true' ? '1x00000000000000000000AA' : undefined);
 // A production build without a real site key would ship Cloudflare's always-pass test key and every registration would fail.
 if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production builds (or PUBLIC_TURNSTILE_ALLOW_TEST_KEY=true for local test builds).');
 ---
-<form class="rsvp not-content" id="rsvp-form" data-event={event} data-contact={contactHref} data-next={next} novalidate>
+<form class="rsvp not-content" id="rsvp-form" data-event={event} data-contact={contactHref} data-next={next} method="post" novalidate>
 	<p class="status-line" id="rsvp-availability" aria-live="polite">Checking availability…</p>
 
 	<div class="field">
@@ -31,13 +37,13 @@ if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production buil
 
 	<fieldset class="field">
 		<legend>How will you attend? <span aria-hidden="true">*</span></legend>
-		<label class="choice"><input type="radio" name="attendance" value="in_person" required /> In person at White City</label>
-		<label class="choice"><input type="radio" name="attendance" value="remote" /> Remotely, talks only, on Google Meet</label>
+		<label class="choice"><input type="radio" name="attendance" value="in_person" required /> {inPersonLabel}</label>
+		<label class="choice"><input type="radio" name="attendance" value="remote" /> {remoteLabel}</label>
 		<label class="choice" id="rsvp-extras-choice" hidden><input type="radio" name="attendance" value="extras" /> <span id="rsvp-extras-label">Just the optional sessions</span></label>
 	</fieldset>
 
-	<fieldset class="field" id="rsvp-tour-fieldset">
-		<legend>Optional lab tour (in person only)</legend>
+	<fieldset class="field" id="rsvp-tour-fieldset" hidden>
+		<legend>{tourLegend}</legend>
 		<label class="choice"><input type="radio" name="tour_id" value="none" checked /> No tour, thanks</label>
 		<div id="rsvp-tours"></div>
 	</fieldset>
@@ -72,14 +78,16 @@ if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production buil
 		</label>
 		<label class="choice">
 			<input type="checkbox" name="share_contact" id="rsvp-share" />
-			<span>Optional: share my email address with the hosts of my sessions, so they can contact me.</span>
+			<span>Optional: share my email address and organisation with the hosts of the sessions I attend, so they can contact me.</span>
 		</label>
 	</div>
 
 	<div class="cf-turnstile" data-sitekey={siteKey} data-response-field-name="cf-turnstile-response"></div>
 
 	<p class="help"><span aria-hidden="true">*</span> Required</p>
-	<button type="submit" class="submit">Register</button>
+	<!-- Disabled until the script runs: without it the form would post personal data to this page and go nowhere. -->
+	<button type="submit" class="submit" disabled>Register</button>
+	<noscript><p class="help">Registering needs JavaScript. Please turn it on, or <a href={contactHref}>contact us</a> to register.</p></noscript>
 	<div id="rsvp-result" role="status" aria-live="polite"></div>
 	<p class="help beta">Registrations via <a href={sourceUrl}>Events&amp;I</a> (beta): <a href={contactHref}>feedback welcome</a>.</p>
 </form>
@@ -93,6 +101,17 @@ if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production buil
 	const toursBox = document.getElementById('rsvp-tours')!;
 	const tourFs = document.getElementById('rsvp-tour-fieldset') as HTMLFieldSetElement;
 	const optFs = document.getElementById('rsvp-optins-fieldset') as HTMLFieldSetElement;
+	const btn = form.querySelector('button[type=submit]') as HTMLButtonElement;
+	btn.disabled = false;
+	const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
+
+	interface Status {
+		ok: boolean;
+		error?: string;
+		event: { open: boolean; deadline: string; extra_question?: string | null };
+		tours: { id: string; label: string; available: boolean; open: boolean }[];
+		optins?: { id: string; label: string; starts_at: string; location: string | null; available?: boolean }[];
+	}
 
 	function syncTour() {
 		const mode = (form.elements.namedItem('attendance') as RadioNodeList).value;
@@ -110,7 +129,7 @@ if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production buil
 	syncTour();
 
 	fetch(`/api/rsvp/status?event=${encodeURIComponent(event)}`)
-		.then((r) => r.json())
+		.then((r) => r.json() as Promise<Status>)
 		.then((s) => {
 			if (!s.ok) throw new Error(s.error);
 			if (!s.event.open) {
@@ -126,6 +145,7 @@ if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production buil
 			// Only the deadline: saying places are full would put people off registering, and the waiting list is how
 			// demand beyond the room shows up.
 			avail.textContent = `Registration closes ${deadline} (UK time).`;
+			tourFs.hidden = !s.tours.length;
 			for (const t of s.tours) {
 				const label = document.createElement('label');
 				label.className = 'choice';
@@ -134,8 +154,8 @@ if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production buil
 				input.name = 'tour_id';
 				input.value = t.id;
 				input.disabled = !t.open;
-				label.append(input, ` ${t.label}${!t.open ? ' (booking closed)' : t.available ? '' : ' (full: waiting list)'}`);
-				toursBox.append(label);
+				label.replaceChildren(input, ` ${t.label}${!t.open ? ' (booking closed)' : t.available ? '' : ' (full: waiting list)'}`);
+				toursBox.appendChild(label);
 			}
 			for (const o of s.optins ?? []) {
 				const label = document.createElement('label');
@@ -145,12 +165,12 @@ if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production buil
 				input.name = 'optins';
 				input.value = o.id;
 				const time = new Date(o.starts_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' });
-				label.append(input, ` ${o.label}, ${time}${o.location ? `, ${o.location}` : ''}${o.available === false ? ' (full: waiting list)' : ''}`);
-				(document.getElementById('rsvp-optins') as HTMLElement).append(label);
+				label.replaceChildren(input, ` ${o.label}, ${time}${o.location ? `, ${o.location}` : ''}${o.available === false ? ' (full: waiting list)' : ''}`);
+				(document.getElementById('rsvp-optins') as HTMLElement).appendChild(label);
 			}
 			optFs.hidden = !(s.optins ?? []).length;
 			if ((s.optins ?? []).length) {
-				document.getElementById('rsvp-extras-label')!.textContent = `Just the ${(s.optins as { label: string }[]).map((o) => o.label.toLowerCase()).join(' and ')}`;
+				document.getElementById('rsvp-extras-label')!.textContent = `Just the ${(s.optins ?? []).map((o) => lowerFirst(o.label)).join(' and ')}`;
 				document.getElementById('rsvp-extras-choice')!.hidden = false;
 			}
 			syncTour();
@@ -169,11 +189,10 @@ if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production buil
 		body.consent = (document.getElementById('rsvp-consent') as HTMLInputElement).checked;
 		body.share_contact = (document.getElementById('rsvp-share') as HTMLInputElement).checked;
 		body.optins = fd.getAll('optins').map(String);
-		const btn = form.querySelector('button[type=submit]') as HTMLButtonElement;
 		btn.disabled = true;
 		try {
 			const res = await fetch('/api/rsvp/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-			const data = await res.json();
+			const data = (await res.json()) as { ok: boolean; error?: string };
 			if (!data.ok) throw new Error(data.error || 'Registration failed.');
 			// A page of its own, so the "check your email" step can't be missed below the form.
 			try { sessionStorage.setItem('rsvp-email', String(fd.get('email'))); } catch {}
@@ -181,7 +200,7 @@ if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production buil
 		} catch (err) {
 			result.textContent = (err as Error).message;
 			(window as unknown as { turnstile?: { reset: () => void } }).turnstile?.reset();
-		} finally {
+			// Only on failure: after success the Turnstile token is spent, so a second click must not resend it.
 			btn.disabled = false;
 		}
 	});
@@ -197,14 +216,14 @@ if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production buil
 	.rsvp :global(.choice input) { margin-top: 0.3rem; }
 	#rsvp-tours, #rsvp-optins { display: grid; gap: 0.35rem; }
 	input[type='text'], input[type='email'], textarea {
-		padding: 0.5rem; border: 1px solid var(--sl-color-gray-3); border-radius: 0.3rem; background: var(--sl-color-bg); color: var(--sl-color-text); font: inherit;
+		padding: 0.5rem; border: 1px solid var(--sl-color-gray-3, #8b8f98); border-radius: 0.3rem; background: var(--sl-color-bg, #fff); color: var(--sl-color-text, inherit); font: inherit;
 	}
 	fieldset:disabled { opacity: 0.6; }
-	.help { font-size: var(--sl-text-sm); color: var(--sl-color-gray-2); margin: 0; }
+	.help { font-size: var(--sl-text-sm, 0.875rem); color: var(--sl-color-gray-2, #4b5563); margin: 0; }
 	.hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
-	.submit { justify-self: start; background: var(--sl-color-accent-high); color: var(--sl-color-black); border: 0; border-radius: 999px; padding: 0.7rem 1.6rem; font-weight: 700; font-size: var(--sl-text-base); cursor: pointer; }
+	.submit { justify-self: start; background: var(--sl-color-accent-high, #0069a0); color: var(--sl-color-black, #fff); border: 0; border-radius: 999px; padding: 0.7rem 1.6rem; font-weight: 700; font-size: var(--sl-text-base, 1rem); cursor: pointer; }
 	:global([data-theme='light']) .submit { background: #0069a0; color: #fff; }
 	.submit:disabled { opacity: 0.6; cursor: wait; }
 	.status-line { font-weight: 600; }
-	#rsvp-result :global(.notice) { padding: 1rem; border: 2px solid var(--sl-color-accent); border-radius: 0.5rem; }
+	#rsvp-result :global(.notice) { padding: 1rem; border: 2px solid var(--sl-color-accent, #0069a0); border-radius: 0.5rem; }
 </style>

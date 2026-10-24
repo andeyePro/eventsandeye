@@ -29,7 +29,7 @@ const LONDON_VTIMEZONE = [
 ];
 
 export function escapeText(s: string): string {
-	return s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+	return s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r\n|\r|\n/g, '\\n');
 }
 
 /** Parameter values (RFC 5545 §3.2) cannot contain escapes: drop quotes and line breaks, then always quote. */
@@ -96,8 +96,9 @@ export function buildIcs(opts: {
 		'TRANSP:OPAQUE',
 	);
 	if (entry.url) lines.push(`URL:${entry.url}`);
+	// ORGANIZER is required for every method (RFC 5546); only REQUEST and CANCEL are addressed to an attendee.
+	lines.push(`ORGANIZER;CN=${paramValue(organizer.name)}:mailto:${organizer.email}`);
 	if (method !== 'PUBLISH') {
-		lines.push(`ORGANIZER;CN=${paramValue(organizer.name)}:mailto:${organizer.email}`);
 		if (attendee) lines.push(`ATTENDEE;CN=${paramValue(attendee.name)};ROLE=REQ-PARTICIPANT;PARTSTAT=${method === 'CANCEL' ? 'DECLINED' : 'NEEDS-ACTION'};RSVP=FALSE:mailto:${attendee.email}`);
 	}
 	if (method !== 'CANCEL') {

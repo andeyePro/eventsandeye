@@ -104,5 +104,7 @@ async function checkJwt(env: Env, request: Request): Promise<AccessResult> {
 	// Defence in depth behind the Access policy: when ADMIN_EMAILS is set, only those addresses are admitted.
 	const admins = (env.ADMIN_EMAILS ?? '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
 	if (admins.length && !admins.includes(email)) return { email: null, reason: `${email || 'this account'} is not an admin` };
-	return { email: email || 'unknown' };
+	// A token with no email (a service token, say) is not a person signing in.
+	if (!email) return { email: null, reason: 'this sign-in carries no email address' };
+	return { email };
 }

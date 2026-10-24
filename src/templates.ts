@@ -53,6 +53,8 @@ export interface RegistrationRow {
 	optins?: string | null;
 	/** The subset of optins they are on the waiting list for. */
 	optins_waiting?: string | null;
+	/** How many times an unconfirmed registration for this address has been replaced (each sends a fresh confirm email). */
+	resends?: number;
 	optins_waitlist_since?: string | null;
 	share_contact: number;
 	status: 'pending' | 'confirmed';
@@ -166,7 +168,7 @@ export function statusLines(reg: RegistrationRow, sessions: SessionRow[]): strin
 		const t = sessions.find((x) => x.id === reg.tour_id);
 		if (t) lines.push(reg.tour_place === 'waitlist' ? `You are on the waiting list for the ${t.label}.` : `You are booked on the ${t.label}.`);
 	}
-	for (const s of optinPlaces(reg, sessions)) lines.push(`You would like to join us for ${lower(s)}.`);
+	for (const s of optinPlaces(reg, sessions)) lines.push(s.capacity != null ? `You have a place at ${lower(s)}.` : `You would like to join us for ${lower(s)}.`);
 	lines.push(...waitingLines(reg, sessions));
 	return lines;
 }
@@ -208,7 +210,7 @@ export function confirmEmail(b: Brand, ev: EventRow, reg: RegistrationRow, sessi
 	const html = layout(b, subject, `
 <h1 style="font-size:22px;margin-top:0">Please complete your registration</h1>
 <p>Hello,</p>
-<p>Someone, hopefully you, registered this address for the <strong>${escapeHtml(ev.title)}</strong> on ${escapeHtml(ukDateTime(ev.starts_at, ev.timezone))}.</p>
+<p>Someone, hopefully you, registered this address for the <strong>${escapeHtml(ev.title)}</strong>, on ${escapeHtml(ukDateTime(ev.starts_at, ev.timezone))}.</p>
 <p><strong>Your registration is not complete yet.</strong> Please click the button below now to confirm your email address${why}. If you don't complete your registration, ${held} on ${escapeHtml(holdUntil)}.</p>
 <p>You are confirming:</p><ul>${choices.map((l) => `<li>${escapeHtml(l)}</li>`).join('')}</ul>
 ${button(confirmUrl, 'Complete registration')}
@@ -217,7 +219,7 @@ ${button(confirmUrl, 'Complete registration')}
 <p style="font-size:14px">If you did not register, please <a href="${escapeHtml(notMeUrl)}">click here to delete the registration</a>.</p>`);
 	const text = `Hello,
 
-Someone, hopefully you, registered this address for the ${ev.title} on ${ukDateTime(ev.starts_at, ev.timezone)}.
+Someone, hopefully you, registered this address for the ${ev.title}, on ${ukDateTime(ev.starts_at, ev.timezone)}.
 
 YOUR REGISTRATION IS NOT COMPLETE YET. Please open this link now and click "Complete registration" to confirm your email address${why}:
 ${confirmUrl}
@@ -275,14 +277,30 @@ export function waitlistReminderEmail(b: Brand, ev: EventRow, reg: RegistrationR
 	return { to: reg.email, subject, html, text };
 }
 
-export function calendarUpdateEmail(b: Brand, ev: EventRow, reg: RegistrationRow, changed: CalEntry[], cancelled: string[], cal: CalendarBlock, manageUrl: string, attachments: Attachment[]): OutgoingEmail {
+/** What an entry was when last sent, for saying what changed. */
+export interface SentEntry { summary: string; start: string; end: string; location: string }
+
+/** One line per changed entry naming what actually changed, so an update never reads as "now <the same as before>". */
+export function describeChange(e: CalEntry, was: SentEntry | undefined, tz: string): string {
+	const hm = (iso: string) => new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: tz }).format(new Date(iso));
+	const when = `${ukDateTime(e.start, tz)} to ${hm(e.end)}`;
+	if (!was) return `added: ${when}, ${e.location}`;
+	const parts: string[] = [];
+	if (Date.parse(was.start) !== Date.parse(e.start) || Date.parse(was.end) !== Date.parse(e.end)) parts.push(`now ${when}`);
+	if (was.location !== e.location) parts.push(`${parts.length ? 'at' : 'now at'} ${e.location}`);
+	if (was.summary !== e.summary) parts.push(`was "${was.summary}"`);
+	return parts.join(', ') || 'details updated (see the attached invitation)';
+}
+
+export function calendarUpdateEmail(b: Brand, ev: EventRow, reg: RegistrationRow, changed: { entry: CalEntry; was?: SentEntry }[], cancelled: string[], cal: CalendarBlock, manageUrl: string, attachments: Attachment[]): OutgoingEmail {
 	const subject = `Calendar update: ${ev.title}`;
+	const lines = changed.map((c) => ({ summary: c.entry.summary, what: describeChange(c.entry, c.was, ev.timezone) }));
 	const items = [
-		...changed.map((e) => `<li><strong>${escapeHtml(e.summary)}</strong>: now ${escapeHtml(ukDateTime(e.start, ev.timezone))}, ${escapeHtml(e.location)}</li>`),
+		...lines.map((l) => `<li><strong>${escapeHtml(l.summary)}</strong>: ${escapeHtml(l.what)}</li>`),
 		...cancelled.map((s) => `<li><s>${escapeHtml(s)}</s> – removed from your calendar</li>`),
 	].join('');
 	const html = layout(b, subject, `<p>Hello ${escapeHtml(reg.name)},</p><p>Your calendar entries for the <strong>${escapeHtml(ev.title)}</strong> have changed:</p><ul>${items}</ul><p style="font-size:14px">The attached invitations update your calendar.</p>${calendarHtml(cal, ev.timezone)}${button(manageUrl, 'Manage my registration')}`);
-	const text = `Hello ${reg.name},\n\nYour calendar entries for the ${ev.title} have changed:\n${changed.map((e) => `- ${e.summary}: now ${ukDateTime(e.start, ev.timezone)}, ${e.location}`).join('\n')}${cancelled.length ? `\n${cancelled.map((s) => `- REMOVED: ${s}`).join('\n')}` : ''}\n\nThe attached invitations update your calendar.${calendarText(cal, ev.timezone)}\n\nView, change or cancel your registration: ${manageUrl}${textFooter(b)}`;
+	const text = `Hello ${reg.name},\n\nYour calendar entries for the ${ev.title} have changed:\n${lines.map((l) => `- ${l.summary}: ${l.what}`).join('\n')}${cancelled.length ? `\n${cancelled.map((s) => `- REMOVED: ${s}`).join('\n')}` : ''}\n\nThe attached invitations update your calendar.${calendarText(cal, ev.timezone)}\n\nView, change or cancel your registration: ${manageUrl}${textFooter(b)}`;
 	return { to: reg.email, subject, html, text, attachments };
 }
 
@@ -339,7 +357,7 @@ export function hostListEmail(b: Brand, ev: EventRow, s: SessionRow, current: Ho
 <ol>${current.map(row).join('')}</ol>
 ${removed.length ? `<p>Removed:</p><ul>${removed.map((l) => `<li><s>${escapeHtml(l.name)} – ${escapeHtml(l.detail)}</s></li>`).join('')}</ul>` : ''}
 <p style="font-size:13px">Emails are shown only for people who agreed to share them with session hosts. If plans change at the last minute, please tell the organisers at ${escapeHtml(b.notify)} so they can reach everyone else. Please use this list only for this session, and delete it afterwards.</p>`);
-	const text = `The list for ${s.label} (${ukDateTime(s.starts_at, ev.timezone)}) has changed. Added or changed people are marked **like this**, removed people ~~like this~~.\n\n${current.length} registered${s.capacity != null ? ` of ${s.capacity} places` : ''}:\n${current.map((l, i) => {
+	const text = `Hello${s.host_name ? ` ${s.host_name}` : ''},\n\nThe list for ${s.label} (${ukDateTime(s.starts_at, ev.timezone)}) has changed. Added or changed people are marked **like this**, removed people ~~like this~~.\n\n${current.length} registered${s.capacity != null ? ` of ${s.capacity} places` : ''}:\n${current.map((l, i) => {
 		const t = `${l.name} – ${l.detail}${l.email ? ` – ${l.email}` : ''}`;
 		return `${i + 1}. ${added.has(l.id) || changedDetail.has(l.id) ? `**${t}**` : t}`;
 	}).join('\n')}${removed.length ? `\n\nRemoved:\n${removed.map((l) => `- ~~${l.name} – ${l.detail}~~`).join('\n')}` : ''}\n\nEmails are shown only for people who agreed to share them with session hosts. If plans change at the last minute, please tell the organisers at ${b.notify} so they can reach everyone else. Please use this list only for this session, and delete it afterwards.${textFooter(b)}`;

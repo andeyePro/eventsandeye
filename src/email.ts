@@ -41,7 +41,10 @@ async function resendPost(env: Env, path: string, body: unknown): Promise<Respon
 			await sleep(Number.isFinite(after) && after > 0 ? after * 1000 : 1000 * 2 ** attempt);
 			continue;
 		}
-		throw new Error(`Resend error ${res.status}: ${(await res.text()).slice(0, 300)}`);
+		// Only Resend's error name is kept: its message can repeat the recipient's address, and this ends up in logs.
+		let name = '';
+		try { name = String(((await res.json()) as { name?: string }).name ?? ''); } catch {}
+		throw new Error(`Resend error ${res.status}${name ? ` (${name})` : ''}`);
 	}
 }
 

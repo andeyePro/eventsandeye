@@ -7,6 +7,8 @@ import {
 } from '../../rsvp';
 
 const ev = (request: Request) => new URL(request.url).searchParams.get('event') || '';
+/** For Content-Disposition filenames: a quote in an event id would break the header. */
+const fileSafe = (s: string) => s.replace(/[^A-Za-z0-9._-]/g, '_');
 
 export const summary = handle(async ({ env, request }) => adminSummary(env, ev(request)));
 
@@ -27,7 +29,7 @@ export const promoteHandler = handle(async ({ env, request }) => {
 
 export const promoteAllHandler = handle(async ({ env, request }) => promoteAll(env, String((await readJson(request)).event || '')));
 
-/** Admin removal (e.g. spam). Sends no email to the person. */
+/** Admin removal. Unconfirmed registrations (spam, typos) go quietly; someone who confirmed is told, as if they had cancelled. */
 export const removeRegistration = handle(async ({ env, request }) => adminDelete(env, String((await readJson(request)).id || '')));
 
 /** ?format=csv (all registrations) or ?format=bcc (confirmed attendees' addresses, comma separated, for Gmail BCC). */
@@ -42,7 +44,7 @@ export const exportHandler = handle(async ({ env, request }) => {
 	}
 	const s = await adminSummary(env, event);
 	return new Response(registrationsCsv(s.registrations, s.sessions), {
-		headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': `attachment; filename="${event}-registrations.csv"` },
+		headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': `attachment; filename="${fileSafe(event)}-registrations.csv"` },
 	});
 });
 
@@ -66,7 +68,7 @@ export const messagesCancel = handle(async ({ env, request }) => cancelMessage(e
 export const sentLog = handle(async ({ env, request }) => {
 	const event = ev(request);
 	return new Response(await sentLogMarkdown(env, event), {
-		headers: { 'content-type': 'text/markdown; charset=utf-8', 'content-disposition': `attachment; filename="${event}-sent-log.md"` },
+		headers: { 'content-type': 'text/markdown; charset=utf-8', 'content-disposition': `attachment; filename="${fileSafe(event)}-sent-log.md"` },
 	});
 });
 

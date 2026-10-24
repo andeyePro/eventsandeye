@@ -7,7 +7,8 @@ const { contactHref } = Astro.props;
 <div class="not-content panel" id="confirm-panel" data-contact={contactHref}>
 	<p id="confirm-intro">Click the button to confirm your email address and complete your registration.</p>
 	<button type="button" id="confirm-btn" class="big">Complete registration</button>
-	<div id="confirm-result" role="status" aria-live="polite"></div>
+	<noscript><p>Confirming needs JavaScript. Please turn it on, or <a href={contactHref}>contact us</a>.</p></noscript>
+	<div id="confirm-result" role="status" aria-live="polite" tabindex="-1"></div>
 	<p class="help"><a href={contactHref}>Contact us</a> if something is not right.</p>
 </div>
 <script>
@@ -17,6 +18,13 @@ const { contactHref } = Astro.props;
 	if (t) history.replaceState(null, '', location.pathname);
 	const btn = document.getElementById('confirm-btn') as HTMLButtonElement;
 	const out = document.getElementById('confirm-result')!;
+	const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
+	interface Reply {
+		ok: boolean;
+		error?: string;
+		already?: boolean;
+		registration: { mode: string; attendance: string; place: string; tour_label: string | null; tour_place: string; optin_labels?: string[]; optin_waiting_labels?: string[] };
+	}
 	if (t && notMe) {
 		// "I did not register": a button (POST), so link scanners cannot delete anything.
 		document.getElementById('confirm-intro')!.textContent = "Didn't register? Delete the registration made with your address.";
@@ -27,11 +35,13 @@ const { contactHref } = Astro.props;
 			del.disabled = true;
 			try {
 				const res = await fetch('/api/rsvp/decline', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ t }) });
-				const d = await res.json();
+				const d = (await res.json()) as { ok: boolean; error?: string };
 				if (!d.ok) throw new Error(d.error);
 				del.hidden = true;
 				document.getElementById('confirm-intro')!.hidden = true;
 				out.innerHTML = '<p><strong>Deleted.</strong> We have sent you a final email to confirm your registration has been deleted.</p>';
+				// The focused button has gone; move focus to the outcome so it isn't lost to the page body.
+				out.focus();
 			} catch (e) {
 				out.textContent = (e as Error).message || 'Something went wrong. Please contact us using the link below.';
 				del.disabled = false;
@@ -47,21 +57,22 @@ const { contactHref } = Astro.props;
 		out.textContent = 'Confirming…';
 		try {
 			const res = await fetch('/api/rsvp/confirm', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ t }) });
-			const d = await res.json();
+			const d = (await res.json()) as Reply;
 			if (!d.ok) throw new Error(d.error);
 			const r = d.registration;
 			btn.hidden = true;
 			document.getElementById('confirm-intro')!.hidden = true;
 			const lines: string[] = [d.already ? 'Your registration was already confirmed.' : 'Thank you, your registration is complete.'];
 			const waitingFor: string[] = r.optin_waiting_labels ?? [];
-			if (r.mode === 'extras') lines.push(`You are joining us for ${(r.optin_labels ?? []).join(' and ').toLowerCase()} only.${waitingFor.length < (r.optin_labels ?? []).length ? ' We have emailed you the details, with a calendar invitation.' : ''}`);
+			if (r.mode === 'extras') lines.push(`You are joining us for ${(r.optin_labels ?? []).map(lowerFirst).join(' and ')} only.${waitingFor.length < (r.optin_labels ?? []).length ? ' We have emailed you the details, with a calendar invitation.' : ''}`);
 			else if (r.attendance === 'remote') lines.push('You are registered to join the talks remotely. We have emailed you the joining instructions, with calendar invitations.');
 			else if (r.place === 'waitlist') lines.push('In-person places are currently full, so you are on the waiting list. We will email you if a place becomes available.');
 			else lines.push('You have an in-person place. We have emailed you the joining instructions, with calendar invitations.');
 			if (r.tour_label) lines.push(r.tour_place === 'waitlist' ? `You are on the waiting list for the ${r.tour_label}.` : `You are booked on the ${r.tour_label}.`);
 			for (const l of waitingFor) lines.push(`${l} is currently full, so you are on its waiting list. We will email you if a place becomes available.`);
 			lines.push('To change or cancel, use the "Manage my registration" link in your emails.');
-			out.replaceChildren(...lines.map((l, i) => { const p = document.createElement('p'); if (i === 0) { const s = document.createElement('strong'); s.textContent = l; p.append(s); } else p.textContent = l; return p; }));
+			out.replaceChildren(...lines.map((l, i) => { const p = document.createElement('p'); if (i === 0) { const s = document.createElement('strong'); s.textContent = l; p.appendChild(s); } else p.textContent = l; return p; }));
+			out.focus();
 		} catch (e) {
 			out.textContent = (e as Error).message || 'Something went wrong. Please contact us using the link below.';
 			btn.disabled = false;
@@ -70,6 +81,6 @@ const { contactHref } = Astro.props;
 </script>
 <style>
 	.panel { margin-block: 1.5rem; }
-	.big { background: #0069a0; color: #fff; border: 0; border-radius: 0.4rem; padding: 0.9rem 1.8rem; font-size: var(--sl-text-lg); font-weight: 700; cursor: pointer; }
+	.big { background: #0069a0; color: #fff; border: 0; border-radius: 0.4rem; padding: 0.9rem 1.8rem; font-size: var(--sl-text-lg, 1.125rem); font-weight: 700; cursor: pointer; }
 	.big:disabled { opacity: 0.6; }
 </style>

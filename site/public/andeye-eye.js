@@ -1,8 +1,8 @@
-// The andeye mark, drawn live from the ORIGINAL brand geometry
-// (assets/brand/andeye.svg: viewBox 0 0 365 235, stroke 17, translate
-// 18.0915,17.9436) with the wink the app itself uses (AndeyeLogo.fullStroke:
-// an eyelid CLOSE — only the two lid cubics' control points move; the
-// corners and the left flourish stay fixed).
+// Events&I – Copyright (C) 2026 andeye Ltd. AGPL-3.0, see ../../LICENSE.
+// The andeye mark, drawn live from the brand geometry (viewBox 0 0 365 235,
+// stroke 17, translate 18.0915,17.9436) with an eyelid wink: only the two
+// lid cubics' control points move; the corners and the left flourish stay
+// fixed.
 //
 // The iris sits centred in the eye aperture, its circle top and bottom
 // meeting the aperture's high and low points, and is CLIPPED by the aperture
@@ -13,7 +13,7 @@
 //   colour : stroke colour (default the brand blue #56C1FF)
 //   iris   : 'none' | 'fill' | 'stroke'   (stroke = same 17px line width)
 //   glyph  : null | 'clock' | 'code' | 'tick' | 'people' | 'calendar'   (drawn inside the iris)
-//   blink  : true = natural periodic blink (respects prefers-reduced-motion)
+//   blink  : true = a few natural blinks, then still (respects prefers-reduced-motion)
 (function (global) {
   'use strict';
   var T = { x: 18.0915, y: 17.9436 };
@@ -30,8 +30,7 @@
   // point ON curve 0 at u=0.03565 (numerically, curve 1 meets it at v≈0.996
   // within 0.01px). Both lids hinge HERE, and the tail retracts ALONG ITS
   // OWN CURVE (a de Casteljau trim of curve 0's leading arc, never an
-  // endpoint drag — Martin, 8 Jul 19:53: dragging the endpoint swelled the
-  // &'s top loop). The winking mark is a single loop, no tail left behind;
+  // endpoint drag, which would swell the &'s top loop). The winking mark is a single loop, no tail left behind;
   // the tail exists only as the draw-on's starting point.
   var CROSS = P(121.243, 138.111);
   var TAIL_CROSS_U = 0.03565;
@@ -42,10 +41,9 @@
     var r0 = m(q0, q1), r1 = m(q1, q2);
     return [m(r0, r1), r1, q2, c[3]];
   }
-  // Closed-pose tuning. MARTIN'S BAKED VERDICT (8 Jul 20:48): lift 0,
-  // smooth 1 — any more lift and the lower lid crosses above the upper;
-  // any less smoothing and the upper lid overshoots the lower. The sliders
-  // in the lab still adjust from these defaults.
+  // Closed-pose tuning: lift 0, smooth 1. Any more lift and the lower lid
+  // crosses above the upper; any less smoothing and the upper lid overshoots
+  // the lower. andeyeEye.tune() adjusts from these defaults.
   var TUNE = { lift: 0, smooth: 1 };
   function closedPose() {
     return {
@@ -69,7 +67,7 @@
       + ' ' + c[2].x.toFixed(2) + ',' + c[2].y.toFixed(2)
       + ' ' + c[3].x.toFixed(2) + ',' + c[3].y.toFixed(2);
   }
-  // Each cubic renders as its OWN path (like the app's segment renderer):
+  // Each cubic renders as its OWN path:
   // the eye's right corner is a degenerate cusp (two control points sit on
   // the endpoint), and a single compound path with round joins grows a spur
   // there on the first wink frames — per-segment strokes with round caps
@@ -126,8 +124,7 @@
       clip = el('clipPath', { id: uid }, el('defs', {}, svg));
       var clipShape = el('path', { d: aperturePath(cubics(0)) }, clip);
       irisGroup = el('g', { 'clip-path': 'url(#' + uid + ')' }, svg);
-      // The iris appears AFTER the mark has drawn on (Martin, 8 Jul 17:48):
-      // hidden while a draw-on is in flight, fading in the moment the
+      // The iris appears AFTER the mark has drawn on: hidden while a draw-on is in flight, fading in the moment the
       // stroke completes. Pages that never draw on (blink only) keep it
       // visible from the start.
       irisGroup.style.transition = 'opacity 0.35s ease';
@@ -241,7 +238,7 @@
     var reduced = global.matchMedia
       && global.matchMedia('(prefers-reduced-motion: reduce)').matches;
     // Page-load draw-on: the pen draws the mark from the tail (~1.2s), and
-    // the iris fades in as the stroke completes (Martin, 8 Jul 17:48).
+    // the iris fades in as the stroke completes.
     if (opts.drawOn && !reduced) {
       var drawStart = null;
       function drawFrame(ts) {
@@ -254,10 +251,11 @@
       global.requestAnimationFrame(drawFrame);
     }
     if (opts.blink !== false && !reduced) {
-      // A natural blink: quick close, brief hold, slightly slower open —
-      // then quiet for a few seconds. Ease with smoothstep.
+      // A natural blink: quick close, brief hold, slightly slower open,
+      // then quiet for a few seconds. Ease with smoothstep. It stops after
+      // a few blinks, so the page does not move indefinitely.
       var next = 1800 + Math.random() * 2500;
-      var start = null, phase = 'idle';
+      var start = null, phase = 'idle', blinksLeft = 6;
       function smooth(t) { return t * t * (3 - 2 * t); }
       function frame(ts) {
         if (phase === 'idle') {
@@ -269,7 +267,10 @@
                 : t < 360 ? 1 - smooth((t - 190) / 170)
                 : 0;
           setWink(w);
-          if (t >= 360) { phase = 'idle'; next = ts + 2600 + Math.random() * 3200; }
+          if (t >= 360) {
+            if (--blinksLeft === 0) return;
+            phase = 'idle'; next = ts + 2600 + Math.random() * 3200;
+          }
         }
         global.requestAnimationFrame(frame);
       }
@@ -277,9 +278,8 @@
     }
     return { setWink: setWink, setPose: setPose, iris: g };
   }
-  // Global closed-pose tuning — affects every mounted eye's NEXT pose update
-  // (the lab re-poses on slider input; blinking eyes pick it up on the next
-  // blink). Values 0..1; see closedPose() for what they move.
+  // Global closed-pose tuning: affects every mounted eye's NEXT pose update
+  // (blinking eyes pick it up on the next blink). Values 0..1; see closedPose() for what they move.
   andeyeEye.tune = function (t) {
     if (t && typeof t.lift === 'number') TUNE.lift = t.lift;
     if (t && typeof t.smooth === 'number') TUNE.smooth = t.smooth;

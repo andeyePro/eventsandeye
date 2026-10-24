@@ -36,7 +36,7 @@ export async function sha256(text: string): Promise<string> {
 
 export const EMAIL_RE = /^[^\s@<>()[\]\\,;:"]+@[^\s@<>()[\]\\,;:"]+\.[^\s@<>()[\]\\,;:"]{2,}$/;
 
-/** Trim, collapse whitespace, strip control characters, cap length. Returns null for empty. */
+/** Trim, strip control characters (line breaks and tabs stay), cap length. Returns null for empty. */
 export function cleanText(v: unknown, max: number): string | null {
 	if (typeof v !== 'string') return null;
 	// eslint-disable-next-line no-control-regex
@@ -46,11 +46,18 @@ export function cleanText(v: unknown, max: number): string | null {
 	return s.slice(0, max);
 }
 
+/** As cleanText, for fields that are one line (names, labels, subjects, locations): a line break typed into a name would
+ * otherwise appear as extra lines in plain-text host lists, notifications and calendar files. */
+export function cleanLine(v: unknown, max: number): string | null {
+	const s = cleanText(v, max);
+	return s === null ? null : s.replace(/\s+/g, ' ').trim().slice(0, max) || null;
+}
+
 export function escapeHtml(s: string): string {
 	return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }
 
-/** Format an ISO time for UK readers, e.g. "Friday 13 November 2026, 10:30". */
+/** Format an ISO time for UK readers, e.g. "Friday, 13 November 2026 at 10:30" (the punctuation follows the runtime's ICU version). */
 export function ukDateTime(iso: string, timeZone = 'Europe/London'): string {
 	return new Intl.DateTimeFormat('en-GB', {
 		weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone,

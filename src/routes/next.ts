@@ -7,13 +7,15 @@ import type { Env } from '../env';
  * example.org/event here once and never change it.
  */
 export const onRequestGet = async ({ env, request }: EventContext<Env, string, unknown>): Promise<Response> => {
-	const fallback = (env as Env & { EVENTS_INDEX_PATH?: string }).EVENTS_INDEX_PATH || '/events/';
-	let path = fallback;
+	// Site-relative paths only: "//host/..." would be an off-site redirect.
+	const local = (p: unknown): p is string => typeof p === 'string' && /^\/(?!\/)/.test(p);
+	const configured = (env as Env & { EVENTS_INDEX_PATH?: string }).EVENTS_INDEX_PATH;
+	let path = local(configured) ? configured : '/events/';
 	try {
 		const row = await env.DB.prepare('SELECT page_path FROM events WHERE ends_at > ? ORDER BY starts_at LIMIT 1')
 			.bind(new Date().toISOString())
 			.first<{ page_path: string }>();
-		if (row?.page_path?.startsWith('/')) path = row.page_path;
+		if (local(row?.page_path)) path = row!.page_path;
 	} catch (e) {
 		console.error(e);
 	}

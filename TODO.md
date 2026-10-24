@@ -9,8 +9,14 @@
 - [ ] **Calendar delivery:** test the invitation rendering in Gmail, Outlook (web and desktop), Apple Mail and Thunderbird with real Resend sends; consider a `text/calendar` alternative MIME part if Resend adds support.
 - [ ] **Events&I Plus:** fully hosted multi-tenant version (per-organisation Access, billing, custom domains, organisation branding in emails).
 - [ ] **Waiting lists:** optional auto-promotion with an expiry window, as a per-event setting (off by default).
+- [ ] **Waiting for the day but ticking the dinner (decision needed):** someone on the in-person waiting list who ticks an opt-in session is given a place at it, but gets no joining instructions or calendar entry until they have a day place. Either hold such people on the session's waiting list until they get a day place, or send them the session's instructions as if they came for it only.
+- [ ] **Messages to just the opt-in sessions:** the audience filter has no "dinner only" or "signed up for X" option, and "In person" also reaches people coming only to the dinner.
+- [ ] **Turnstile:** also check the `hostname` and an `action` in the siteverify response (a token minted on another site using the same key is accepted today).
+- [ ] **Host list debounce:** a change of attendance re-emails every affected host at once; sending each host at most one list an hour from the cron would cut the noise during a busy sign-up day (self-service changes are capped at 10 emails an hour per registration for now).
+- [ ] **Markdown renderer nits:** emphasis is applied inside code spans and `*` between numbers is read as italics; URLs containing `)` are cut short.
 - [ ] **Accessibility review** of the Astro components in a real browser, including colour contrast (the axe scan in jsdom cannot check contrast).
 - [ ] **Host changes:** when a session's host email changes, tell the previous host to delete the list they were sent.
+- [ ] **Framework-neutral wording:** the form's attendance labels and the change-of-attendance email intro in `src/rsvp.ts` should come from event/session data rather than props.
 - [ ] **Framework-neutral components:** plain HTML/JS versions of the booking, confirm and manage panels for non-Astro sites.
 - [ ] **Packaging:** publish to npm with typed exports for the route handlers.
 

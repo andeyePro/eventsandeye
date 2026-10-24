@@ -204,7 +204,7 @@ async function load() {
 			+ f('hname', 'Host name', 'text', x.host_name ?? '')
 			+ f('hemail', 'Host email (gets the list)', 'email', x.host_email ?? '')
 			+ f('cap', 'Capacity (blank = unlimited)', 'number', x.capacity ?? '', 'min="0"')
-			+ (x.choice_group ? f('dl', 'Booking closes (blank = at start)', 'datetime-local', isoToUkLocal(x.booking_deadline)) : '')
+			+ (x.choice_group || x.optin ? f('dl', 'Booking closes (blank = at start)', 'datetime-local', isoToUkLocal(x.booking_deadline)) : '')
 			+ '</div></fieldset>';
 	}).join('');
 

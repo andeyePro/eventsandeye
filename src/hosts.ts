@@ -21,6 +21,9 @@ export function hostLines(s: SessionRow, regs: RegistrationRow[]): HostLine[] {
 			if (s.optin && (r.optins ?? '').split(',').includes(s.id)) out.push(line(r, (r.optins_waiting ?? '').split(',').includes(s.id) ? 'this session only, waiting list' : 'this session only'));
 		} else if (r.attendance === 'remote') {
 			if (s.mode !== 'in_person' && s.kind !== 'social') out.push(line(r, 'remote'));
+		} else if (s.optin) {
+			// An opt-in session (e.g. dinner) lists only the people who signed up for it, not everyone coming for the day.
+			if ((r.optins ?? '').split(',').includes(s.id)) out.push(line(r, (r.optins_waiting ?? '').split(',').includes(s.id) ? 'waiting list' : r.place === 'waitlist' ? 'signed up, but waiting for an in-person place' : 'signed up'));
 		} else if (s.mode !== 'online') {
 			out.push(line(r, r.place === 'waitlist' ? 'in-person waiting list' : 'in person'));
 		}

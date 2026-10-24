@@ -1,5 +1,5 @@
-/// <reference types="@cloudflare/workers-types" />
 // Events&I – Copyright (C) 2026 andeye Ltd. AGPL-3.0, see ../LICENSE.
+import type { D1Database } from '@cloudflare/workers-types';
 
 export interface Env {
 	DB: D1Database;
@@ -26,8 +26,7 @@ export interface Env {
 	ACCESS_AUD?: string;
 	/** Where people can read the Events&I source and give feedback (AGPL). */
 	EVENTSANDEYE_URL?: string;
-	/** "true" only in local development: enables the dev outbox endpoints and test keys. Never set in production. */
-	/** "false" turns off the two-factor check on admin sign-ins (on by default). */
+	/** "false" turns off the two-factor check on admin sign-ins (on by default; local development only). */
 	ACCESS_REQUIRE_MFA?: string;
 	/** Comma-separated `amr` values accepted as a second factor; see access.ts. */
 	ACCESS_MFA_METHODS?: string;
@@ -38,6 +37,7 @@ export interface Env {
 	ADMIN_EMAILS?: string;
 	/** Maximum age of an admin sign-in in hours (default 12). */
 	ACCESS_MAX_AGE_HOURS?: string;
+	/** "true" only in local development: enables the dev outbox endpoints and test keys. Never set in production. */
 	DEV_MODE?: string;
 	/** Local development only: JSON Web Key Set used instead of the Access certs URL, for tests. */
 	ACCESS_JWKS_JSON?: string;

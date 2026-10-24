@@ -97,15 +97,15 @@ features:
     - title: Self-service for attendees
       text: Every email carries a personal link to view, change or cancel. Cancelling deletes their details.
     - title: Private by design
-      text: Your own Cloudflare account, double opt-in, an admin page behind two-factor sign-in, and everything deleted 30 days after the event.
-setup:
+      text: Your own Cloudflare account, double opt-in, an admin page behind two-factor sign-in, and attendees' details deleted 30 days after the event.
+needs:
   eyebrow: What you need
   h2: Your own Cloudflare, your own data
   lede: Events&I runs on Cloudflare Pages, D1 and a small Worker, and sends email through Resend. A small event fits within their free plans. If your site is on Cloudflare Pages, setting it up takes an afternoon.
   items:
     - A Cloudflare account with your domain on it
     - A Resend account for sending email
-    - A site on Cloudflare Pages (the ready-made form is an Astro component)
+    - A site on Cloudflare Pages (the ready-made form is an Astro component, styled for Astro Starlight sites, with plain fallbacks elsewhere)
   cta_label: Read the setup guide
   cta_href: "https://github.com/andeyePro/eventsandeye#set-it-up"
 who:

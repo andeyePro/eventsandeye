@@ -1,14 +1,15 @@
 ---
+// Events&I – Copyright (C) 2026 andeye Ltd. AGPL-3.0, see ../../../LICENSE.
 // The andeye mark: original brand geometry + the app's eyelid wink.
-// Rendered client-side by /andeye-eye.js (one shared engine per page).
+// Rendered client-side by /andeye-eye.js, which the page loads once in its <head>.
+// Decorative: a page that needs the mark announced wraps it in a labelled role="img" element.
 // variant: main (blue, empty) | time (orange, clock iris) | vibe (white, > iris) | events (green, people iris)
 // weight: fill | stroke — the iris treatment (ignored for main).
 // background: the page colour behind the mark — the glyph inside a FILLED
 // iris is drawn in this colour, so it must match where the eye sits.
 const { variant = 'main', weight = 'fill', background = '#131826', glyph = '', class: cls = '' } = Astro.props;
 ---
-<svg class={`andeye-eye ${cls}`} data-variant={variant} data-weight={weight} data-background={background} data-glyph={glyph || undefined}></svg>
-<script src="/andeye-eye.js" is:inline></script>
+<svg class={`andeye-eye ${cls}`} data-variant={variant} data-weight={weight} data-background={background} data-glyph={glyph || undefined} aria-hidden="true" focusable="false"></svg>
 <script is:inline>
   (function () {
     document.querySelectorAll('svg.andeye-eye:not([data-mounted])').forEach(function (svg) {

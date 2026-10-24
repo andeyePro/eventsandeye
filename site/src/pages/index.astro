@@ -1,11 +1,12 @@
 ---
+// Events&I – Copyright (C) 2026 andeye Ltd. AGPL-3.0, see ../../../LICENSE.
 // events.andeye.com: a single page, sibling of andeye.com and vibe.andeye.com, in the same treatment.
 // The centrepiece is a registration journey: a deck of steps driving a mail window that shows what the attendee
 // (or host) actually receives. The visitor drives, nothing autoplays, and with JS off every email shows in full.
 // Hover states change colour only (nothing moves), and swapped text sits in fixed-height boxes.
-// All visible copy comes from content/home.md.
+// All visible copy comes from home.md.
 import AndeyeEye from '../components/AndeyeEye.astro';
-import { frontmatter as copy, Content } from '../content/home.md';
+import { frontmatter as copy, Content } from '../home.md';
 
 // Body lines may carry **bold** and ~~struck~~ spans, as the host list email does.
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -23,6 +24,15 @@ const steps = copy.journey.steps;
 <meta property="og:title" content={`${copy.title} – ${copy.tagline}`} />
 <meta property="og:description" content={copy.description} />
 <meta property="og:url" content="https://events.andeye.com/" />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Events&amp;I" />
+<meta property="og:image" content="https://events.andeye.com/og.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content={`${copy.title}: ${copy.tagline}`} />
+<meta name="twitter:card" content="summary_large_image" />
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<script src="/andeye-eye.js" is:inline></script>
 <style>
   :root {
     --bg: #0c0f16;
@@ -33,7 +43,7 @@ const steps = copy.journey.steps;
     --line-soft: #1b2233;
     --text: #eef1f6;
     --muted: #98a0b3;
-    --faint: #6f7888;
+    --faint: #8089a0;
     --accent: #7fd69e;
     --accent-soft: rgba(127, 214, 158, 0.14);
     --radius: 14px;
@@ -320,14 +330,14 @@ const steps = copy.journey.steps;
   <div class="wrap">
     <div class="eyebrow-row">
       <AndeyeEye variant="events" weight="fill" background="#090b11" />
-      <p class="eyebrow">{copy.setup.eyebrow}</p>
+      <p class="eyebrow">{copy.needs.eyebrow}</p>
     </div>
-    <h2>{copy.setup.h2}</h2>
-    <p class="lede">{copy.setup.lede}</p>
+    <h2>{copy.needs.h2}</h2>
+    <p class="lede">{copy.needs.lede}</p>
     <ul class="needs">
-      {copy.setup.items.map((n) => <li>{n}</li>)}
+      {copy.needs.items.map((n) => <li>{n}</li>)}
     </ul>
-    <a class="btn btn-primary" href={copy.setup.cta_href}>{copy.setup.cta_label}</a>
+    <a class="btn btn-primary" href={copy.needs.cta_href}>{copy.needs.cta_label}</a>
   </div>
 </section>
 

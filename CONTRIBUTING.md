@@ -5,7 +5,13 @@ Thanks for looking. Agents and humans alike: [AGENTS.md](AGENTS.md) is the short
 ## The short version
 
 - Open an issue before a large change, so nobody builds the same thing twice.
-- Run the end-to-end test before you open a pull request: from a site that hosts Events&I, build it with `PUBLIC_TURNSTILE_ALLOW_TEST_KEY=true`, then `E2E_DB=<your database> node eventsandeye/tests/e2e.mjs` (see the README).
+- Run the unit tests (`npm install`, then `npm test`) and the end-to-end test before you open a pull request. From a site that hosts Events&I (see the README):
+
+  ```sh
+  PUBLIC_TURNSTILE_ALLOW_TEST_KEY=true npm run build
+  E2E_DB=events E2E_SEED=eventsandeye/examples/seed.example.sql E2E_NOTIFY=<your NOTIFY_EMAIL> node eventsandeye/tests/e2e.mjs
+  ```
+
 - Add a check to `tests/e2e.mjs` for every behaviour you add or change.
 - Sign the CLA when the bot asks on your first pull request, and add your name to `CONTRIBUTORS.md` in your own commit.
 - Everything you contribute is released under AGPL-3.0 and, separately, licensed to andeye Ltd under `CLA.md`. Both are explained under **Licensing** below.
@@ -20,7 +26,7 @@ Thanks for looking. Agents and humans alike: [AGENTS.md](AGENTS.md) is the short
 
 - `src/` – server logic (`rsvp.ts` flows, `calendar.ts` and `ics.ts` invitations, `hosts.ts` host lists, `templates.ts` emails) and `routes/` handlers.
 - `migrations/` – D1 schema. Add a new numbered migration; never edit one that has shipped.
-- `worker/` – the cron Worker. `astro/` – booking, confirm and manage components. `examples/` – config, seed and function wrappers for a new site. `site/` (upstream repository only) – events.andeye.com.
+- `worker/` – the cron Worker. `astro/` – booking, confirm and manage components. `examples/` – config, seed and function wrappers for a new site. `site/` – events.andeye.com, not used by host sites.
 - Code comments explain why, not what. User-facing text is plain, short and in British English.
 
 ## Licensing — what you are agreeing to

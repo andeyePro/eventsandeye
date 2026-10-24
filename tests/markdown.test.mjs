@@ -1,3 +1,4 @@
+// Events&I – Copyright (C) 2026 andeye Ltd. AGPL-3.0, see ../LICENSE.
 // Unit tests for the email markdown renderer. Run: node --test eventsandeye/tests/markdown.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

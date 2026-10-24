@@ -7,7 +7,7 @@ import type { EventRow, RegistrationRow, SessionRow } from './templates';
 import { sha256 } from './util';
 
 /** What we last sent for each calendar entry of a registration. */
-export interface EntryState { seq: number; hash: string; uid: string; summary: string; start: string; end: string; location: string }
+export interface EntryState { seq: number; hash: string; uid: string; summary: string; start: string; end: string; location: string; cancelled?: boolean }
 export type CalendarState = Record<string, EntryState>;
 
 const hostOf = (env: Env) => new URL(siteUrl(env)).hostname;
@@ -83,7 +83,7 @@ export function entriesFor(env: Env, ev: EventRow, sessions: SessionRow[], reg: 
 			if (s.kind === 'social') note = s.optin && waitingIds.includes(s.id) && optinIds.includes(s.id) ? ' (you are on the waiting list)' : s.optin && optinIds.includes(s.id) ? ` (you signed up${s.location ? `, ${s.location}` : ''})` : ` (optional${s.location ? `, ${s.location}` : ''})`;
 			return `${hm(s.starts_at, tz)} ${s.label}${note}`;
 		});
-	const travel = ev.travel_minutes || 60;
+	const travel = ev.travel_minutes ?? 60; // 0 is a real answer (no travel), not "unset"
 	return [{
 		key: 'day',
 		uid: uid('day'),
@@ -101,11 +101,11 @@ export function entriesFor(env: Env, ev: EventRow, sessions: SessionRow[], reg: 
 
 // Times are normalised so that re-saving the same time in another ISO spelling ('…:00Z' vs '…:00.000Z') is not a change.
 const iso = (t: string) => { const d = Date.parse(t); return Number.isNaN(d) ? t : new Date(d).toISOString(); };
-const hashEntry = (e: CalEntry) => sha256(JSON.stringify([e.summary, e.description, e.location, iso(e.start), iso(e.end), e.url ?? '', e.alarms]));
+export const hashEntry = (e: CalEntry) => sha256(JSON.stringify([e.summary, e.description, e.location, iso(e.start), iso(e.end), e.url ?? '', e.alarms]));
 
 export interface CalendarPlan {
 	entries: CalEntry[];
-	requests: { entry: CalEntry; seq: number }[]; // new or changed entries to (re)send
+	requests: { entry: CalEntry; seq: number; was?: EntryState }[]; // new or changed entries to (re)send, with what they replace
 	cancels: EntryState[]; // entries that no longer apply, with bumped sequence
 	state: CalendarState; // state to store once sent
 	unchanged: { entry: CalEntry; seq: number }[];
@@ -115,17 +115,27 @@ export async function plan(prev: CalendarState, entries: CalEntry[]): Promise<Ca
 	const state: CalendarState = {};
 	const requests: CalendarPlan['requests'] = [];
 	const unchanged: CalendarPlan['unchanged'] = [];
-	for (const e of entries) {
+	const out: CalEntry[] = [];
+	for (const e0 of entries) {
+		const p = prev[e0.key];
+		// A UID, once sent, is kept for good (a site that changes address must not duplicate entries), and an entry that
+		// was cancelled and comes back continues its sequence: a lower number than the cancellation is ignored as stale.
+		const e = p ? { ...e0, uid: p.uid } : e0;
+		out.push(e);
 		const h = await hashEntry(e);
-		const p = prev[e.key];
-		const seq = !p ? 0 : p.hash === h ? p.seq : p.seq + 1;
+		const seq = !p ? 0 : p.cancelled || p.hash !== h ? p.seq + 1 : p.seq;
 		state[e.key] = { seq, hash: h, uid: e.uid, summary: e.summary, start: e.start, end: e.end, location: e.location };
-		if (!p || p.hash !== h) requests.push({ entry: e, seq });
+		if (!p || p.cancelled || p.hash !== h) requests.push({ entry: e, seq, ...(p && !p.cancelled ? { was: p } : {}) });
 		else unchanged.push({ entry: e, seq });
 	}
-	const cancels = Object.entries(prev).filter(([k]) => !state[k]).map(([, v]) => ({ ...v, seq: v.seq + 1 }));
-	return { entries, requests, cancels, state, unchanged };
+	// Entries that no longer apply are cancelled once, then remembered with the cancellation's sequence in case they return.
+	const cancels = Object.entries(prev).filter(([k, v]) => !state[k] && !v.cancelled).map(([, v]) => ({ ...v, seq: v.seq + 1 }));
+	for (const [k, v] of Object.entries(prev)) if (!state[k]) state[k] = v.cancelled ? v : { ...v, seq: v.seq + 1, cancelled: true };
+	return { entries: out, requests, cancels, state, unchanged };
 }
+
+/** The entries actually in someone's calendar: cancelled ones are only remembered. */
+export const liveState = (state: CalendarState) => Object.values(state).filter((s) => !s.cancelled);
 
 export function parseState(json: string | null | undefined): CalendarState {
 	try {
