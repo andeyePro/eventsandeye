@@ -74,7 +74,7 @@ const steps = copy.journey.steps;
   .eyebrow { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em; color: var(--accent); margin: 0; }
   .eyebrow-row { display: flex; align-items: center; gap: 10px; margin: 0 0 0.9rem; }
   :global(svg.andeye-eye) { aspect-ratio: 365 / 235; }
-  .eyebrow-row :global(svg.andeye-eye) { display: block; flex: none; width: 34px; height: auto; }
+  .eyebrow-row :global(svg.andeye-eye) { display: block; flex: none; width: 32px; height: auto; }
   .hero .eyebrow { margin-bottom: 0.9rem; }
 
   h1 { font-size: clamp(2.5rem, 6.2vw, 4.4rem); font-weight: 800; letter-spacing: -0.025em; line-height: 1.04; margin: 0 0 1.1rem; }
@@ -85,7 +85,7 @@ const steps = copy.journey.steps;
 
   /* ---------- hero ---------- */
 
-  .hero { position: relative; padding: clamp(56px, 9vh, 96px) 0 40px; text-align: center; }
+  .hero { position: relative; padding: clamp(56px, 9vh, 96px) 0 clamp(24px, 4vh, 48px); text-align: center; }
   .hero::before {
     content: "";
     position: absolute;
@@ -98,7 +98,7 @@ const steps = copy.journey.steps;
     pointer-events: none;
   }
   .eyewrap { position: relative; display: flex; justify-content: center; margin: 0 auto 2.2rem; }
-  .eyewrap :global(svg.andeye-eye) { display: block; width: clamp(170px, 24vw, 230px); height: auto; }
+  .eyewrap :global(svg.andeye-eye) { display: block; width: clamp(230px, 36vw, 330px); height: auto; }
   .hero .sub { max-width: 680px; margin: 0 auto 1.9rem; }
 
   .ctas { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-bottom: 0.7rem; }
@@ -361,6 +361,7 @@ const steps = copy.journey.steps;
     <nav>
       <a href="https://andeye.com">andeye.com</a>
       <a href="https://github.com/andeyePro/eventsandeye">GitHub</a>
+      <a href="https://github.com/andeyePro/eventsandeye/discussions">Discussions</a>
       <a href="https://andeye.com/terms/">Terms</a>
       <a href="https://andeye.com/privacy/">Privacy</a>
       <a href="#top">{copy.title}</a>

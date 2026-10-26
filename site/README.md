@@ -12,7 +12,7 @@ npm run build    # static output in dist/
 
 ## Deploying on Cloudflare Pages
 
-Workers & Pages → Create → Pages → Connect to Git → `andeyePro/eventsandeye`, project name `events-andeye`, then:
+Workers & Pages → Create → Pages → Connect to Git → `andeyePro/eventsandeye`, project name `eventsandeye`, then:
 
 - Production branch `main`; framework preset Astro; **root directory `site`**; build command `npm run build`;
   output directory `dist`; build variable `NODE_VERSION` = `22`.
