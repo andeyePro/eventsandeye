@@ -3,7 +3,7 @@
 // The andeye mark: original brand geometry + the app's eyelid wink.
 // Rendered client-side by /andeye-eye.js, which the page loads once in its <head>.
 // Decorative: a page that needs the mark announced wraps it in a labelled role="img" element.
-// variant: main (blue, empty) | time (orange, clock iris) | vibe (white, > iris) | events (green, people iris)
+// variant: main (blue, empty) | time (orange, clock iris) | vibe (white, > iris) | events (pink, people iris)
 // weight: fill | stroke — the iris treatment (ignored for main).
 // background: the page colour behind the mark — the glyph inside a FILLED
 // iris is drawn in this colour, so it must match where the eye sits.
@@ -18,7 +18,7 @@ const { variant = 'main', weight = 'fill', background = '#131826', glyph = '', c
       var bg = svg.getAttribute('data-background') || '#131826';
       var opts = v === 'time' ? { colour: '#f0a13a', iris: w, glyph: 'clock', background: bg }
                : v === 'vibe' ? { colour: '#eef1f6', iris: w, glyph: 'code', background: bg }
-               : v === 'events' ? { colour: '#7fd69e', iris: w, glyph: svg.getAttribute('data-glyph') || 'people', background: bg }
+               : v === 'events' ? { colour: '#ff8fab', iris: w, glyph: svg.getAttribute('data-glyph') || 'people', background: bg }
                : { iris: 'none' };
       opts.drawOn = true;   // hand-draw the mark on load; iris fades in at the end
       window.andeyeEye(svg, opts);
