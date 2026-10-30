@@ -45,6 +45,8 @@ export interface Env {
 	POLL_REPLY_EMAIL?: string;
 	/** "true" on the Workers paid plan: messages carrying joining instructions go out in bigger pieces. */
 	PAID_PLAN?: string;
+	/** Local development only: the shortest time a registration is answered in (default 1500 ms; see register.ts). */
+	REGISTER_MIN_MS?: string;
 	/** Local development only: JSON Web Key Set used instead of the Access certs URL, for tests. */
 	ACCESS_JWKS_JSON?: string;
 }

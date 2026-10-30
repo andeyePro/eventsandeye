@@ -55,6 +55,8 @@ writeFileSync('.dev.vars', [
 	// Check the token's own methods here (the live site relies on the Access application's MFA instead).
 	'ACCESS_MFA=claim',
 	'POLL_REPLY_EMAIL=polls@example.org',
+	// Registrations are answered no sooner than this (1.5 s on a live site), so timing cannot tell who is registered.
+	'REGISTER_MIN_MS=200',
 	`ACCESS_JWKS_JSON=${JSON.stringify({ keys: [jwk] })}`,
 	'',
 ].join('\n'));
@@ -396,8 +398,10 @@ try {
 	  check('dinner host list has Alice, signed up, and not Bob (in person, no dinner)', !!dh && /Alice[^\n]*signed up/.test(dh.text_body) && !/Bob/.test(dh.text_body), dh?.text_body); }
 
 	console.log('\nRegistering again with a confirmed address');
+	let t0 = Date.now();
 	r = await register({ name: 'Alice again', email: alice });
 	check('duplicate returns the same generic success', r.status === 200 && r.data.ok);
+	check('…no sooner than a new registration would (REGISTER_MIN_MS), so timing does not reveal it', Date.now() - t0 >= 200, Date.now() - t0);
 	m = await last(alice);
 	check('reminder confirms name, event, email and when registered, then the joining instructions', (await mailsTo(alice)).length === 3 && /already registered/.test(m.text_body) && /Name: Alice\. Email: alice@example\.org\. Registered: /.test(m.text_body) && /Schedule \(UK time\)/.test(m.text_body));
 	check('reminder re-attaches the current calendar invitations (same sequence)', m.att.length === 2 && m.att.every((a) => /SEQUENCE:0/.test(a.content)));
