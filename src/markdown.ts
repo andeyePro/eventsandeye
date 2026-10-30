@@ -52,21 +52,26 @@ export function mdToHtml(md: string): string {
 	return out.join('\n');
 }
 
+/** Italics need the `*` to hug the words, and not to sit inside a word or number, so "2*3*4" stays as it is. */
 function emphasis(s: string): string {
-	s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
-	s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-	return s.replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>');
+	s = s.replace(/\*\*(?=\S)([^*]*?\S)\*\*/g, '<strong>$1</strong>');
+	return s.replace(/(^|[^*\p{L}\p{N}])\*(?=\S)([^*]*?\S)\*(?![*\p{L}\p{N}])/gu, '$1<em>$2</em>');
 }
 
 function inline(text: string): string {
-	// NUL marks link placeholders below, so none may come from the text itself.
+	// NUL marks placeholders below, so none may come from the text itself.
 	let s = escapeHtml(text.replace(/\u0000/g, ''));
-	// Each link becomes one atomic placeholder with its label rendered on its own, so a * or ` inside a URL cannot
-	// become markup and emphasis can never open inside a link and close outside it.
-	const links: string[] = [];
-	s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)/g, (_m, label, href) => `\u0000${links.push(`<a href="${href}">${emphasis(label)}</a>`) - 1}\u0000`);
+	// Code spans and links each become one atomic placeholder, so nothing inside code is read as emphasis, a * or ` inside
+	// a URL cannot become markup, and emphasis can never open inside a link and close outside it.
+	const held: string[] = [];
+	const hold = (html: string) => `\u0000${held.push(html) - 1}\u0000`;
+	s = s.replace(/`([^`]+)`/g, (_m, code) => hold(`<code>${code}</code>`));
+	// A URL may contain balanced brackets, as Wikipedia's do: https://en.wikipedia.org/wiki/Camping_(disambiguation)
+	s = s.replace(/\[([^\]]+)\]\((https?:\/\/(?:[^\s()]|\([^\s()]*\))+|mailto:[^\s)]+)\)/g, (_m, label, href) => hold(`<a href="${href}">${emphasis(label)}</a>`));
 	s = emphasis(s);
-	return s.replace(/\u0000(\d+)\u0000/g, (_m, i) => links[Number(i)] ?? '');
+	// Twice: a link label can hold a code span.
+	for (let i = 0; i < 2; i++) s = s.replace(/\u0000(\d+)\u0000/g, (_m, n) => held[Number(n)] ?? '');
+	return s;
 }
 
 /** Plain-text version: markdown is already readable; just turn [label](url) into "label (url)". */

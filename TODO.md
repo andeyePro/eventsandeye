@@ -14,7 +14,6 @@
 - [ ] **Messages to just the opt-in sessions:** the audience filter has no "dinner only" or "signed up for X" option, and "In person" also reaches people coming only to the dinner.
 - [ ] **Turnstile:** also check the `hostname` and an `action` in the siteverify response (a token minted on another site using the same key is accepted today).
 - [ ] **Host list debounce:** a change of attendance re-emails every affected host at once; sending each host at most one list an hour from the cron would cut the noise during a busy sign-up day (self-service changes are capped at 10 emails an hour per registration for now).
-- [ ] **Markdown renderer nits:** emphasis is applied inside code spans and `*` between numbers is read as italics; URLs containing `)` are cut short.
 - [ ] **Accessibility review** of the Astro components in a real browser, including colour contrast (the axe scan in jsdom cannot check contrast).
 - [ ] **Host changes:** when a session's host email changes, tell the previous host to delete the list they were sent.
 - [ ] **Framework-neutral wording:** the form's attendance labels and the change-of-attendance email intro in `src/rsvp.ts` should come from event/session data rather than props.
