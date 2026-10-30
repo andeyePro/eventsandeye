@@ -14,7 +14,7 @@ hero:
   cta_inuse_href: "https://amy.bo/event"
   cta_andeye_label: More from andeye
   sub_default: Built for meetups, open days, workshops and lab tours with tens of people, not thousands.
-  sub_setup: Free and open source. The README walks you through Cloudflare, Resend and the admin page, step by step.
+  sub_setup: Free and open source. The README walks you through Cloudflare, Resend and the admin page, step by step, and a starter site gets you going if you have no site yet.
   sub_inuse: "AMYBO, a non-profit sustainable protein community, takes registrations for its 13 November event with Events&I."
   sub_andeye: From the makers of Time&I and Vibe&I.
   fineprint: Free and open source under the AGPL-3.0. In public beta, and feedback is very welcome.
