@@ -1,0 +1,67 @@
+/* Events&I components, generated from the Astro components by scripts/build-html.mjs. Plain fallbacks for the Starlight variables. */
+/* RsvpForm */
+.eai .rsvp { display: grid; gap: 1rem; max-width: 40rem; margin-block: 1.5rem; }
+	.eai .field { display: grid; gap: 0.35rem; border: 0; padding: 0; margin: 0; }
+	.eai .field label:not(.choice), .eai legend { font-weight: 600; }
+	
+	.eai .rsvp .choice { display: flex; gap: 0.5rem; align-items: flex-start; font-weight: normal; }
+	.eai .rsvp .choice input { margin-top: 0.3rem; }
+	.eai #rsvp-tours, .eai #rsvp-optins { display: grid; gap: 0.35rem; }
+	.eai #rsvp-polls { display: grid; gap: 1rem; }
+	.eai #rsvp-polls .rank { list-style: decimal; padding-left: 1.75rem; margin: 0; display: grid; gap: 0.35rem; }
+	.eai #rsvp-polls .rank li { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.4rem 0.6rem; border: 1px solid var(--sl-color-gray-4, #c7cad1); border-radius: 0.3rem; background: var(--sl-color-bg, #fff); }
+	.eai #rsvp-polls .rank li[draggable='true'] { cursor: grab; }
+	.eai #rsvp-polls .rank li.dragging { opacity: 0.5; }
+	.eai #rsvp-polls .rank li.bar { list-style: none; margin-left: -1.75rem; border: 0; border-top: 3px dashed #b3261e; border-radius: 0; font-weight: 700; color: #b3261e; background: transparent; }
+	.eai #rsvp-polls .moves { display: flex; gap: 0.25rem; flex-shrink: 0; }
+	.eai #rsvp-polls .moves button { min-width: 2.25rem; min-height: 2.25rem; border: 1px solid var(--sl-color-gray-3, #8b8f98); border-radius: 0.3rem; background: transparent; color: inherit; cursor: pointer; }
+	.eai #rsvp-polls .moves button:disabled { opacity: 0.35; cursor: default; }
+	.eai input[type='text'], .eai input[type='email'], .eai textarea {
+		padding: 0.5rem; border: 1px solid var(--sl-color-gray-3, #8b8f98); border-radius: 0.3rem; background: var(--sl-color-bg, #fff); color: var(--sl-color-text, inherit); font: inherit;
+	}
+	.eai fieldset:disabled { opacity: 0.6; }
+	.eai .help { font-size: var(--sl-text-sm, 0.875rem); color: var(--sl-color-gray-2, #4b5563); margin: 0; }
+	.eai .hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+	.eai .submit { justify-self: start; background: var(--sl-color-accent-high, #0069a0); color: var(--sl-color-black, #fff); border: 0; border-radius: 999px; padding: 0.7rem 1.6rem; font-weight: 700; font-size: var(--sl-text-base, 1rem); cursor: pointer; }
+	[data-theme='light'] .eai .submit { background: #0069a0; color: #fff; }
+	.eai .submit:disabled { opacity: 0.6; cursor: wait; }
+	.eai .status-line { font-weight: 600; }
+	.eai #rsvp-result .notice { padding: 1rem; border: 2px solid var(--sl-color-accent, #0069a0); border-radius: 0.5rem; }
+/* ConfirmPanel */
+.eai .panel { margin-block: 1.5rem; }
+	.eai .big { background: #0069a0; color: #fff; border: 0; border-radius: 0.4rem; padding: 0.9rem 1.8rem; font-size: var(--sl-text-lg, 1.125rem); font-weight: 700; cursor: pointer; }
+	.eai .big:disabled { opacity: 0.6; }
+/* ManagePanel */
+.eai #manage-form { display: grid; gap: 1rem; max-width: 40rem; margin-block: 1.5rem; }
+	.eai .summary { font-weight: 600; }
+	.eai .field { display: grid; gap: 0.35rem; border: 0; padding: 0; margin: 0; }
+	.eai .field label:not(.choice), .eai legend { font-weight: 600; }
+	
+	.eai #manage-form .choice { display: flex; gap: 0.5rem; align-items: flex-start; }
+	.eai #manage-form .choice input { margin-top: 0.3rem; }
+	.eai #m-tours, .eai #m-optins { display: grid; gap: 0.35rem; }
+	.eai input[type='text'], .eai textarea { padding: 0.5rem; border: 1px solid var(--sl-color-gray-3, #8b8f98); border-radius: 0.3rem; background: var(--sl-color-bg, #fff); color: var(--sl-color-text, inherit); font: inherit; }
+	.eai fieldset:disabled { opacity: 0.6; }
+	
+	.eai #m-polls { display: grid; gap: 1.5rem; max-width: 40rem; margin-block: 1.5rem; }
+	.eai #m-polls .poll { display: grid; gap: 0.75rem; }
+	.eai #m-polls h2 { margin: 0; }
+	.eai #m-polls .rank { list-style: decimal; padding-left: 1.75rem; margin: 0; display: grid; gap: 0.35rem; }
+	.eai #m-polls .rank li { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.4rem 0.6rem; border: 1px solid var(--sl-color-gray-4, #c7cad1); border-radius: 0.3rem; background: var(--sl-color-bg, #fff); }
+	.eai #m-polls .rank li[draggable='true'] { cursor: grab; }
+	.eai #m-polls .rank li.dragging { opacity: 0.5; }
+	.eai #m-polls .rank li.bar { list-style: none; margin-left: -1.75rem; border: 0; border-top: 3px dashed #b3261e; border-radius: 0; font-weight: 700; color: #b3261e; background: transparent; }
+	.eai #m-polls .tag { font-size: var(--sl-text-xs, 0.75rem); font-weight: 400; margin-left: 0.5rem; padding: 0.05rem 0.4rem; border-radius: 0.25rem; background: var(--sl-color-gray-6, #eef0f3); color: var(--sl-color-text, inherit); }
+	.eai #m-polls .moves { display: flex; gap: 0.25rem; flex-shrink: 0; }
+	.eai #m-polls .moves button { min-width: 2.25rem; min-height: 2.25rem; border: 1px solid var(--sl-color-gray-3, #8b8f98); border-radius: 0.3rem; background: transparent; color: inherit; cursor: pointer; }
+	.eai #m-polls .moves button:disabled { opacity: 0.35; cursor: default; }
+	.eai #m-polls .suggest { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+	.eai #m-polls .suggest input { flex: 1 1 14rem; }
+	.eai #m-polls .secondary { background: transparent; color: var(--sl-color-text, inherit); border: 2px solid #0069a0; border-radius: 999px; padding: 0.5rem 1.2rem; font-weight: 700; cursor: pointer; }
+	.eai #m-polls table { border-collapse: collapse; margin-top: 0.5rem; }
+	.eai #m-polls th, .eai #m-polls td { padding: 0.25rem 0.75rem 0.25rem 0; text-align: left; }
+	.eai .help { font-size: var(--sl-text-sm, 0.875rem); color: var(--sl-color-gray-2, #4b5563); margin: 0; }
+	.eai .actions { display: flex; gap: 1rem; flex-wrap: wrap; }
+	.eai .actions button:disabled { opacity: 0.6; cursor: wait; }
+	.eai #manage .primary { background: #0069a0; color: #fff; border: 0; border-radius: 999px; padding: 0.6rem 1.4rem; font-weight: 700; cursor: pointer; }
+	.eai .danger { background: transparent; color: var(--sl-color-text, inherit); border: 2px solid #b3261e; border-radius: 999px; padding: 0.5rem 1.2rem; font-weight: 700; cursor: pointer; }

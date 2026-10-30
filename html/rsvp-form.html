@@ -1,0 +1,74 @@
+<!-- Events&I RsvpForm, generated from astro/RsvpForm.astro by scripts/build-html.mjs: do not edit. Replace the capitalised placeholders. -->
+<div class="eai">
+<form class="rsvp not-content" id="rsvp-form" data-event="YOUR-EVENT-ID" data-contact="mailto:you@example.org" data-next="/events/check-email/" method="post" novalidate>
+	<p class="status-line" id="rsvp-availability" aria-live="polite">Checking availability…</p>
+
+	<div class="field">
+		<label for="rsvp-name">Name <span aria-hidden="true">*</span></label>
+		<input id="rsvp-name" name="name" type="text" autocomplete="name" required maxlength="120" />
+	</div>
+	<div class="field">
+		<label for="rsvp-email">Email <span aria-hidden="true">*</span></label>
+		<input id="rsvp-email" name="email" type="email" autocomplete="email" required maxlength="254" />
+	</div>
+
+	<fieldset class="field">
+		<legend>How will you attend? <span aria-hidden="true">*</span></legend>
+		<label class="choice"><input type="radio" name="attendance" value="in_person" required /> <span id="rsvp-in-person-label">In person</span></label>
+		<label class="choice"><input type="radio" name="attendance" value="remote" /> <span id="rsvp-remote-label">Remotely (online sessions only)</span></label>
+		<label class="choice" id="rsvp-extras-choice" hidden><input type="radio" name="attendance" value="extras" /> <span id="rsvp-extras-label">Just the optional sessions</span></label>
+	</fieldset>
+
+	<fieldset class="field" id="rsvp-tour-fieldset" hidden>
+		<legend id="rsvp-tour-legend">Optional tour (in person only)</legend>
+		<label class="choice"><input type="radio" name="tour_id" value="none" checked /> No tour, thanks</label>
+		<div id="rsvp-tours"></div>
+	</fieldset>
+
+	<fieldset class="field" id="rsvp-optins-fieldset" hidden>
+		<legend id="rsvp-optins-legend">Also joining us for (in person only)</legend>
+		<div id="rsvp-optins"></div>
+	</fieldset>
+
+	<div class="field">
+		<label for="rsvp-affiliation">Organisation or affiliation (optional)</label>
+		<input id="rsvp-affiliation" name="affiliation" type="text" autocomplete="organization" maxlength="200" />
+	</div>
+	<div class="field">
+		<label for="rsvp-needs">Dietary or access needs (optional)</label>
+		<textarea id="rsvp-needs" name="needs" rows="3" maxlength="1000"></textarea>
+	</div>
+	<div class="field" id="rsvp-extra-field" hidden>
+		<label for="rsvp-extra" id="rsvp-extra-label">Anything else (optional)</label>
+		<textarea id="rsvp-extra" name="extra_answer" rows="2" maxlength="500"></textarea>
+	</div>
+
+	<div id="rsvp-polls" hidden></div>
+	<div class="hp" aria-hidden="true">
+		<label for="rsvp-website">Leave this field empty</label>
+		<input id="rsvp-website" name="website" type="text" tabindex="-1" autocomplete="off" />
+	</div>
+
+	<div class="field consent">
+		<label class="choice">
+			<input type="checkbox" name="consent" id="rsvp-consent" required />
+			<span>I agree that YOUR ORGANISATION may use my details, including any dietary or access needs I share, to run this event and email me about it, as in the <a href="/privacy/">privacy notice</a>. <span aria-hidden="true">*</span></span>
+		</label>
+		<label class="choice">
+			<input type="checkbox" name="share_contact" id="rsvp-share" />
+			<span>Optional: share my email address and organisation with the hosts of the sessions I attend, so they can contact me.</span>
+		</label>
+	</div>
+
+	<div class="cf-turnstile" data-sitekey="YOUR-TURNSTILE-SITE-KEY" data-action="eventsandeye-register" data-response-field-name="cf-turnstile-response"></div>
+
+	<p class="help"><span aria-hidden="true">*</span> Required</p>
+	<!-- Disabled until the script runs: without it the form would post personal data to this page and go nowhere. -->
+	<button type="submit" class="submit" disabled>Register</button>
+	<noscript><p class="help">Registering needs JavaScript. Please turn it on, or <a href="mailto:you@example.org">contact us</a> to register.</p></noscript>
+	<div id="rsvp-result" role="status" aria-live="polite"></div>
+	<p class="help beta">Registrations via <a href="https://github.com/andeyePro/eventsandeye">Events&amp;I</a> (beta): <a href="mailto:you@example.org">feedback welcome</a>.</p>
+</form>
+</div>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+<script type="module" src="rsvp-form.js"></script>

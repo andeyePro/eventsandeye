@@ -78,6 +78,8 @@ These steps assume your site's repository is checked out locally and Events&I go
    - **`/events/confirm/`** with `<ConfirmPanel contactHref="…" />` and **`/events/manage/`** with `<ManagePanel />`, both from `eventsandeye/astro/`. Give these two pages a `noindex` robots tag.
    - **A privacy notice** (at `/privacy/` unless you change the form's `privacyHref` and, for emails, `PRIVACY_URL`) that covers registrations, session hosts and the 30-day retention.
 
+   **Not using Astro?** [`html/`](html/) has the same three components as plain HTML: `rsvp-form.html`, `confirm-panel.html` and `manage-panel.html`, generated from the Astro ones. Paste each into its page and replace the capitalised placeholders (event id, organisation, contact link, Turnstile site key). Then run `npm install` and `node scripts/build-html.mjs` in `eventsandeye/`, and copy `html/rsvp-form.js`, `confirm-panel.js`, `manage-panel.js` and `events-and-i.css` next to those pages (or change the `src` in each fragment), with a `<link rel="stylesheet">` to the CSS. Every rule in it sits under the fragments' `.eai` wrapper, so it leaves the rest of your site alone; restyle it freely.
+
 4. **Configure.** Copy [`examples/wrangler.toml`](examples/wrangler.toml) to your site's root and replace every example value (see the [settings reference](#settings-reference)).
 
 5. **Create the database and your event.**
@@ -210,12 +212,13 @@ New features can bring new function wrappers (polls added `functions/api/rsvp/po
 cp -Rn eventsandeye/examples/functions/. functions/
 ```
 
+With the plain HTML components, run `node scripts/build-html.mjs` in `eventsandeye/` again after updating, copy the new `.js` and `.css` files, and compare your pages with the new `html/*.html`.
+
 ## Roadmap
 
 [Open an issue](https://github.com/andeyePro/eventsandeye/issues) if you need any of these, or something else:
 
 - **Any programme shape:** parallel sessions and tracks as well as sequential ones, several optional choice groups, per-session registration for multi-day events.
-- **Framework-neutral components:** plain HTML and JavaScript versions of the form, confirm and manage panels.
 - **Events&I Plus:** a fully hosted version, so you do not need your own Cloudflare account.
 
 See [TODO.md](TODO.md) for the full list.

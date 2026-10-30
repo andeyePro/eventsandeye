@@ -26,7 +26,7 @@ Thanks for looking. Agents and humans alike: [AGENTS.md](AGENTS.md) is the short
 
 - `src/` – server logic (`rsvp.ts` flows, `calendar.ts` and `ics.ts` invitations, `hosts.ts` host lists, `templates.ts` emails) and `routes/` handlers.
 - `migrations/` – D1 schema. Add a new numbered migration; never edit one that has shipped.
-- `worker/` – the cron Worker. `astro/` – booking, confirm and manage components. `examples/` – config, seed and function wrappers for a new site. `site/` – events.andeye.com, not used by host sites.
+- `worker/` – the cron Worker. `astro/` – booking, confirm and manage components (each script in its own module, shared with the plain HTML versions in `html/`, which `scripts/build-html.mjs` generates: rerun it after changing a component's markup; `npm test` checks it is up to date). `examples/` – config, seed and function wrappers for a new site. `site/` – events.andeye.com, not used by host sites.
 - Code comments explain why, not what. User-facing text is plain, short and in British English.
 
 ## Licensing — what you are agreeing to

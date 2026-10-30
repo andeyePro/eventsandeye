@@ -21,3 +21,6 @@ node_modules/
 
 # /vsss session logs (local only)
 .vss/
+
+# Built by scripts/build-html.mjs (the plain HTML components)
+html/*.js

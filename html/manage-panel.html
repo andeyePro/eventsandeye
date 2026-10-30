@@ -1,0 +1,53 @@
+<!-- Events&I ManagePanel, generated from astro/ManagePanel.astro by scripts/build-html.mjs: do not edit. Replace the capitalised placeholders. -->
+<div class="eai">
+<div class="not-content" id="manage">
+	<p id="manage-loading" role="status">Loading your registration…</p>
+	<noscript><p>Managing your registration needs JavaScript. Please turn it on, or contact the organisers.</p></noscript>
+	<form id="manage-form" hidden novalidate>
+		<p id="manage-summary" class="summary"></p>
+		<div class="field">
+			<label for="m-name">Name</label>
+			<input id="m-name" name="name" type="text" required maxlength="120" autocomplete="name" />
+		</div>
+		<p class="help">Email: <span id="m-email"></span>. To use a different address, cancel and register again.</p>
+		<fieldset class="field">
+			<legend>How will you attend?</legend>
+			<label class="choice"><input type="radio" name="attendance" value="in_person" /> <span id="m-in-person-label">In person</span></label>
+			<label class="choice"><input type="radio" name="attendance" value="remote" /> <span id="m-remote-label">Remotely (online sessions only)</span></label>
+			<label class="choice" id="m-extras-choice" hidden><input type="radio" name="attendance" value="extras" /> <span id="m-extras-label">Just the optional sessions</span></label>
+			<p class="help" id="m-closed" hidden>Registration has closed: you can still switch to remote or cancel.</p>
+		</fieldset>
+		<fieldset class="field" id="m-tour-fs" hidden>
+			<legend id="m-tour-legend">Optional tour (in person only)</legend>
+			<label class="choice"><input type="radio" name="tour_id" value="none" /> No tour, thanks</label>
+			<div id="m-tours"></div>
+		</fieldset>
+		<fieldset class="field" id="m-optins-fieldset" hidden>
+			<legend id="m-optins-legend">Also joining us for (in person only)</legend>
+			<div id="m-optins"></div>
+		</fieldset>
+		<div class="field">
+			<label for="m-affiliation">Organisation or affiliation (optional)</label>
+			<input id="m-affiliation" name="affiliation" type="text" maxlength="200" />
+		</div>
+		<div class="field">
+			<label for="m-needs">Dietary or access needs (optional)</label>
+			<textarea id="m-needs" name="needs" rows="3" maxlength="1000"></textarea>
+		</div>
+		<div class="field" id="m-extra-field" hidden>
+			<label for="m-extra" id="m-extra-label">Anything else (optional)</label>
+			<textarea id="m-extra" name="extra_answer" rows="2" maxlength="500"></textarea>
+		</div>
+		<label class="choice"><input type="checkbox" name="share_contact" id="m-share" /> Share my email address and organisation with the hosts of the sessions I attend (otherwise hosts see only your name and whether you have a place, so if plans change at the last minute they may not be able to reach you directly)</label>
+		<div id="m-calendar"></div>
+		<p class="help">Moving to a different tour, or from remote to in person, is subject to availability: if it is full you join the waiting list.</p>
+		<div class="actions">
+			<button type="submit" id="m-save" class="primary">Save changes</button>
+			<button type="button" id="m-cancel" class="danger">Cancel my registration</button>
+		</div>
+		<div id="manage-result" role="status" aria-live="polite"></div>
+	</form>
+	<div id="m-polls" hidden></div>
+</div>
+</div>
+<script type="module" src="manage-panel.js"></script>
