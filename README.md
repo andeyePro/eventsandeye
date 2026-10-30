@@ -138,6 +138,8 @@ Preview deployments get the same Functions and database binding as production, s
 
 Everything day to day happens on the admin page, `/admin/rsvps/`:
 
+- **Set-up check:** at the top, only when something needs putting right: settings missing or still at their example values, test keys on the live site, database migrations not applied, a cron Worker that has not run in the last 20 minutes, and a cron Worker whose `TOKEN_SECRET`, `SITE_URL`, `EMAIL_FROM` or Resend key differ from the site's (which would break the links in what it sends).
+
 - **Events:** switch between events, edit one (title, venue, dates, time zone, the form's wording), create a new one, or clone this one to a new date (programme, latest joining instructions and polls' options; never people, hosts or answers). Sessions can be added there too, and deleted while nobody has booked them. None of this emails anyone.
 
 - **Numbers at a glance:** in-person places, waiting lists, remote attendees, each tour and opt-in session, and unconfirmed registrations.
@@ -205,7 +207,7 @@ Update the submodule (`git submodule update --remote eventsandeye`), then apply 
 npx wrangler d1 migrations apply events --remote
 ```
 
-Migrations only ever add; they never change one that has shipped. Redeploy the cron Worker too, so it runs the same code as the site. The cron Worker matters more than it did: since migration 0009 it finishes big messages and queued calendar updates, so check it is deployed and running (its log shows a `scheduled run` line every five minutes).
+Migrations only ever add; they never change one that has shipped. Redeploy the cron Worker too, so it runs the same code as the site; the admin page's set-up check says if the database is missing a migration or the cron Worker has not run since. The cron Worker matters more than it did: since migration 0009 it finishes big messages and queued calendar updates, so check it is deployed and running (its log shows a `scheduled run` line every five minutes).
 
 New features can bring new function wrappers (polls added `functions/api/rsvp/poll.ts`, `functions/api/admin/polls.ts` and `functions/api/dev/inbound.ts`; event set-up added `functions/api/admin/events.ts`). Copy any you do not have yet, leaving your existing ones alone:
 

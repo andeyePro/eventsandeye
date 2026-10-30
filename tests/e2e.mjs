@@ -188,6 +188,22 @@ try {
 	const page = await req('GET', '/admin/rsvps/', undefined, ADMIN);
 	check('the admin page cannot be framed by another site, and sends no referrer', /frame-ancestors 'none'/.test(page.headers.get('content-security-policy') || '') && page.headers.get('x-frame-options') === 'DENY' && page.headers.get('referrer-policy') === 'no-referrer');
 	check('admin page is HTML with the sessions editor', typeof page.data === 'string' && /id="sessions-form"/.test(page.data) && /Events&amp;I/.test(page.data));
+	{
+		const setup = async () => (await req('GET', '/api/admin/events', undefined, ADMIN)).data.setup;
+		let f = await setup();
+		check('set-up check: before the cron has run, the admin page says to deploy it', f.some((x) => x.level === 'error' && /cron Worker has not run yet/.test(x.text)), JSON.stringify(f));
+		check('set-up check: no complaint about migrations when all are applied', !f.some((x) => /migrations/.test(x.text)), JSON.stringify(f));
+		await cron();
+		f = await setup();
+		check('…and after a cron run, nothing about the cron', !f.some((x) => /cron Worker/.test(x.text)), JSON.stringify(f));
+		const real = JSON.parse(sql(`SELECT value FROM status WHERE key = 'cron'`, true))[0].results[0].value;
+		const v = JSON.parse(real);
+		sql(`UPDATE status SET value = '${JSON.stringify({ ...v, secret: 'something-else', site: 'https://elsewhere.example', at: new Date(Date.now() - 3600_000).toISOString() })}' WHERE key = 'cron'`);
+		f = await setup();
+		check('a cron Worker with another TOKEN_SECRET or SITE_URL, or not run for an hour, is named on the admin page', f.some((x) => x.level === 'error' && /TOKEN_SECRET is not the same/.test(x.text)) && f.some((x) => x.level === 'error' && /SITE_URL \(https:\/\/elsewhere\.example\)/.test(x.text)) && f.some((x) => x.level === 'warning' && /last ran 60 minutes ago/.test(x.text)), JSON.stringify(f));
+		check('the summary carries the same check', Array.isArray((await req('GET', `/api/admin/summary?event=${EVENT}`, undefined, ADMIN)).data.setup));
+		await cron();
+	}
 	check('admin POST without JWT → 401', (await req('POST', '/api/admin/settings', { event: EVENT, in_person_max: 999 })).status === 401);
 	check('admin POST from another origin → 403', (await req('POST', '/api/admin/settings', { event: EVENT }, { ...ADMIN, origin: 'https://evil.example' })).status === 403);
 	check('admin POST with neither Origin nor Sec-Fetch-Site → 403', (await req('POST', '/api/admin/settings', { event: EVENT }, { 'cf-access-jwt-assertion': jwt() })).status === 403);

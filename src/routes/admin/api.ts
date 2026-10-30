@@ -1,4 +1,5 @@
 // Events&I – Copyright (C) 2026 andeye Ltd. AGPL-3.0, see ../../../LICENSE.
+import { setupChecks } from '../../health';
 import { handle, readJson } from '../../http';
 import { mdToHtml } from '../../markdown';
 import { adminPollAction, adminPolls } from '../../polls';
@@ -12,7 +13,7 @@ const ev = (request: Request) => new URL(request.url).searchParams.get('event') 
 /** For Content-Disposition filenames: a quote in an event id would break the header. */
 const fileSafe = (s: string) => s.replace(/[^A-Za-z0-9._-]/g, '_');
 
-export const summary = handle(async ({ env, request }) => adminSummary(env, ev(request)));
+export const summary = handle(async ({ env, request }) => ({ ...(await adminSummary(env, ev(request))), setup: await setupChecks(env, request) }));
 
 export const settings = handle(async ({ env, request }) => {
 	const body = await readJson(request);
@@ -87,6 +88,6 @@ export const pollsPost = handle(async ({ env, request, data }) => {
 	return adminPollAction(env, { ...body, by: data.adminEmail || 'admin' });
 });
 
-export const eventsGet = handle(async ({ env }) => listEvents(env));
+export const eventsGet = handle(async ({ env, request }) => ({ ...(await listEvents(env)), setup: await setupChecks(env, request) }));
 /** Create, edit or clone events, and add or remove sessions. Nobody is emailed. */
 export const eventsPost = handle(async ({ env, request, data }) => eventAction(env, await readJson(request), data.adminEmail || 'admin'));

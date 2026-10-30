@@ -11,6 +11,7 @@ import {
 import { modeOf } from './mode';
 import { mdToHtml, mdToText } from './markdown';
 import { adminPolls, parseBookingBallots, saveBookingBallots, unansweredPolls, voterPolls } from './polls';
+import { recordCronRun } from './health';
 import { makeToken } from './tokens';
 import { cleanLine, cleanText, EMAIL_RE, escapeHtml, nowIso, randomToken, sha256, ukDateTime } from './util';
 
@@ -1148,6 +1149,7 @@ export async function sentLogMarkdown(env: Env, eventId: string): Promise<string
 export async function runScheduled(env: Env, now = Date.now()) {
 	const nowS = new Date(now).toISOString();
 	const report = { messagesSent: 0, calendarUpdates: 0, holdsWarned: 0, holdsExpired: 0, retentionDeleted: 0 };
+	await recordCronRun(env, now);
 
 	const pending = (await env.DB.prepare(`SELECT * FROM registrations WHERE status='pending'`).all<RegistrationRow>()).results;
 	// One warning per event per run, however many holds reached half way: made-up registrations must not flood the organiser.

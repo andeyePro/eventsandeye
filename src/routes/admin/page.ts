@@ -43,6 +43,9 @@ const HTML = /* html */ `<!doctype html>
 	legend { font-weight: 700; }
 	#toast { position: fixed; bottom: 1rem; right: 1rem; background: #111; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; max-width: 30rem; }
 	#toast:empty { display: none; }
+	#setup { border-color: #b3261e; }
+	#setup li { margin: 0.3rem 0; }
+	#setup .error::marker { content: '✗ '; color: #b3261e; } #setup .warning::marker { content: '! '; color: #8a5a00; } #setup .note::marker { content: 'i '; color: #444; }
 </style>
 </head>
 <body>
@@ -53,6 +56,7 @@ const HTML = /* html */ `<!doctype html>
 	<span class="small">Events&amp;I ${VERSION} (beta)</span>
 </header>
 <main>
+	<section aria-labelledby="h-setup" id="setup" hidden><h2 id="h-setup">Set-up check</h2><p class="small">Things to put right in your Cloudflare settings. This list disappears when everything is in order.</p><ul id="setup-list"></ul></section>
 	<section aria-labelledby="h-summary"><h2 id="h-summary">Summary</h2><div class="stats" id="stats"></div></section>
 
 	<section aria-labelledby="h-events" id="events">
@@ -263,18 +267,26 @@ function sessionEdits() {
 	});
 }
 
+function showSetup(findings) {
+	const list = (findings || []).filter((f) => f.level !== 'note' || findings.some((x) => x.level !== 'note'));
+	$('setup').hidden = !list.length;
+	$('setup-list').innerHTML = list.map((f) => '<li class="' + esc(f.level) + '">' + esc(f.text) + '</li>').join('');
+}
+
 async function load() {
 	// A site updated without copying functions/api/admin/events.ts has no events API: the page works without that section.
 	const evs = await api('/api/admin/events').catch(() => null);
+	showSetup(evs && evs.setup);
 	if (!evs) $('events').hidden = true;
 	else if (!evs.events.length) {
 		// A new installation: nothing to show but the form to create the first event.
-		document.querySelectorAll('main > section').forEach((x) => { x.hidden = x.id !== 'events'; });
+		document.querySelectorAll('main > section').forEach((x) => { x.hidden = x.id !== 'events' && !(x.id === 'setup' && evs.setup.length); });
 		$('ev-pick').hidden = true; $('ev-pick').previousElementSibling.textContent = 'No events yet: create the first one.';
 		$('ev-form').closest('details').hidden = true; $('clone-form').closest('details').hidden = true; $('new-details').open = true;
 		return;
 	}
 	const s = await api('/api/admin/summary?event=' + encodeURIComponent(eventId));
+	if (!evs) showSetup(s.setup);
 	eventId = s.event.id;
 	TZ = s.event.timezone || 'Europe/London';
 	document.querySelectorAll('.tzl').forEach((x) => { x.textContent = tzLabel(); });
