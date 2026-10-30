@@ -1,0 +1,9 @@
+<!-- Events&I SentTo, generated from astro/SentTo.astro by scripts/build-html.mjs: do not edit. For the page people go to after registering. -->
+<p id="sent-to">We've sent you an email.</p>
+<script>
+	try {
+		const e = sessionStorage.getItem('rsvp-email');
+		const p = document.getElementById('sent-to');
+		if (e && p) p.textContent = `We've sent an email to ${e}.`;
+	} catch {}
+</script>

@@ -7,28 +7,46 @@
  *   node scripts/build-html.mjs --check    fails if the committed html/*.html or the stylesheet is out of date
  */
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 
-const root = new URL('..', import.meta.url).pathname;
-const PLACEHOLDERS = {
-	event: 'YOUR-EVENT-ID', controller: 'YOUR ORGANISATION', contactHref: 'mailto:you@example.org', privacyHref: '/privacy/',
-	sourceUrl: 'https://github.com/andeyePro/eventsandeye', next: '/events/check-email/', siteKey: 'YOUR-TURNSTILE-SITE-KEY',
+const root = fileURLToPath(new URL('..', import.meta.url));
+/** For the props a page must give (capitalised, to be replaced). Props with defaults take them from the component. */
+const PLACEHOLDERS = { event: 'YOUR-EVENT-ID', controller: 'YOUR ORGANISATION', contactHref: 'YOUR-CONTACT-LINK', siteKey: 'YOUR-TURNSTILE-SITE-KEY' };
+/**
+ * Every rule under .eai (the wrapper each fragment comes in), so the components' plain class names cannot touch the
+ * rest of a site. Only what the components use today is handled; anything else (at-rules, selector lists inside
+ * brackets, html or body) stops the build rather than coming out wrong.
+ */
+const scope = (name, css) => {
+	if (/@/.test(css)) throw new Error(`${name}: at-rules in the component's style are not handled by scripts/build-html.mjs`);
+	return css.trim().replace(/(^|\})(\s*)([^{}]+)\{/g, (m, close, space, sel) => {
+		if (/\([^)]*,/.test(sel)) throw new Error(`${name}: a selector list inside brackets is not handled: ${sel.trim()}`);
+		return `${close}${space}${sel.split(',').map((x) => {
+			const t = x.trim();
+			if (/(^|[\s>+~])(html|body|:root)\b/.test(t)) throw new Error(`${name}: a selector reaching outside the component is not handled: ${t}`);
+			return t.startsWith('[data-theme') ? t.replace(/^(\[data-theme[^\]]*\])\s*/, '$1 .eai ') : `.eai ${t}`;
+		}).join(', ')} {`;
+	});
 };
-/** Every rule under .eai (the wrapper each fragment comes in), so the components' plain class names cannot touch the rest of a site. */
-const scope = (css) => css.trim().replace(/(^|\})(\s*)([^{}]+)\{/g, (m, close, space, sel) => `${close}${space}${sel.split(',').map((x) => {
-	const t = x.trim();
-	return t.startsWith('[data-theme') ? t.replace(/^(\[data-theme[^\]]*\])\s*/, '$1 .eai ') : `.eai ${t}`;
-}).join(', ')} {`);
 const components = [['RsvpForm', 'rsvp-form'], ['ConfirmPanel', 'confirm-panel'], ['ManagePanel', 'manage-panel']];
 
 function fragment(name, mod) {
 	const src = readFileSync(`${root}astro/${name}.astro`, 'utf8');
+	const [, front = ''] = src.split(/^---$/m);
 	const body = src.split(/^---$/m).slice(2).join('---');
-	const markup = body.slice(0, body.search(/^<script/m)).trim();
-	const style = /<style>([\s\S]*?)<\/style>/.exec(body)?.[1] ?? '';
+	const end = body.search(/^<script/m);
+	if (end < 0) throw new Error(`${name}: no <script> found after the markup`);
+	const markup = body.slice(0, end).trim();
+	const styles = [...body.matchAll(/<style([^>]*)>([\s\S]*?)<\/style>/g)];
+	if (styles.length > 1 || styles.some((m) => m[1].trim())) throw new Error(`${name}: only one plain <style> block is handled`);
+	const style = styles[0]?.[2] ?? '';
+	// Defaults as the component declares them: `name = 'value'` in its Astro.props destructuring.
+	const defaults = Object.fromEntries([...(/const \{([\s\S]*?)\} = Astro\.props/.exec(front)?.[1] ?? '').matchAll(/(\w+)\s*=\s*'([^']*)'/g)].map((m) => [m[1], m[2]]));
 	const value = (k) => {
-		if (!(k in PLACEHOLDERS)) throw new Error(`${name}: no placeholder for {${k}}`);
-		return PLACEHOLDERS[k];
+		const v = defaults[k] ?? PLACEHOLDERS[k];
+		if (v === undefined) throw new Error(`${name}: no default or placeholder for {${k}}`);
+		return v.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 	};
 	const html = markup
 		.replace(/ data-fixed=\{\w+ \? "1" : undefined\}/g, '') // the page's own wording is not set here: the event's is used
@@ -36,11 +54,22 @@ function fragment(name, mod) {
 		.replace(/=\{(\w+)\}/g, (m, k) => `="${value(k)}"`)
 		.replace(/\{(\w+)\}/g, (m, k) => value(k));
 	if (/[{}]/.test(html.replace(/<!--[\s\S]*?-->/g, ''))) throw new Error(`${name}: an expression was left in the markup`);
-	const turnstile = mod === 'rsvp-form' ? '\n<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>' : '';
+	// Inline scripts (Turnstile's loader) as the component has them.
+	const inline = [...body.matchAll(/<script is:inline([^>]*)><\/script>/g)].map((m) => `\n<script${m[1]}></script>`).join('');
 	return {
-		html: `<!-- Events&I ${name}, generated from astro/${name}.astro by scripts/build-html.mjs: do not edit. Replace the capitalised placeholders. -->\n<div class="eai">\n${html}\n</div>${turnstile}\n<script type="module" src="${mod}.js"></script>\n`,
-		css: `/* ${name} */\n${scope(style.replace(/\/\*[\s\S]*?\*\//g, '').replace(/:global\(([^)]*)\)/g, '$1'))}\n`,
+		html: `<!-- Events&I ${name}, generated from astro/${name}.astro by scripts/build-html.mjs: do not edit. Replace the capitalised placeholders. -->\n<div class="eai">\n${html}\n</div>${inline}\n<script type="module" src="${mod}.js"></script>\n`,
+		css: `/* ${name} */\n${scope(name, style.replace(/\/\*[\s\S]*?\*\//g, '').replace(/:global\(([^)]*)\)/g, '$1'))}\n`,
 	};
+}
+
+/** The "check your email" page's line: no props, and a few lines of plain script. */
+function sentTo() {
+	const src = readFileSync(`${root}astro/SentTo.astro`, 'utf8');
+	const body = src.split(/^---$/m).slice(2).join('---');
+	const markup = body.slice(0, body.search(/^<script/m)).trim();
+	const script = /<script>([\s\S]*?)<\/script>/.exec(body)?.[1];
+	if (!script || /:\s*(string|number|HTML\w+)\b|\bas\s+\w/.test(script)) throw new Error('SentTo: expected a plain JavaScript script');
+	return `<!-- Events&I SentTo, generated from astro/SentTo.astro by scripts/build-html.mjs: do not edit. For the page people go to after registering. -->\n${markup}\n<script>${script}</script>\n`;
 }
 
 const check = process.argv.includes('--check');
@@ -54,6 +83,14 @@ for (const [name, mod] of components) {
 		try { was = readFileSync(path, 'utf8'); } catch {}
 		if (was !== f.html) { stale++; console.error(`html/${mod}.html is out of date: run node scripts/build-html.mjs`); }
 	} else writeFileSync(path, f.html);
+}
+{
+	const html = sentTo(), path = `${root}html/sent-to.html`;
+	if (check) {
+		let was = '';
+		try { was = readFileSync(path, 'utf8'); } catch {}
+		if (was !== html) { stale++; console.error('html/sent-to.html is out of date: run node scripts/build-html.mjs'); }
+	} else writeFileSync(path, html);
 }
 if (check) {
 	let was = '';

@@ -1,6 +1,6 @@
 <!-- Events&I RsvpForm, generated from astro/RsvpForm.astro by scripts/build-html.mjs: do not edit. Replace the capitalised placeholders. -->
 <div class="eai">
-<form class="rsvp not-content" id="rsvp-form" data-event="YOUR-EVENT-ID" data-contact="mailto:you@example.org" data-next="/events/check-email/" method="post" novalidate>
+<form class="rsvp not-content" id="rsvp-form" data-event="YOUR-EVENT-ID" data-contact="YOUR-CONTACT-LINK" data-next="/events/check-email/" method="post" novalidate>
 	<p class="status-line" id="rsvp-availability" aria-live="polite">Checking availability…</p>
 
 	<div class="field">
@@ -65,9 +65,9 @@
 	<p class="help"><span aria-hidden="true">*</span> Required</p>
 	<!-- Disabled until the script runs: without it the form would post personal data to this page and go nowhere. -->
 	<button type="submit" class="submit" disabled>Register</button>
-	<noscript><p class="help">Registering needs JavaScript. Please turn it on, or <a href="mailto:you@example.org">contact us</a> to register.</p></noscript>
+	<noscript><p class="help">Registering needs JavaScript. Please turn it on, or <a href="YOUR-CONTACT-LINK">contact us</a> to register.</p></noscript>
 	<div id="rsvp-result" role="status" aria-live="polite"></div>
-	<p class="help beta">Registrations via <a href="https://github.com/andeyePro/eventsandeye">Events&amp;I</a> (beta): <a href="mailto:you@example.org">feedback welcome</a>.</p>
+	<p class="help beta">Registrations via <a href="https://github.com/andeyePro/eventsandeye">Events&amp;I</a> (beta): <a href="YOUR-CONTACT-LINK">feedback welcome</a>.</p>
 </form>
 </div>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
