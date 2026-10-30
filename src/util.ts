@@ -68,3 +68,17 @@ export function ukDateTime(iso: string, timeZone = 'Europe/London'): string {
 export function ukDate(iso: string, timeZone = 'Europe/London'): string {
 	return new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone }).format(new Date(iso)).replace(',', '');
 }
+
+/**
+ * When an event runs, for emails: "Friday 13 November 2026" for one day, otherwise a range that leaves out what both
+ * ends share, e.g. "Saturday 7 to Sunday 8 November 2026" or "Saturday 31 October to Sunday 1 November 2026".
+ */
+export function ukDates(startIso: string, endIso: string, timeZone = 'Europe/London'): string {
+	const part = (iso: string) => Object.fromEntries(new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone }).formatToParts(new Date(iso)).map((p) => [p.type, p.value]));
+	// The end is exclusive in spirit: an event ending at midnight belongs to the day before.
+	const a = part(startIso), b = part(new Date(Date.parse(endIso) - 1).toISOString());
+	if (a.year === b.year && a.month === b.month && a.day === b.day) return ukDate(startIso, timeZone);
+	if (a.year !== b.year) return `${a.weekday} ${a.day} ${a.month} ${a.year} to ${b.weekday} ${b.day} ${b.month} ${b.year}`;
+	if (a.month !== b.month) return `${a.weekday} ${a.day} ${a.month} to ${b.weekday} ${b.day} ${b.month} ${b.year}`;
+	return `${a.weekday} ${a.day} to ${b.weekday} ${b.day} ${b.month} ${b.year}`;
+}

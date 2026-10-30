@@ -809,6 +809,23 @@ try {
 		check('a clone across a change to summer time keeps every session at the same local time', r.data.ok && summer.sessions.every((x, i) => local(x.starts_at).slice(9) === local(orig.sessions[i].starts_at).slice(9) && local(x.ends_at).slice(9) === local(orig.sessions[i].ends_at).slice(9)),
 			JSON.stringify(summer.sessions?.map((x) => local(x.starts_at))));
 		check('setting up events emailed nobody', (await outbox()).length === before);
+
+		// A weekend event: one calendar entry per day, and the dates as a range in the emails.
+		const sat = new Date(Date.now() + 40 * 86400_000);
+		sat.setUTCDate(sat.getUTCDate() + ((6 - sat.getUTCDay() + 7) % 7));
+		const on = (dayOffset, h) => new Date(Date.UTC(sat.getUTCFullYear(), sat.getUTCMonth(), sat.getUTCDate() + dayOffset, h)).toISOString();
+		await req('POST', EV, { action: 'create', id: 'e2e-weekend', title: 'Weekend Camp', timezone: 'Europe/London', starts_at: on(0, 10), ends_at: on(1, 16), deadline: on(-2, 12), in_person_max: 10, page_path: '/events/e2e-weekend/', location: 'A field' }, ADMIN);
+		await req('POST', EV, { action: 'add_session', event: 'e2e-weekend', label: 'Saturday walks', starts_at: on(0, 10), ends_at: on(0, 16) }, ADMIN);
+		await req('POST', EV, { action: 'add_session', event: 'e2e-weekend', label: 'Sunday talks', starts_at: on(1, 10), ends_at: on(1, 16) }, ADMIN);
+		await registerAndConfirm({ event: 'e2e-weekend', name: 'Yan', email: 'yan@example.org', attendance: 'in_person', tour_id: 'none' });
+		const ym = await mailsTo('yan@example.org');
+		const satName = new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', timeZone: 'Europe/London' }).format(new Date(on(0, 10))).replace(',', '');
+		check('a weekend event\'s emails give its dates as a range', ym.length === 2 && ym.every((m) => new RegExp(`on ${satName} to Sunday \\d+ \\w+ \\d{4}`).test(m.text_body)), ym.map((m) => m.text_body.slice(0, 200)).join(' | '));
+		const days = ym[1].att.filter((a) => /METHOD:REQUEST/.test(a.content));
+		const dt = (a, p) => (new RegExp(`${p};TZID=Europe/London:(\\d{8})T(\\d{6})`).exec(unfold(a.content)) || []).slice(1).join('T');
+		check('…and one calendar entry per day, each within its own day', days.length === 2 && days.every((a) => dt(a, 'DTSTART').slice(0, 8) === dt(a, 'DTEND').slice(0, 8)) && dt(days[0], 'DTSTART').slice(0, 8) !== dt(days[1], 'DTSTART').slice(0, 8)
+			&& days.some((a) => /SUMMARY:Weekend Camp: Saturday/.test(unfold(a.content))) && days.some((a) => /Sunday talks/.test(unfold(a.content).replace(/\\n/g, ' '))), days.map((a) => dt(a, 'DTSTART') + '-' + dt(a, 'DTEND')).join(', '));
+		await req('DELETE', '/api/rsvp/manage', { t: await manageOf('yan@example.org') });
 	}
 
 	console.log('\nAdmin removal');

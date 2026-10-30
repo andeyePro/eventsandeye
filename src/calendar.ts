@@ -1,7 +1,7 @@
 // Events&I – Copyright (C) 2026 andeye Ltd. AGPL-3.0, see ../LICENSE.
 import type { Attachment } from './email';
 import { type Env, fromAddress, orgName, siteUrl } from './env';
-import { buildIcs, type CalEntry } from './ics';
+import { buildIcs, type CalEntry, localStamp } from './ics';
 import { modeOf } from './mode';
 import type { EventRow, RegistrationRow, SessionRow } from './templates';
 import { sha256 } from './util';
@@ -73,30 +73,37 @@ export function entriesFor(env: Env, ev: EventRow, sessions: SessionRow[], reg: 
 	const core = ordered.filter((s) => isCore(s) && s.mode !== 'online');
 	const tour = reg.tour_id && reg.tour_place === 'place' ? ordered.find((s) => s.id === reg.tour_id) : undefined;
 	if (!core.length && !tour) return optinEntries;
-	const starts = [...core.map((s) => s.starts_at), ...(tour ? [tour.starts_at] : [])].sort();
-	const ends = [...core.map((s) => s.ends_at), ...(tour ? [tour.ends_at] : [])].sort();
-	const schedule = ordered
-		.filter((s) => isCore(s) ? s.mode !== 'online' : s.id === reg.tour_id || s.kind === 'social')
-		.map((s) => {
-			let note = '';
-			if (s.id === reg.tour_id) note = reg.tour_place === 'waitlist' ? ' (you are on the waiting list)' : ' (booked)';
-			if (s.kind === 'social') note = s.optin && waitingIds.includes(s.id) && optinIds.includes(s.id) ? ' (you are on the waiting list)' : s.optin && optinIds.includes(s.id) ? ` (you signed up${s.location ? `, ${s.location}` : ''})` : ` (optional${s.location ? `, ${s.location}` : ''})`;
-			return `${hm(s.starts_at, tz)} ${s.label}${note}`;
-		});
+	const scheduled = ordered.filter((s) => isCore(s) ? s.mode !== 'online' : s.id === reg.tour_id || s.kind === 'social');
+	const line = (s: SessionRow) => {
+		let note = '';
+		if (s.id === reg.tour_id) note = reg.tour_place === 'waitlist' ? ' (you are on the waiting list)' : ' (booked)';
+		if (s.kind === 'social') note = s.optin && waitingIds.includes(s.id) && optinIds.includes(s.id) ? ' (you are on the waiting list)' : s.optin && optinIds.includes(s.id) ? ` (you signed up${s.location ? `, ${s.location}` : ''})` : ` (optional${s.location ? `, ${s.location}` : ''})`;
+		return `${hm(s.starts_at, tz)} ${s.label}${note}`;
+	};
 	const travel = ev.travel_minutes ?? 60; // 0 is a real answer (no travel), not "unset"
-	return [{
-		key: 'day',
-		uid: uid('day'),
-		summary: ev.title,
-		location: ev.location,
-		start: starts[0],
-		end: ends[ends.length - 1],
-		description: [
-			'Your day:', ...schedule, '',
-			manage,
-		].join('\n'),
-		alarms: ['-P7D', '-P1D', `-PT${travel + 15}M`, '-PT15M'],
-	}, ...optinEntries];
+	// One entry per local day with something on it, so a weekend event does not block the night in between. The first
+	// day keeps the key 'day', so a one-day event's entry is exactly what it always was.
+	const dayOf = (iso: string) => localStamp(iso, tz).slice(0, 8);
+	const attending = [...core, ...(tour ? [tour] : [])];
+	const days = [...new Set(attending.map((s) => dayOf(s.starts_at)))].sort();
+	const many = days.length > 1;
+	const dayEntries: CalEntry[] = days.map((d, i) => {
+		const on = attending.filter((s) => dayOf(s.starts_at) === d);
+		const key = i === 0 ? 'day' : `day-${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
+		const date = new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: tz }).format(new Date(on[0].starts_at)).replace(',', '');
+		return {
+			key,
+			uid: uid(key),
+			summary: many ? `${ev.title}: ${date}` : ev.title,
+			location: ev.location,
+			start: on.map((s) => s.starts_at).sort()[0],
+			end: on.map((s) => s.ends_at).sort().at(-1)!,
+			description: [many ? `Your day, ${date}:` : 'Your day:', ...scheduled.filter((s) => dayOf(s.starts_at) === d).map(line), '', manage].join('\n'),
+			// The week-ahead reminder only before the first day.
+			alarms: [...(i === 0 ? ['-P7D'] : []), '-P1D', `-PT${travel + 15}M`, '-PT15M'],
+		};
+	});
+	return [...dayEntries, ...optinEntries];
 }
 
 // Times are normalised so that re-saving the same time in another ISO spelling ('…:00Z' vs '…:00.000Z') is not a change.

@@ -3,7 +3,7 @@ import { type Mode, modeOf } from './mode';
 import type { Attachment, OutgoingEmail } from './email';
 import { type CalEntry, addLinks } from './ics';
 import { mdToHtml, mdToText } from './markdown';
-import { escapeHtml, ukDate, ukDateTime } from './util';
+import { escapeHtml, ukDate, ukDates, ukDateTime } from './util';
 
 export interface EventRow {
 	id: string;
@@ -156,6 +156,11 @@ export const onlyWaiting = (reg: Pick<RegistrationRow, 'attendance' | 'place' | 
 export const waitingForPlace = (reg: Pick<RegistrationRow, 'attendance' | 'place' | 'optins' | 'optins_waiting'>, sessions: SessionRow[]) =>
 	(reg.attendance === 'in_person' && reg.place === 'waitlist') || onlyWaiting(reg, sessions);
 
+/** The start, with its time, for a one-day event; the dates for one over several days. */
+const when = (ev: EventRow) => {
+	const dates = ukDates(ev.starts_at, ev.ends_at, ev.timezone);
+	return dates === ukDate(ev.starts_at, ev.timezone) ? ukDateTime(ev.starts_at, ev.timezone) : dates;
+};
 const lower = (s: SessionRow) => s.label.charAt(0).toLowerCase() + s.label.slice(1);
 const waitingLines = (reg: RegistrationRow, sessions: SessionRow[]) =>
 	optedIn(reg, sessions).filter((s) => optinWaiting(reg, s.id)).map((s) => `You are on the waiting list for ${lower(s)}. We will email you if a place becomes available.`);
@@ -216,7 +221,7 @@ export function confirmEmail(b: Brand, ev: EventRow, reg: RegistrationRow, sessi
 	const html = layout(b, subject, `
 <h1 style="font-size:22px;margin-top:0">Please complete your registration</h1>
 <p>Hello,</p>
-<p>Someone, hopefully you, registered this address for the <strong>${escapeHtml(ev.title)}</strong>, on ${escapeHtml(ukDateTime(ev.starts_at, ev.timezone))}.</p>
+<p>Someone, hopefully you, registered this address for the <strong>${escapeHtml(ev.title)}</strong>, on ${escapeHtml(when(ev))}.</p>
 <p><strong>Your registration is not complete yet.</strong> Please click the button below now to confirm your email address${why}. If you don't complete your registration, ${held} on ${escapeHtml(holdUntil)}.</p>
 <p>You are confirming:</p><ul>${choices.map((l) => `<li>${escapeHtml(l)}</li>`).join('')}</ul>
 ${button(confirmUrl, 'Complete registration')}
@@ -225,7 +230,7 @@ ${button(confirmUrl, 'Complete registration')}
 <p style="font-size:14px">If you did not register, please <a href="${escapeHtml(notMeUrl)}">click here to delete the registration</a>.</p>`);
 	const text = `Hello,
 
-Someone, hopefully you, registered this address for the ${ev.title}, on ${ukDateTime(ev.starts_at, ev.timezone)}.
+Someone, hopefully you, registered this address for the ${ev.title}, on ${when(ev)}.
 
 YOUR REGISTRATION IS NOT COMPLETE YET. Please open this link now and click "Complete registration" to confirm your email address${why}:
 ${confirmUrl}
@@ -249,7 +254,7 @@ export function instructionsEmail(
 	const st = statusLines(reg, sessions);
 	// Open polls this person has not answered: one line in an email they get anyway, never an email of its own.
 	const ask = polls.length ? `Have your say: ${polls.map((q) => `"${q}"`).join(' and ')}. Put the options in order on your registration page.` : '';
-	const thanks = `Thank you for registering for the ${ev.title}, on ${ukDate(ev.starts_at, ev.timezone)}.`;
+	const thanks = `Thank you for registering for the ${ev.title}, on ${ukDates(ev.starts_at, ev.ends_at, ev.timezone)}.`;
 	const body = forAudience(instr.body_md, modeOf(reg));
 	const html = layout(b, instr.subject, `
 <p>Hello ${escapeHtml(reg.name)},</p>
