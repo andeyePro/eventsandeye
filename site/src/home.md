@@ -17,7 +17,7 @@ hero:
   sub_setup: Free and open source. The README walks you through Cloudflare, Resend and the admin page, step by step.
   sub_inuse: "AMYBO, a non-profit sustainable protein community, takes registrations for its 13 November event with Events&I."
   sub_andeye: From the makers of Time&I and Vibe&I.
-  fineprint: Free and open source under the AGPL-3.0. Early release, and feedback is very welcome.
+  fineprint: Free and open source under the AGPL-3.0. In public beta, and feedback is very welcome.
   see_journey_label: "▾ follow a registration from sign-up to the day"
 journey:
   eyebrow: How it works

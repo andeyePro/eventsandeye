@@ -60,5 +60,5 @@ export const privacyUrl = (env: Env) => {
 };
 /** Bare address of the sender, for the calendar ORGANIZER. */
 export const fromAddress = (env: Env) => /<([^>]+)>/.exec(emailFrom(env))?.[1] ?? emailFrom(env);
-export const VERSION = '0.2.0-beta';
+export const VERSION = '0.3.0-beta';
 export const sourceUrl = (env: Env) => env.EVENTSANDEYE_URL || 'https://github.com/andeyePro/eventsandeye';

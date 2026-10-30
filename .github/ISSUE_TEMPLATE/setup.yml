@@ -1,0 +1,21 @@
+name: Help setting it up
+description: Stuck following the README
+body:
+  - type: input
+    id: step
+    attributes:
+      label: Which step of the README?
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What you did and what you see
+      description: The exact message, and anything the admin page's set-up check lists. Leave out secrets, keys and other people's details.
+    validations:
+      required: true
+  - type: dropdown
+    id: site
+    attributes:
+      label: Your site
+      options: [Starter site (examples/starter), Another Astro site, Plain HTML site, Something else]

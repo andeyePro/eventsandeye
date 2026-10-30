@@ -4,7 +4,7 @@ Free, open source event registration for small community events, running entirel
 
 Website: [events.andeye.com](https://events.andeye.com). Made by [andeye Ltd](https://andeye.com). Licensed under the [GNU AGPL-3.0](LICENSE).
 
-> **Early release.** Events&I is in use on [amybo.org](https://amybo.org/events/), which is also the reference integration ([source](https://github.com/amy-bo/website)). Feedback is very welcome: [open an issue](https://github.com/andeyePro/eventsandeye/issues) or [send a message](https://contact.andeye.com/?source=eventsandeye&subject=Events%26I%20feedback).
+> **Public beta** (version 0.3.0-beta). Events&I is in use on [amybo.org](https://amybo.org/events/), which is also the reference integration ([source](https://github.com/amy-bo/website)). Feedback is very welcome: [open an issue](https://github.com/andeyePro/eventsandeye/issues) or [send a message](https://contact.andeye.com/?source=eventsandeye&subject=Events%26I%20feedback). Security problems: see [SECURITY.md](SECURITY.md).
 
 ## Contents
 
@@ -239,7 +239,14 @@ Secrets: `TOKEN_SECRET`, `RESEND_API_KEY`, `TURNSTILE_SECRET_KEY` (step 8). Turn
 
 ## Updating
 
-Update the submodule (`git submodule update --remote eventsandeye`), then apply any new database migrations before deploying:
+Releases are tagged (`v0.3.0-beta` and so on), and [CHANGELOG.md](CHANGELOG.md) says what each needs: new migrations, function wrappers and settings. To move to a release, check out its tag in the submodule and commit that in your site:
+
+```sh
+git -C eventsandeye fetch --tags && git -C eventsandeye checkout v0.3.0-beta
+git add eventsandeye
+```
+
+(`git submodule update --remote eventsandeye` follows `main` instead, with everything not yet released.) Then apply any new database migrations before deploying:
 
 ```sh
 npx wrangler d1 migrations apply events --remote

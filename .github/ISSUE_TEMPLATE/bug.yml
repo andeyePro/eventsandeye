@@ -1,0 +1,35 @@
+name: Something is not working
+description: A bug, or Events&I doing something it should not
+body:
+  - type: markdown
+    attributes:
+      value: "For security problems, please don't open an issue: see [SECURITY.md](https://github.com/andeyePro/eventsandeye/blob/main/SECURITY.md)."
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen
+      placeholder: "1. Register for an event as…\n2. …"
+  - type: input
+    id: version
+    attributes:
+      label: Events&I version
+      description: Shown at the top of the admin page (or VERSION in src/env.ts), or the commit your site uses.
+    validations:
+      required: true
+  - type: dropdown
+    id: plan
+    attributes:
+      label: Workers plan
+      options: [Free, Paid, Not sure]
+  - type: textarea
+    id: setup
+    attributes:
+      label: Set-up check and logs
+      description: Anything the admin page's set-up check lists, and relevant lines from `npx wrangler pages deployment tail` or the cron Worker's log. Remove names and email addresses.
+      render: text
