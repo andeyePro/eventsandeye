@@ -9,8 +9,8 @@ Events&I is registration for small community events on the organiser's own Cloud
 - `src/rsvp.ts`: the registration flows (register, confirm, change, cancel, promote, messages). `templates.ts`: every email's wording. `calendar.ts` and `ics.ts`: invitations and updates. `hosts.ts`: session host lists. `access.ts`: Cloudflare Access JWT checks.
 - `src/routes/`: request handlers, called from the host site's `functions/` (copies of the wrappers are in `examples/functions/`).
 - `migrations/`: the D1 schema. `worker/`: the cron Worker. `astro/`: the booking form, confirm and manage panels; `html/`: plain HTML versions generated from them by `scripts/build-html.mjs` (rerun after changing their markup).
-- `examples/`: config, function wrappers and a seed (AMYBO's event) for a new site. `site/`: events.andeye.com, a separate Astro build; it is not part of the product.
-- `tests/e2e.mjs`: the end-to-end test, run from a host site against local D1. `tests/markdown.test.mjs`: unit tests (`npm install`, then `npm test`).
+- `examples/`: config, function wrappers and a seed (AMYBO's event) for a new site; `examples/starter/` is a minimal Astro site with every page Events&I needs, which the end-to-end test runs on. `site/`: events.andeye.com, a separate Astro build; it is not part of the product.
+- `tests/e2e.mjs`: the end-to-end test, run against local D1 from a host site or, with `sh scripts/starter-e2e.sh`, from a throwaway copy of the starter site. `tests/markdown.test.mjs`: unit tests (`npm install`, then `npm test`).
 
 ## Rules that will bite
 

@@ -1,0 +1,23 @@
+# Unit tests, the generated plain HTML check, and the end-to-end test on the starter site in examples/starter.
+name: Test
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npm test
+      - name: End-to-end test
+        run: sh scripts/starter-e2e.sh

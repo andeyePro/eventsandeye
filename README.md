@@ -40,7 +40,7 @@ Website: [events.andeye.com](https://events.andeye.com). Made by [andeye Ltd](ht
 
 ## Set it up
 
-These steps assume your site's repository is checked out locally and Events&I goes in a folder called `eventsandeye/` at its root.
+These steps assume your site's repository is checked out locally and Events&I goes in a folder called `eventsandeye/` at its root. **Starting without a site?** Copy [`examples/starter/`](examples/starter/), a minimal Astro site with every page Events&I needs, to a new repository and follow its README.
 
 1. **Add Events&I to your site.** Either as a git submodule, which makes updating easy:
 
@@ -163,7 +163,7 @@ npx wrangler pages dev ./dist --port 8788
 
 Open http://localhost:8788. With `DEV_MODE=true`, emails (with their calendar attachments) are printed to the console and kept in a local outbox at `/api/dev/outbox` instead of being sent, and the admin page opens without Cloudflare Access. In the outbox, an address containing `fail-send` is refused as Resend would refuse it, and one containing `fail-500` fails as in an outage, for trying out how messages recover.
 
-**End-to-end test.** [`tests/e2e.mjs`](tests/e2e.mjs) runs the whole flow against a local D1 database with `wrangler pages dev`, against AMYBO's example seed: registration, confirmation, waiting lists, promotion, calendar invitations and updates, host lists, polls and suggestions (email replies go through `/api/dev/inbound`), scheduled messages, holds, deadlines, cancellation, retention and the Access checks. It writes its own `.dev.vars`, backing yours up and restoring it afterwards. From your site:
+**End-to-end test.** `sh scripts/starter-e2e.sh`, from this repository, runs it on a throwaway copy of the [starter site](examples/starter/) and needs nothing else. [`tests/e2e.mjs`](tests/e2e.mjs) runs the whole flow against a local D1 database with `wrangler pages dev`, against AMYBO's example seed: registration, confirmation, waiting lists, promotion, calendar invitations and updates, host lists, polls and suggestions (email replies go through `/api/dev/inbound`), scheduled messages, holds, deadlines, cancellation, retention and the Access checks. It writes its own `.dev.vars`, backing yours up and restoring it afterwards. From your site:
 
 ```sh
 PUBLIC_TURNSTILE_ALLOW_TEST_KEY=true npm run build

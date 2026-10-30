@@ -1,0 +1,19 @@
+{
+  "name": "my-events-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "build:test": "PUBLIC_TURNSTILE_ALLOW_TEST_KEY=true astro build",
+    "pages:dev": "wrangler pages dev ./dist --port 8788",
+    "db:local": "wrangler d1 migrations apply events --local && wrangler d1 execute events --local --file seed/my-event.sql"
+  },
+  "dependencies": {
+    "astro": "^5.18.2"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261023.1",
+    "wrangler": "^4.152.0"
+  }
+}

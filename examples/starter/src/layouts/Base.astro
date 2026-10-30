@@ -1,0 +1,25 @@
+---
+// A plain page shell. Replace it with your own site's layout: the Events&I components need nothing from it.
+interface Props { title: string; noindex?: boolean }
+const { title, noindex = false } = Astro.props;
+---
+<!doctype html>
+<html lang="en-GB">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>{title}</title>
+		{noindex && <meta name="robots" content="noindex" />}
+	</head>
+	<body>
+		<main>
+			<slot />
+		</main>
+		<footer><a href="/">Home</a> · <a href="/privacy/">Privacy</a></footer>
+	</body>
+</html>
+<style is:global>
+	:root { color-scheme: light dark; font-family: system-ui, sans-serif; line-height: 1.5; }
+	body { margin: 0 auto; max-width: 42rem; padding: 1rem; }
+	footer { margin-top: 3rem; font-size: 0.9rem; }
+</style>

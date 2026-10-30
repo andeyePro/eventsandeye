@@ -1,0 +1,9 @@
+---
+// The booking form. Change event, controller and contactHref to yours: event is the id from your seed or admin page.
+import Base from '../layouts/Base.astro';
+import RsvpForm from '../../eventsandeye/astro/RsvpForm.astro';
+---
+<Base title="Register">
+	<h1>Register</h1>
+	<RsvpForm event="2026-11-13-london" controller="Example Organisers" contactHref="mailto:events@example.org" />
+</Base>
