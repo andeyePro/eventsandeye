@@ -18,3 +18,6 @@
 # Local clutter
 .DS_Store
 node_modules/
+
+# /vsss session logs (local only)
+.vss/
