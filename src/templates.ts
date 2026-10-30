@@ -228,7 +228,7 @@ export function confirmEmail(b: Brand, ev: EventRow, reg: RegistrationRow, sessi
 <p><strong>Your registration is not complete yet.</strong> Please click the button below now to confirm your email address${why}. If you don't complete your registration, ${held} on ${escapeHtml(holdUntil)}.</p>
 <p>You are confirming:</p><ul>${choices.map((l) => `<li>${escapeHtml(l)}</li>`).join('')}</ul>
 ${button(confirmUrl, 'Complete registration')}
-<p style="font-size:14px">If the button does not work, copy this link into your browser:<br><a href="${escapeHtml(confirmUrl)}">${escapeHtml(confirmUrl)}</a></p>
+<p style="font-size:14px;overflow-wrap:anywhere;word-break:break-all">If the button does not work, copy this link into your browser:<br><a href="${escapeHtml(confirmUrl)}">${escapeHtml(confirmUrl)}</a></p>
 <p style="font-size:14px">To change anything, register again with the same address: the newest registration replaces this one. Once you have confirmed, every email has a link to view, change or cancel your registration.</p>
 <p style="font-size:14px">If you did not register, please <a href="${escapeHtml(notMeUrl)}">click here to delete the registration</a>.</p>`);
 	const text = `Hello,

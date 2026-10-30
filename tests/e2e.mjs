@@ -268,6 +268,8 @@ try {
 	const aliceConfirm = tokenFrom(mails[0].text_body, 'confirm');
 	check('confirm link present; no manage link before the address is confirmed', !!aliceConfirm && !tokenFrom(mails[0].text_body, 'manage'));
 	check('confirm email lists the choices being confirmed, without repeating the typed name', /You are confirming:/.test(mails[0].text_body) && /10:30 lab tour/.test(mails[0].text_body) && /share your email address with the hosts/.test(mails[0].text_body) && !/Alice/.test(mails[0].text_body));
+	// The link is one long word: unbroken, it widens the email past a phone screen.
+	check('the confirm email\'s copy-this-link fallback wraps on a phone', /<p style="[^"]*word-break:break-all">If the button does not work/.test(mails[0].html_body));
 	check('confirm email offers a link to delete a registration the recipient did not make', /not-me=1/.test(mails[0].text_body) && /click here to delete the registration/.test(mails[0].html_body));
 
 	console.log('\nJust the dinner');
