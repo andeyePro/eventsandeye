@@ -9,6 +9,6 @@
   "type": "module",
   "private": true,
   "engines": { "node": ">=22" },
-  "scripts": { "test": "node --test tests/markdown.test.mjs tests/inbound.test.mjs tests/polls.test.mjs tests/turnstile.test.mjs tests/ics.test.mjs tests/components.test.mjs tests/dates.test.mjs" },
+  "scripts": { "test": "node --test tests/markdown.test.mjs tests/inbound.test.mjs tests/polls.test.mjs tests/turnstile.test.mjs tests/ics.test.mjs tests/components.test.mjs tests/dates.test.mjs tests/health.test.mjs" },
   "devDependencies": { "esbuild": "0.27.7" }
 }
