@@ -347,6 +347,18 @@ export interface HostLine {
 }
 
 /** Attendee list for a session host, with additions in bold and removals struck through. */
+/** To a session's previous host, once the session has a new host or none: the lists they were sent are no longer theirs. */
+export function hostReleasedEmail(b: Brand, ev: EventRow, s: SessionRow): OutgoingEmail {
+	const subject = `You are no longer hosting: ${s.label}, ${ev.title}`;
+	const lines = [
+		`Hello${s.host_name ? ` ${s.host_name}` : ''},`,
+		`You are no longer down as the host of ${s.label} (${ukDateTime(s.starts_at, ev.timezone)}), so you will get no more attendee lists for it.`,
+		'Please delete the lists we sent you for this session, including any email addresses in them.',
+		`If this is a mistake, please tell the organisers at ${b.notify}.`,
+	];
+	return { to: s.host_email!, subject, text: lines.join('\n\n') + textFooter(b), html: layout(b, subject, lines.map((l) => `<p>${escapeHtml(l)}</p>`).join('')) };
+}
+
 export function hostListEmail(b: Brand, ev: EventRow, s: SessionRow, current: HostLine[], added: Set<string>, removed: HostLine[], changedDetail: Set<string>): OutgoingEmail {
 	const subject = `Attendee list changed: ${s.label}, ${ev.title}`;
 	const row = (l: HostLine) => {

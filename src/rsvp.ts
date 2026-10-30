@@ -6,7 +6,7 @@ import { syncHosts } from './hosts';
 import { buildIcs } from './ics';
 import {
 	alreadyRegisteredIntro, type Brand, calendarUpdateEmail, cancellationEmail, confirmEmail, declinedEmail, type EventRow, instructionsEmail, messageEmail,
-	notification, onlyWaiting, optedIn, optinWaiting, type RegistrationRow, type SessionRow, waitingForPlace, waitlistReminderEmail,
+	hostReleasedEmail, notification, onlyWaiting, optedIn, optinWaiting, type RegistrationRow, type SessionRow, waitingForPlace, waitlistReminderEmail,
 } from './templates';
 import { modeOf } from './mode';
 import { mdToHtml, mdToText } from './markdown';
@@ -819,15 +819,21 @@ export async function updateSessions(env: Env, eventId: string, input: Record<st
 		return { ok: true as const, calendar_updates: n };
 	}
 	const stmts = [];
+	const released: SessionRow[] = [];
 	for (const s of next) {
 		const old = sessions.find((x) => x.id === s.id)!;
 		if (JSON.stringify(old) === JSON.stringify(s)) continue;
 		stmts.push(env.DB.prepare('UPDATE sessions SET starts_at=?, ends_at=?, location=?, online_url=?, host_name=?, host_email=?, capacity=?, booking_deadline=? WHERE id=?')
 			.bind(s.starts_at, s.ends_at, s.location, s.online_url, s.host_name, s.host_email, s.capacity, s.booking_deadline, s.id));
 		// A new host gets the whole list, not a diff against the previous host's.
-		if (old.host_email !== s.host_email) stmts.push(env.DB.prepare('DELETE FROM host_snapshots WHERE session_id=?').bind(s.id));
+		if (old.host_email !== s.host_email) {
+			stmts.push(env.DB.prepare('DELETE FROM host_snapshots WHERE session_id=?').bind(s.id));
+			// Only a host who was actually sent a list has anything to delete.
+			if (old.host_email && await env.DB.prepare('SELECT 1 FROM host_snapshots WHERE session_id=?').bind(s.id).first()) released.push(old);
+		}
 	}
 	if (stmts.length) await env.DB.batch(stmts);
+	for (const old of released) await sendEmail(env, hostReleasedEmail(brand(env), ev, old));
 	// "Save without emailing": calendars aren't updated now. Each person's entries catch up with the next email that
 	// carries their calendar (joining instructions, a message that includes them, or a change of their own).
 	const updates = input.quiet === true ? 0 : await resyncCalendars(env, ev.id);

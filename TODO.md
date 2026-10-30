@@ -14,7 +14,7 @@
 - [ ] **Messages to just the opt-in sessions:** the audience filter has no "dinner only" or "signed up for X" option, and "In person" also reaches people coming only to the dinner.
 - [ ] **Host list debounce:** a change of attendance re-emails every affected host at once; sending each host at most one list an hour from the cron would cut the noise during a busy sign-up day (self-service changes are capped at 10 emails an hour per registration for now).
 - [ ] **Accessibility review** of the Astro components in a real browser, including colour contrast (the axe scan in jsdom cannot check contrast).
-- [ ] **Host changes:** when a session's host email changes, tell the previous host to delete the list they were sent.
+- [ ] **"Save without emailing anyone" and hosts:** a quiet session save still emails hosts their changed lists (and, since 2026-10-30, a replaced host the note to delete theirs). Either relabel the button ("without emailing attendees") or hold host emails back too.
 - [ ] **Framework-neutral wording:** the form's attendance labels and the change-of-attendance email intro in `src/rsvp.ts` should come from event/session data rather than props.
 - [ ] **Framework-neutral components:** plain HTML/JS versions of the booking, confirm and manage panels for non-Astro sites.
 - [ ] **Polls, next steps:** several polls side by side are supported but untested in a real browser on small screens; drag and drop is mouse-only (touch and keyboard use the arrow buttons); suggestions are only on the manage page, as the booking form's address is not confirmed yet.

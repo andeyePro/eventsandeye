@@ -697,6 +697,23 @@ try {
 		await req('DELETE', '/api/rsvp/manage', { t: quinn.manage });
 	}
 
+	console.log('\nHost changes');
+	{
+		const sentBefore = (await mailsTo('dinnerhost@example.org')).length;
+		check('the dinner host has been sent a list', sentBefore > 0);
+		await req('POST', '/api/admin/sessions', { event: EVENT, dry_run: true, sessions: [{ id: DINNER, host_email: 'dinner2@example.org' }] }, ADMIN);
+		check('a dry run of a host change emails nobody', (await mailsTo('dinnerhost@example.org')).length === sentBefore && !(await mailsTo('dinner2@example.org')).length);
+		r = await req('POST', '/api/admin/sessions', { event: EVENT, sessions: [{ id: DINNER, host_email: 'dinner2@example.org' }] }, ADMIN);
+		const gone = await last('dinnerhost@example.org');
+		check('a replaced host is asked to delete the lists they were sent', r.data.ok && /You are no longer hosting: Dinner/.test(gone.subject) && /Please delete the lists we sent you/.test(gone.text_body), gone.subject);
+		check('the new host gets the whole list', /Attendee list changed: Dinner/.test((await last('dinner2@example.org'))?.subject ?? ''));
+		const n2 = (await mailsTo('dinner2@example.org')).length;
+		await req('POST', '/api/admin/sessions', { event: EVENT, sessions: [{ id: AM.id, host_email: 'talkhost@example.org' }] }, ADMIN);
+		await req('POST', '/api/admin/sessions', { event: EVENT, sessions: [{ id: DINNER, host_email: 'dinner2@example.org' }] }, ADMIN);
+		check('saving the same host again sends no note', (await mailsTo('dinner2@example.org')).length === n2 && !(await mailsTo('dinner2@example.org')).some((m) => /no longer hosting/.test(m.subject)));
+		await req('POST', '/api/admin/sessions', { event: EVENT, sessions: [{ id: AM.id, host_email: '' }] }, ADMIN);
+	}
+
 	console.log('\nAdmin removal');
 	const gina = 'gina@example.org', hal = 'hal@example.org';
 	await registerAndConfirm({ name: 'Gina', email: gina, attendance: 'remote' });
