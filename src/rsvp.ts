@@ -823,8 +823,8 @@ export async function deliverMessage(env: Env, id: string) {
 		if (plain.length) {
 			const emails: OutgoingEmail[] = [];
 			for (const r of plain) emails.push(messageEmail(brand(env), r, claim, await manageUrl(env, r.id, at)));
-			// The key is the piece as recorded, even if someone in it has cancelled since: if Resend took it, a retry for
-			// fewer people under the same key sends nothing again (see email.ts).
+			// The key is the piece as recorded, even if someone in it has cancelled since: if Resend took it, a retry under the
+			// same key sends nothing again, and a retry that differs (fewer people) leaves them marked uncertain (see email.ts).
 			try {
 				await sendBatch(env, emails, `msg-${id}-${(await sha256(plainIds.join(','))).slice(0, 24)}`);
 				await done(plain.map((r) => r.id));
