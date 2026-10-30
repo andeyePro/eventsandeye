@@ -59,9 +59,12 @@ export function fold(line: string): string {
 
 export const utcStamp = (iso: string) => iso.replace(/[-:]/g, '').replace(/\.\d{3}/, '').replace(/Z?$/, 'Z');
 
-/** Wall-clock YYYYMMDDTHHMMSS in a time zone. */
+const formatters = new Map<string, Intl.DateTimeFormat>();
+/** Wall-clock YYYYMMDDTHHMMSS in a time zone. One formatter per zone: building them is most of the cost. */
 export function localStamp(iso: string, tz: string): string {
-	const parts = new Intl.DateTimeFormat('en-GB', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(iso));
+	let f = formatters.get(tz);
+	if (!f) formatters.set(tz, (f = new Intl.DateTimeFormat('en-GB', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' })));
+	const parts = f.formatToParts(new Date(iso));
 	const g = (t: string) => parts.find((p) => p.type === t)!.value;
 	return `${g('year')}${g('month')}${g('day')}T${g('hour')}${g('minute')}${g('second')}`;
 }
@@ -89,15 +92,23 @@ const wallStamp = (ms: number) => utcStamp(new Date(ms).toISOString()).slice(0, 
  * instant, so each change of offset within a year either side of the event is found by search and written as an
  * observance of its own (no RRULEs to get wrong). Calendar apps need only the rules around the event's own dates.
  */
+const zones = new Map<string, string[]>();
 export function vtimezone(tz: string, aroundIso: string): string[] {
 	if (tz === 'Europe/London') return LONDON_VTIMEZONE;
-	const DAY = 86400_000, from = Date.parse(aroundIso) - 366 * DAY, to = Date.parse(aroundIso) + 366 * DAY;
+	// From the start of the event's UTC day, so the search runs on whole minutes, and so every file for the same event
+	// (and the cache) shares one answer.
+	const DAY = 86400_000, day = Math.floor(Date.parse(aroundIso) / DAY) * DAY;
+	const key = `${tz}|${day}`;
+	const cached = zones.get(key);
+	if (cached) return cached;
+	const from = day - 366 * DAY, to = day + 366 * DAY;
 	const changes: { at: number; before: number; after: number }[] = [];
 	let prev = offsetMinutes(from, tz);
-	for (let t = from + 6 * 3600_000; t <= to; t += 6 * 3600_000) {
+	// A day at a time: no zone changes its offset and back again within a day.
+	for (let t = from + DAY; t <= to; t += DAY) {
 		const cur = offsetMinutes(t, tz);
 		if (cur === prev) continue;
-		let lo = t - 6 * 3600_000, hi = t; // the change is in (lo, hi]
+		let lo = t - DAY, hi = t; // the change is in (lo, hi]
 		while (hi - lo > 60_000) {
 			const mid = lo + Math.floor((hi - lo) / 120_000) * 60_000;
 			if (offsetMinutes(mid, tz) === prev) lo = mid; else hi = mid;
@@ -112,7 +123,7 @@ export function vtimezone(tz: string, aroundIso: string): string[] {
 		const kind = after > standard ? 'DAYLIGHT' : 'STANDARD';
 		return [`BEGIN:${kind}`, `TZOFFSETFROM:${fmtOffset(before)}`, `TZOFFSETTO:${fmtOffset(after)}`, `DTSTART:${wallStamp(startWall)}`, `END:${kind}`];
 	};
-	return [
+	const out = [
 		'BEGIN:VTIMEZONE', `TZID:${tz}`,
 		// In force from before the first change found; its DTSTART is the start of the search window, in local time.
 		...block(from + first * 60_000, first, first),
@@ -120,6 +131,8 @@ export function vtimezone(tz: string, aroundIso: string): string[] {
 		...changes.flatMap((c) => block(c.at + c.before * 60_000, c.before, c.after)),
 		'END:VTIMEZONE',
 	];
+	zones.set(key, out);
+	return out;
 }
 
 function dt(prop: string, iso: string, tz: string): string {

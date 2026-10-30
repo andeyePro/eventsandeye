@@ -46,3 +46,11 @@ test('Europe/London keeps its rule-based block; an unknown zone falls back to UT
 	assert.match(s, /DTSTART:20261113T150000Z/);
 	assert.doesNotMatch(s, /VTIMEZONE/);
 });
+
+test('building zones is quick enough for a calendar update to everyone', () => {
+	const t = Date.now();
+	for (let i = 0; i < 200; i++) ics('America/New_York', new Date(Date.parse('2026-11-13T15:00:00Z') + (i % 3) * 3600_000).toISOString(), '2026-11-13T18:00:00Z');
+	vtimezone('Pacific/Chatham', '2027-06-01T12:34:56Z');
+	assert.ok(Date.now() - t < 1500, `took ${Date.now() - t} ms`);
+	assert.ok(vtimezone('America/New_York', '2026-11-13T15:30:15Z').includes('DTSTART:20261101T020000'), 'changes found on whole minutes whatever the event time');
+});

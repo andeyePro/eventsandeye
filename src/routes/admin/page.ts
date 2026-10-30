@@ -88,7 +88,7 @@ const HTML = /* html */ `<!doctype html>
 				<button type="submit">Clone</button>
 			</form>
 		</details>
-		<details><summary>New event</summary>
+		<details id="new-details"><summary>New event</summary>
 			<form id="new-form">
 				<div class="row">
 					<div><label for="n-id">Event id</label><input id="n-id" type="text" required pattern="[a-z0-9][a-z0-9-]{2,59}" placeholder="2027-03-12-london" /></div>
@@ -233,10 +233,12 @@ let TZ = 'Europe/London';
 const tzLabel = () => TZ === 'Europe/London' ? 'UK time' : TZ.split('/').pop().replace(/_/g, ' ') + ' time';
 function ukLocalToIso(v, tz = TZ) {
 	if (!v) return null;
-	const guess = new Date(v + 'Z');
-	const uk = new Date(guess.toLocaleString('en-US', { timeZone: tz }));
-	const utc = new Date(guess.toLocaleString('en-US', { timeZone: 'UTC' }));
-	return new Date(guess.getTime() - (uk.getTime() - utc.getTime())).toISOString();
+	const wall = new Date(v + 'Z').getTime();
+	const offset = (ms) => { const d = new Date(ms); return new Date(d.toLocaleString('en-US', { timeZone: tz })).getTime() - new Date(d.toLocaleString('en-US', { timeZone: 'UTC' })).getTime(); };
+	// The offset that applies at the instant itself, so a second pass from the first guess: near a change of offset the
+	// first guess can be on the other side of it. A wall time that does not exist (in the hour clocks skip) moves forward.
+	const first = wall - offset(wall), second = wall - offset(first);
+	return new Date(offset(second) === offset(first) ? second : first).toISOString();
 }
 function isoToUkLocal(iso) {
 	if (!iso) return '';
@@ -262,11 +264,18 @@ function sessionEdits() {
 }
 
 async function load() {
+	const evs = await api('/api/admin/events');
+	if (!evs.events.length) {
+		// A new installation: nothing to show but the form to create the first event.
+		document.querySelectorAll('main > section').forEach((x) => { x.hidden = x.id !== 'events'; });
+		$('ev-pick').hidden = true; $('ev-pick').previousElementSibling.textContent = 'No events yet: create the first one.';
+		$('ev-form').closest('details').hidden = true; $('clone-form').closest('details').hidden = true; $('new-details').open = true;
+		return;
+	}
 	const s = await api('/api/admin/summary?event=' + encodeURIComponent(eventId));
 	eventId = s.event.id;
 	TZ = s.event.timezone || 'Europe/London';
 	document.querySelectorAll('.tzl').forEach((x) => { x.textContent = tzLabel(); });
-	const evs = await api('/api/admin/events');
 	$('ev-pick').innerHTML = evs.events.map((x) => '<option value="' + esc(x.id) + '"' + (x.id === eventId ? ' selected' : '') + '>' + esc(x.title) + ' – ' + esc(uk(x.starts_at)) + '</option>').join('');
 	const ev = s.event;
 	$('e-title').value = ev.title; $('e-loc').value = ev.location || ''; $('e-page').value = ev.page_path; $('e-tz').value = ev.timezone;

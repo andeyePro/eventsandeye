@@ -54,6 +54,11 @@ export async function syncHosts(env: Env, brand: Brand, ev: EventRow, sessions: 
 		const changed = new Set(current.filter((l) => prevById.has(l.id) && key(prevById.get(l.id)!) !== key(l)).map((l) => l.id));
 		const removed = prev.filter((l) => !curIds.has(l.id));
 		if (!added.size && !changed.size && !removed.length) continue;
+		// Claimed first, so a request and the cron reaching the same change at once send one list, not two.
+		if (snap) {
+			const claim = await env.DB.prepare('UPDATE host_snapshots SET sent_at = ? WHERE session_id = ? AND sent_at = ?').bind(new Date(now).toISOString(), s.id, snap.sent_at).run();
+			if (!claim.meta.changes) continue;
+		}
 		await sendEmail(env, hostListEmail(brand, ev, s, current, added, removed, changed));
 		const stored = current.map(({ id, name, detail, email }) => ({ id, name, detail, ...(email ? { email } : {}) }));
 		await env.DB.prepare('INSERT INTO host_snapshots (session_id, snapshot, sent_at) VALUES (?,?,?) ON CONFLICT(session_id) DO UPDATE SET snapshot = excluded.snapshot, sent_at = excluded.sent_at')

@@ -786,6 +786,8 @@ export async function updateSettings(env: Env, eventId: string, input: Record<st
 	const hostMinutes = input.host_list_minutes === undefined ? ev.host_list_minutes ?? 0 : Number(input.host_list_minutes);
 	if (!Number.isInteger(hostMinutes) || hostMinutes < 0 || hostMinutes > 1440) throw new UserError('The gap between host lists must be a whole number of minutes, up to a day.');
 	await env.DB.prepare('UPDATE events SET in_person_max=?, deadline=?, travel_minutes=?, host_list_minutes=? WHERE id=?').bind(max, deadline, travel, hostMinutes, eventId).run();
+	// A shorter gap can release lists held back under the old one (the cron only looks at events with a gap).
+	if (hostMinutes < (ev.host_list_minutes ?? 0)) await syncHosts(env, brand(env), { ...ev, host_list_minutes: hostMinutes }, await getSessions(env, ev.id));
 	// A new travel time changes everyone's "time to leave" reminder, which is not worth an email to every attendee:
 	// like a quiet session save, each person's calendar catches up with their next email.
 	return { ok: true as const, calendar_updates: 0 };
@@ -849,7 +851,10 @@ export async function updateSessions(env: Env, eventId: string, input: Record<st
 		}
 	}
 	if (stmts.length) await env.DB.batch(stmts);
-	for (const old of released) await sendEmail(env, hostReleasedEmail(brand(env), ev, old));
+	// Each note on its own: the save is done, so one failed send must not stop the others or the updates below.
+	for (const old of released) {
+		try { await sendEmail(env, hostReleasedEmail(brand(env), ev, old)); } catch (e) { console.error('replaced-host note failed', old.id, e); }
+	}
 	// "Save without emailing": calendars aren't updated now. Each person's entries catch up with the next email that
 	// carries their calendar (joining instructions, a message that includes them, or a change of their own).
 	const updates = input.quiet === true ? 0 : await resyncCalendars(env, ev.id);

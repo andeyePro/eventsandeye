@@ -747,6 +747,11 @@ try {
 		await cron(Date.now() + 61 * 60_000);
 		const gathered = await last('talkhost@example.org');
 		check('…and gathered into one list once the hour has passed', (await hostMails()) === h0 + 1 && /\*\*Vic – remote\*\*/.test(gathered.text_body) && /\*\*Wyn – remote\*\*/.test(gathered.text_body), gathered.text_body.slice(0, 400));
+		await registerAndConfirm({ name: 'Xan', email: 'xan@example.org', attendance: 'remote' });
+		const h1 = await hostMails();
+		await req('POST', '/api/admin/settings', { event: EVENT, host_list_minutes: 0 }, ADMIN);
+		check('removing the gap sends a list held back under it at once', (await hostMails()) === h1 + 1 && /\*\*Xan – remote\*\*/.test((await last('talkhost@example.org')).text_body));
+		await req('DELETE', '/api/rsvp/manage', { t: await manageOf('xan@example.org') });
 		check('a negative gap is refused', (await req('POST', '/api/admin/settings', { event: EVENT, host_list_minutes: -1 }, ADMIN)).status === 400);
 		await req('POST', '/api/admin/settings', { event: EVENT, host_list_minutes: 0 }, ADMIN);
 		for (const who of ['vic@example.org', 'wyn@example.org']) await req('DELETE', '/api/rsvp/manage', { t: await manageOf(who) });
