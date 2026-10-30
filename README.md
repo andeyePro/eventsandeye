@@ -48,7 +48,9 @@ For someone at home with Cloudflare: the numbered steps below say the same at le
 git submodule add https://github.com/andeyePro/eventsandeye.git eventsandeye   # in your site (or start from examples/starter)
 cp -R eventsandeye/examples/functions/. functions/                                 # the API, admin page and /events/next
 cp eventsandeye/examples/wrangler.toml .                                           # then fill it in
-npx wrangler d1 create events && npx wrangler d1 migrations apply events --remote
+npm install -D wrangler @cloudflare/workers-types
+npx wrangler d1 create events                    # put the database_id it prints into wrangler.toml, then:
+npx wrangler d1 migrations apply events --remote
 ```
 
 Then: add the form, check-email, confirm, manage and privacy pages (step 3); a Turnstile widget (6) and a Resend domain (7); the secrets `TOKEN_SECRET`, `RESEND_API_KEY` and `TURNSTILE_SECRET_KEY` (8); Cloudflare Access with two-factor sign-in on `/admin/*` and `/api/admin/*` (9); the cron Worker with the same settings and secrets (10). Deploy, create your event on the admin page, `/admin/rsvps/`, and work through its set-up check until it disappears.
