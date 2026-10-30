@@ -12,7 +12,7 @@ import { modeOf } from './mode';
 import { mdToHtml, mdToText } from './markdown';
 import { adminPolls, parseBookingBallots, saveBookingBallots, unansweredPolls, voterPolls } from './polls';
 import { makeToken } from './tokens';
-import { cleanLine, cleanText, EMAIL_RE, escapeHtml, nowIso, randomToken, ukDateTime } from './util';
+import { cleanLine, cleanText, EMAIL_RE, escapeHtml, nowIso, randomToken, sha256, ukDateTime } from './util';
 
 const HOUR = 3600_000;
 export const MAX_HOLD_MS = 48 * HOUR;
@@ -309,7 +309,7 @@ async function demoteOptinIfLatest(env: Env, id: string, sessionId: string, now:
  * changed entries (or all of them when resendAllCalendar), and entries that no longer apply are cancelled.
  */
 async function sendInstructions(env: Env, ev: EventRow, reg: RegistrationRow, sessions: SessionRow[],
-	opts: { intro?: { html: string; text: string }; resendAllCalendar?: boolean; kind?: string; subject?: string } = {}) {
+	opts: { intro?: { html: string; text: string }; resendAllCalendar?: boolean; kind?: string; subject?: string; idempotencyKey?: string } = {}) {
 	// Without a saved version yet, people still get their status, manage link and calendar, and a promise of instructions.
 	const instr = (await latestInstructions(env, ev.id))
 		?? { version: 0, subject: `Your registration: ${ev.title}`, body_md: 'Joining instructions will follow by email nearer the day.' };
@@ -319,7 +319,7 @@ async function sendInstructions(env: Env, ev: EventRow, reg: RegistrationRow, se
 	const files = attachments(env, ev, reg, send, p.cancels);
 	const mail = instructionsEmail(brand(env), ev, reg, sessions, instr, murl, { entries: p.entries, icsUrl: await icsUrlFor(env, reg.id) }, files, opts.intro, await unansweredPolls(env, ev, reg.id));
 	if (opts.subject) mail.subject = opts.subject;
-	const pid = await sendEmail(env, mail);
+	const pid = await sendEmail(env, mail, opts.idempotencyKey);
 	await env.DB.prepare('UPDATE registrations SET instructions_version = ?, calendar_state = ? WHERE id = ?').bind(instr.version, JSON.stringify(p.state), reg.id).run();
 	await recordDelivery(env, reg.id, opts.kind ?? 'instructions', pid, { version: instr.version });
 }
@@ -601,7 +601,9 @@ export async function promote(env: Env, id: string, what: 'event' | 'tour' | 'op
 }
 
 /** Promotes people from the in-person waiting list, in waiting-list order, until the in-person maximum is reached
- * (for when a bigger room is found). Each gets the latest joining instructions, as with a single promotion. */
+ * (for when a bigger room is found). Each gets the latest joining instructions, as with a single promotion. A few at a
+ * time (each promotion is several queries and an email): `more` says to call again, as the admin page does. */
+const PROMOTE_CHUNK = 2;
 export async function promoteAll(env: Env, eventId: string) {
 	const ev = await getEvent(env, eventId);
 	const cap = await capacity(env, ev, await getSessions(env, ev.id));
@@ -609,11 +611,12 @@ export async function promoteAll(env: Env, eventId: string) {
 	const waiting = await env.DB.prepare(
 		`SELECT id FROM registrations WHERE event_id = ? AND status = 'confirmed' AND attendance = 'in_person' AND place = 'waitlist'
 		 ORDER BY waitlist_since, confirmed_at LIMIT ?`,
-	).bind(ev.id, room).all<{ id: string }>();
+	).bind(ev.id, Math.min(room, PROMOTE_CHUNK)).all<{ id: string }>();
 	// Hosts get one list for the lot, not one per person promoted.
 	for (const r of waiting.results) await promote(env, r.id, 'event', '', { skipHosts: true });
 	if (waiting.results.length) await syncHosts(env, brand(env), ev, await getSessions(env, ev.id));
-	return { ok: true as const, promoted: waiting.results.length, still_waiting: cap.inPerson.waiting - waiting.results.length };
+	const still = cap.inPerson.waiting - waiting.results.length;
+	return { ok: true as const, promoted: waiting.results.length, still_waiting: still, more: still > 0 && room > waiting.results.length };
 }
 
 /** "I did not register": deletes a registration that has not been confirmed, from the link in the confirmation email,
@@ -688,7 +691,7 @@ export async function audienceRecipients(env: Env, eventId: string, a: Audience)
 interface MessageRow {
 	id: string; event_id: string; subject: string; body_md: string; audience: string; marks_instructions_version: number | null;
 	status: string; scheduled_at: string | null; sent_at: string | null; recipients_count: number | null; error: string | null;
-	created_at: string; created_by: string | null;
+	created_at: string; created_by: string | null; claimed_until?: string | null; started_at?: string | null;
 }
 
 export async function createMessage(env: Env, eventId: string, input: Record<string, unknown>, createdBy: string) {
@@ -713,41 +716,78 @@ export async function createMessage(env: Env, eventId: string, input: Record<str
 	return env.DB.prepare('SELECT * FROM messages WHERE id = ?').bind(id).first<MessageRow>();
 }
 
-/** Sends a message to its audience, recording each delivery. Safe to call from the cron: claims the row first. */
+/** How much one request (or cron run) sends, to stay inside the Workers free plan's 50 queries and 50 outbound requests
+ * per invocation: a message's plain copies go to Resend 100 at a time, but each copy carrying joining instructions and
+ * calendar files is a request and several queries of its own. */
+const MESSAGE_PLAIN_CHUNK = 100;
+const MESSAGE_INSTRUCTIONS_CHUNK = 5;
+const CLAIM_MS = 4 * 60_000;
+
+/**
+ * Sends the next piece of a message to its audience, recording each delivery as it goes. The first piece goes when it
+ * is sent or falls due; the cron Worker sends the rest, a piece per run. Who already has it is read from the delivery
+ * records, and each piece has its own idempotency key, so a piece that fails is retried without sending anyone a copy
+ * twice. A claim of a few minutes stops two runs working on the same message at once.
+ */
 export async function deliverMessage(env: Env, id: string) {
-	const claim = await env.DB.prepare(`UPDATE messages SET status='sending' WHERE id=? AND status = 'scheduled' RETURNING *` /* one claim only, even if two cron runs overlap */).bind(id).first<MessageRow>();
-	if (!claim) return;
+	const now = nowIso();
+	const claim = await env.DB.prepare(
+		`UPDATE messages SET status = 'sending', started_at = COALESCE(started_at, ?1), claimed_until = ?2
+		 WHERE id = ?3 AND status IN ('scheduled', 'sending') AND (claimed_until IS NULL OR claimed_until < ?1) RETURNING *`,
+	).bind(now, new Date(Date.now() + CLAIM_MS).toISOString(), id).first<MessageRow>();
+	if (!claim) return { sent: 0, left: 0 };
 	try {
-		const recipients = await audienceRecipients(env, claim.event_id, JSON.parse(claim.audience));
+		const done = new Set((await env.DB.prepare('SELECT registration_id FROM deliveries WHERE message_id = ?').bind(id).all<{ registration_id: string }>()).results.map((r) => r.registration_id));
+		// The audience as it was when sending started: someone confirming part way through is not added.
+		const todo = (await audienceRecipients(env, claim.event_id, JSON.parse(claim.audience)))
+			.filter((r) => !done.has(r.id) && (r.confirmed_at ?? '') <= (claim.started_at ?? now));
 		// "Include the latest joining instructions": the message opens a full copy of the instructions (with any calendar
 		// changes) for everyone who has a place; people still waiting for one get the message alone.
 		const latest = await latestInstructions(env, claim.event_id);
 		const withInstructions = !!latest && claim.marks_instructions_version === latest.version;
-		const ev = withInstructions ? await getEvent(env, claim.event_id) : null;
 		const sessions = await getSessions(env, claim.event_id);
-		const plain = recipients.filter((r) => !withInstructions || waitingForPlace(r, sessions));
-		const emails: OutgoingEmail[] = [];
-		for (const r of plain) emails.push(messageEmail(brand(env), r, claim, await manageUrl(env, r.id)));
-		const plainIds = await sendBatch(env, emails);
-		const ids = recipients.map((r) => (plain.includes(r) ? plainIds[plain.indexOf(r)] : null));
-		if (ev) for (const r of recipients) if (!plain.includes(r)) await sendInstructions(env, ev, r, sessions, { intro: { html: mdToHtml(claim.body_md), text: mdToText(claim.body_md) }, subject: claim.subject, kind: 'message_instructions' });
-		const stmts = recipients.map((r, i) =>
+		const full = withInstructions ? todo.filter((r) => !waitingForPlace(r, sessions)) : [];
+		const plain = todo.filter((r) => !full.includes(r)).slice(0, MESSAGE_PLAIN_CHUNK);
+		const instr = full.slice(0, MESSAGE_INSTRUCTIONS_CHUNK);
+		const record = (r: RegistrationRow, providerId: string | null) => [
 			env.DB.prepare('INSERT INTO deliveries (registration_id, kind, message_id, instructions_version, sent_at, provider_id) VALUES (?,?,?,?,?,?)')
-				.bind(r.id, 'message', id, claim.marks_instructions_version, nowIso(), ids[i] ?? null));
-		if (claim.marks_instructions_version) {
-			for (const r of recipients) stmts.push(env.DB.prepare('UPDATE registrations SET instructions_version = MAX(instructions_version, ?) WHERE id = ?').bind(claim.marks_instructions_version, r.id));
+				.bind(r.id, 'message', id, claim.marks_instructions_version, nowIso(), providerId),
+			...(claim.marks_instructions_version ? [env.DB.prepare('UPDATE registrations SET instructions_version = MAX(instructions_version, ?) WHERE id = ?').bind(claim.marks_instructions_version, r.id)] : []),
+		];
+		if (plain.length) {
+			const emails: OutgoingEmail[] = [];
+			for (const r of plain) emails.push(messageEmail(brand(env), r, claim, await manageUrl(env, r.id)));
+			const key = `msg-${id}-${(await sha256(plain.map((r) => r.id).join(','))).slice(0, 24)}`;
+			const pids = await sendBatch(env, emails, key);
+			await env.DB.batch(plain.flatMap((r, i) => record(r, pids[i] ?? null)));
 		}
-		stmts.push(env.DB.prepare(`UPDATE messages SET status='sent', sent_at=?, recipients_count=? WHERE id=?`).bind(nowIso(), recipients.length, id));
-		await env.DB.batch(stmts);
+		if (instr.length) {
+			const ev = await getEvent(env, claim.event_id);
+			for (const r of instr) {
+				await sendInstructions(env, ev, r, sessions, { intro: { html: mdToHtml(claim.body_md), text: mdToText(claim.body_md) }, subject: claim.subject, kind: 'message_instructions', idempotencyKey: `msg-${id}-${r.id}` });
+				await env.DB.batch(record(r, null));
+			}
+		}
+		const left = todo.length - plain.length - instr.length;
+		if (left > 0) await env.DB.prepare('UPDATE messages SET claimed_until = NULL, error = NULL WHERE id = ?').bind(id).run();
+		else {
+			await env.DB.prepare(`UPDATE messages SET status = 'sent', sent_at = ?, claimed_until = NULL, error = NULL, recipients_count = (SELECT COUNT(*) FROM deliveries WHERE message_id = ?) WHERE id = ?`)
+				.bind(nowIso(), id, id).run();
+		}
+		return { sent: plain.length + instr.length, left };
 	} catch (e) {
-		await env.DB.prepare(`UPDATE messages SET status='failed', error=? WHERE id=?`).bind(String(e).slice(0, 500), id).run();
+		// Still 'sending': the next cron run carries on from the delivery records. The error shows on the admin page.
+		await env.DB.prepare('UPDATE messages SET claimed_until = NULL, error = ? WHERE id = ?').bind(String(e).slice(0, 500), id).run();
 		throw e;
 	}
 }
 
+/** A scheduled message, or the rest of one part sent (its delivery records say who already has it). */
 export async function cancelMessage(env: Env, id: string) {
-	const r = await env.DB.prepare(`UPDATE messages SET status='cancelled' WHERE id=? AND status='scheduled' RETURNING id`).bind(id).first();
-	if (!r) throw new UserError('Only scheduled messages that have not started sending can be cancelled.', 409);
+	const now = nowIso();
+	const r = await env.DB.prepare(`UPDATE messages SET status='cancelled', recipients_count = (SELECT COUNT(*) FROM deliveries WHERE message_id = ?1)
+		WHERE id = ?1 AND (status = 'scheduled' OR (status = 'sending' AND (claimed_until IS NULL OR claimed_until < ?2))) RETURNING id`).bind(id, now).first();
+	if (!r) throw new UserError('Only messages that have not finished sending can be cancelled, and not in the moment a part is going out: try again in a minute.', 409);
 	return { ok: true as const };
 }
 
@@ -859,21 +899,48 @@ export async function updateSessions(env: Env, eventId: string, input: Record<st
 	}
 	// "Save without emailing": calendars aren't updated now. Each person's entries catch up with the next email that
 	// carries their calendar (joining instructions, a message that includes them, or a change of their own).
-	const updates = input.quiet === true ? 0 : await resyncCalendars(env, ev.id);
+	const updates = input.quiet === true ? { sent: 0, queued: 0 } : await resyncCalendars(env, ev.id);
 	await syncHosts(env, brand(env), ev, await getSessions(env, ev.id));
-	return { ok: true as const, calendar_updates: updates };
+	return { ok: true as const, calendar_updates: updates.sent + updates.queued, calendar_queued: updates.queued };
 }
 
 const confirmedRegs = async (env: Env, eventId: string) =>
 	(await env.DB.prepare(`SELECT * FROM registrations WHERE event_id = ? AND status = 'confirmed'`).bind(eventId).all<RegistrationRow>()).results;
 
+/** Calendar updates sent in the request that changed the sessions; the rest are queued for the cron Worker. */
+const CALENDAR_CHUNK = 8;
+
+/** Works out who needs a calendar update (no queries), sends the first few and queues the rest. Returns both counts. */
 async function resyncCalendars(env: Env, eventId: string) {
 	const ev = await getEvent(env, eventId);
 	const sessions = await getSessions(env, ev.id);
-	let n = 0;
+	const changed: RegistrationRow[] = [];
 	for (const r of await confirmedRegs(env, ev.id)) {
 		// People who have never been sent a calendar (e.g. still waiting) are skipped by the plan itself.
-		if (await syncCalendar(env, ev, r, sessions)) n++;
+		const p = await plan(parseState(r.calendar_state), entriesFor(env, ev, sessions, r));
+		if (p.requests.length || p.cancels.length) changed.push(r);
+	}
+	const later = changed.slice(CALENDAR_CHUNK);
+	for (let i = 0; i < later.length; i += 90) {
+		const ids = later.slice(i, i + 90).map((r) => r.id);
+		await env.DB.prepare(`UPDATE registrations SET calendar_dirty = 1 WHERE id IN (${ids.map(() => '?').join(',')})`).bind(...ids).run();
+	}
+	for (const r of changed.slice(0, CALENDAR_CHUNK)) await syncCalendar(env, ev, r, sessions);
+	return { sent: Math.min(changed.length, CALENDAR_CHUNK), queued: later.length };
+}
+
+/** The cron's share of calendar updates: a few queued people per run. Each is re-planned, so a later change is included. */
+async function runCalendarQueue(env: Env) {
+	const dirty = (await env.DB.prepare('SELECT * FROM registrations WHERE calendar_dirty = 1 ORDER BY event_id LIMIT ?').bind(CALENDAR_CHUNK).all<RegistrationRow>()).results;
+	let n = 0;
+	for (const evId of [...new Set(dirty.map((r) => r.event_id))]) {
+		const ev = await getEvent(env, evId);
+		const sessions = await getSessions(env, evId);
+		for (const r of dirty.filter((x) => x.event_id === evId)) {
+			// Cleared first: a failed send leaves the person for their next email to catch up, rather than retried forever.
+			await env.DB.prepare('UPDATE registrations SET calendar_dirty = 0 WHERE id = ?').bind(r.id).run();
+			if (r.status === 'confirmed' && await syncCalendar(env, ev, r, sessions)) n++;
+		}
 	}
 	return n;
 }
@@ -937,12 +1004,16 @@ export async function sentLogMarkdown(env: Env, eventId: string): Promise<string
 
 export async function runScheduled(env: Env, now = Date.now()) {
 	const nowS = new Date(now).toISOString();
-	const report = { messagesSent: 0, holdsWarned: 0, holdsExpired: 0, retentionDeleted: 0 };
+	const report = { messagesSent: 0, calendarUpdates: 0, holdsWarned: 0, holdsExpired: 0, retentionDeleted: 0 };
 
-	const due = (await env.DB.prepare(`SELECT id FROM messages WHERE status='scheduled' AND scheduled_at <= ?`).bind(nowS).all<{ id: string }>()).results;
-	for (const m of due) {
-		try { await deliverMessage(env, m.id); report.messagesSent++; } catch (e) { console.error('message failed', m.id, e); }
+	// One piece of one message per run (the oldest first), and the queued calendar updates below, keep a run inside the
+	// free plan's limits; a big message finishes over a few runs.
+	const due = await env.DB.prepare(`SELECT id FROM messages WHERE (status = 'scheduled' AND scheduled_at <= ?1) OR (status = 'sending' AND (claimed_until IS NULL OR claimed_until < ?1))
+		ORDER BY COALESCE(started_at, scheduled_at) LIMIT 1`).bind(nowS).first<{ id: string }>();
+	if (due) {
+		try { report.messagesSent += (await deliverMessage(env, due.id)).sent; } catch (e) { console.error('message failed', due.id, e); }
 	}
+	try { report.calendarUpdates = await runCalendarQueue(env); } catch (e) { console.error('calendar queue failed', e); }
 
 	const pending = (await env.DB.prepare(`SELECT * FROM registrations WHERE status='pending'`).all<RegistrationRow>()).results;
 	for (const r of pending) {

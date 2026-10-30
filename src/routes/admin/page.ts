@@ -352,7 +352,7 @@ async function load() {
 	await loadPolls();
 
 	const ms = await api('/api/admin/messages?event=' + encodeURIComponent(eventId));
-	$('msgs').querySelector('tbody').innerHTML = ms.messages.map((m) => '<tr><td>' + esc(uk(m.sent_at || m.scheduled_at || m.created_at)) + '</td><td>' + esc(m.subject) + '</td><td>' + esc(m.status) + (m.error ? ': ' + esc(m.error) : '') + '</td><td>' + esc(m.recipients_count ?? '') + '</td><td><code>' + esc(m.audience) + '</code></td><td>' + (m.status === 'scheduled' ? '<button class="danger" data-cancel="' + esc(m.id) + '">Cancel</button>' : '') + '</td></tr>').join('') || '<tr><td colspan="6">Nothing sent yet.</td></tr>';
+	$('msgs').querySelector('tbody').innerHTML = ms.messages.map((m) => '<tr><td>' + esc(uk(m.sent_at || m.scheduled_at || m.created_at)) + '</td><td>' + esc(m.subject) + '</td><td>' + esc(m.status) + (m.error ? ': ' + esc(m.error) : '') + '</td><td>' + esc(m.recipients_count ?? '') + '</td><td><code>' + esc(m.audience) + '</code></td><td>' + (m.status === 'sending' ? '<span class="small">the rest go out within a few minutes</span> ' : '') + (m.status === 'scheduled' || m.status === 'sending' ? '<button class="danger" data-cancel="' + esc(m.id) + '">Cancel</button>' : '') + '</td></tr>').join('') || '<tr><td colspan="6">Nothing sent yet.</td></tr>';
 }
 
 $('settings-form').addEventListener('submit', async (e) => {
@@ -368,7 +368,7 @@ $('sessions-form').addEventListener('submit', async (e) => {
 		const dry = await api('/api/admin/sessions', 'POST', { event: eventId, sessions: sessionEdits(), dry_run: true });
 		if (!confirm('Save sessions? ' + dry.calendar_updates + ' person(s) will get updated calendar invitations.')) return;
 		const d = await api('/api/admin/sessions', 'POST', { event: eventId, sessions: sessionEdits() });
-		toast('Sessions saved. ' + d.calendar_updates + ' calendar update(s) sent.'); load();
+		toast('Sessions saved. ' + d.calendar_updates + ' calendar update(s)' + (d.calendar_queued ? ': ' + (d.calendar_updates - d.calendar_queued) + ' sent now, the rest within a few minutes.' : ' sent.')); load();
 	} catch (err) { toast(err.message); }
 });
 document.body.addEventListener('click', async (e) => {
@@ -383,7 +383,9 @@ document.body.addEventListener('click', async (e) => {
 			toast(d.calendar_updates + ' person(s) would get updated calendar invitations.');
 		} else if (b.id === 'promote-all') {
 			if (!confirm('Promote ' + b.dataset.fit + ' person(s) from the waiting list? Each will be emailed the latest joining instructions.')) return;
-			const d = await api('/api/admin/promote-all', 'POST', { event: eventId }); toast('Promoted and emailed ' + d.promoted + (d.still_waiting ? '; ' + d.still_waiting + ' still waiting.' : '.')); load();
+			let d, total = 0;
+			do { d = await api('/api/admin/promote-all', 'POST', { event: eventId }); total += d.promoted; toast('Promoting… ' + total + ' so far.'); } while (d.more && d.promoted);
+			toast('Promoted and emailed ' + total + (d.still_waiting ? '; ' + d.still_waiting + ' still waiting.' : '.')); load();
 		} else if (b.dataset.promote) {
 			if (!confirm('Promote this person? They will be emailed the latest joining instructions.')) return;
 			await api('/api/admin/promote', 'POST', { id: b.dataset.id, what: b.dataset.promote, session: b.dataset.session }); toast('Promoted and emailed.'); load();
@@ -514,8 +516,8 @@ $('msg-form').addEventListener('submit', async (e) => {
 	try {
 		const count = (await api('/api/admin/messages', 'POST', { event: eventId, dry_run: true, audience: audience() })).count;
 		if (!confirm((when ? 'Schedule for ' + uk(when) : 'Send now') + ' to ' + count + ' recipient(s)?')) return;
-		await api('/api/admin/messages', 'POST', { event: eventId, subject: $('m-subject').value, body_md: $('m-body').value, audience: audience(), scheduled_at: when, marks_instructions_version: $('m-instr').checked ? latestVersion : undefined });
-		toast(when ? 'Scheduled.' : 'Sent.'); e.target.reset(); load();
+		const sent = await api('/api/admin/messages', 'POST', { event: eventId, subject: $('m-subject').value, body_md: $('m-body').value, audience: audience(), scheduled_at: when, marks_instructions_version: $('m-instr').checked ? latestVersion : undefined });
+		toast(when ? 'Scheduled.' : sent.message && sent.message.status === 'sending' ? 'Sending: the first copies have gone, and the rest go out within a few minutes.' : 'Sent.'); e.target.reset(); load();
 	} catch (err) { toast(err.message); }
 });
 load().catch((err) => { document.querySelector('main').innerHTML = '<section><h2>Not available</h2><p>' + esc(err.message) + '</p><p class="small">This page needs Cloudflare Access sign-in, and an event id (?event=...).</p></section>'; });

@@ -841,6 +841,38 @@ try {
 		await req('DELETE', '/api/rsvp/manage', { t: await manageOf('yan@example.org') });
 	}
 
+	console.log('\nSending to a whole event, in pieces');
+	{
+		const EV = '/api/admin/events', B = 'e2e-bulk';
+		const t0 = Date.now() + 50 * 86400_000;
+		const at = (h) => new Date(t0 + h * 3600_000).toISOString();
+		await req('POST', EV, { action: 'create', id: B, title: 'Bulk Day', timezone: 'Europe/London', starts_at: at(0), ends_at: at(8), deadline: at(-24), in_person_max: 50, page_path: '/events/e2e-bulk/', location: 'Hall' }, ADMIN);
+		const S = (await req('POST', EV, { action: 'add_session', event: B, label: 'Talks', mode: 'hybrid', starts_at: at(1), ends_at: at(3) }, ADMIN)).data.id;
+		await req('POST', '/api/admin/instructions', { event: B, subject: 'Bulk Day instructions', body_md: 'Hello all.' }, ADMIN);
+		const people = Array.from({ length: 12 }, (_, i) => `bulk${i}@example.org`);
+		for (const [i, email] of people.entries()) await registerAndConfirm({ event: B, name: `Bulk ${i}`, email, attendance: 'remote' });
+		const count = async (re) => { let n = 0; for (const p of people) n += (await mailsTo(p)).filter((m) => re.test(m.subject)).length; return n; };
+		r = await req('POST', '/api/admin/sessions', { event: B, sessions: [{ id: S, starts_at: at(2), ends_at: at(4) }] }, ADMIN);
+		check('a session change for 12 people: 8 calendar updates now, 4 queued', r.data.calendar_updates === 12 && r.data.calendar_queued === 4 && (await count(/Calendar update/)) === 8, JSON.stringify(r.data));
+		await cron();
+		const updates = []; for (const p of people) updates.push((await mailsTo(p)).filter((m) => /Calendar update/.test(m.subject)).length);
+		check('…and the cron sends the other 4, nobody twice', updates.every((n) => n === 1), JSON.stringify(updates));
+		const V = (await req('GET', `/api/admin/instructions?event=${B}`, undefined, ADMIN)).data.versions[0].version;
+		r = await req('POST', '/api/admin/messages', { event: B, subject: 'Bulk news', body_md: 'News.', audience: {}, marks_instructions_version: V }, ADMIN);
+		let msg = r.data.message;
+		check('a message with joining instructions to 12: the first 5 go at once, the rest are left sending', msg.status === 'sending' && (await count(/Bulk news/)) === 5, JSON.stringify(msg));
+		await cron(); await cron();
+		msg = (await req('GET', `/api/admin/messages?event=${B}`, undefined, ADMIN)).data.messages.find((x) => x.id === msg.id);
+		const each = []; for (const p of people) each.push((await mailsTo(p)).filter((m) => /Bulk news/.test(m.subject)).length);
+		check('…the cron finishes it over two runs: everyone has exactly one copy, and the count is right', msg.status === 'sent' && msg.recipients_count === 12 && each.every((n) => n === 1), JSON.stringify([msg.status, msg.recipients_count, each]));
+		r = await req('POST', '/api/admin/messages', { event: B, subject: 'Bulk stop', body_md: 'x', audience: {}, marks_instructions_version: V }, ADMIN);
+		check('a message part sent can be cancelled', (await req('POST', '/api/admin/messages/cancel', { id: r.data.message.id }, ADMIN)).data.ok);
+		await cron();
+		msg = (await req('GET', `/api/admin/messages?event=${B}`, undefined, ADMIN)).data.messages.find((x) => x.id === r.data.message.id);
+		check('…and no more of it goes out', msg.status === 'cancelled' && msg.recipients_count === 5 && (await count(/Bulk stop/)) === 5, JSON.stringify(msg));
+		for (const p of people) await req('DELETE', '/api/rsvp/manage', { t: await manageOf(p) });
+	}
+
 	console.log('\nAdmin removal');
 	const gina = 'gina@example.org', hal = 'hal@example.org';
 	await registerAndConfirm({ name: 'Gina', email: gina, attendance: 'remote' });

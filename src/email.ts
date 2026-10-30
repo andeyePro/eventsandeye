@@ -29,11 +29,12 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * POST to Resend, pacing to its default limit of 2 requests a second and retrying on 429 or 5xx
  * (honouring retry-after), so a calendar update to everyone does not fail part way.
  */
-async function resendPost(env: Env, path: string, body: unknown): Promise<Response> {
+async function resendPost(env: Env, path: string, body: unknown, idempotencyKey?: string): Promise<Response> {
 	for (let attempt = 0; ; attempt++) {
 		const res = await fetch(`${RESEND_URL}${path}`, {
 			method: 'POST',
-			headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, 'content-type': 'application/json' },
+			// The same key on a retry (here, or a later run finishing a message) makes Resend send it once only.
+			headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, 'content-type': 'application/json', ...(idempotencyKey ? { 'idempotency-key': idempotencyKey } : {}) },
 			body: JSON.stringify(body),
 		});
 		if (res.ok) {
@@ -63,12 +64,13 @@ const toBase64 = (s: string) => {
  * Sends via Resend when RESEND_API_KEY is set. Without it, only DEV_MODE is allowed: the email is written to
  * the dev_outbox table and the console. On the live site a missing key is an error, never a silent skip.
  */
-export async function sendEmail(env: Env, email: OutgoingEmail): Promise<string> {
-	const [id] = await sendBatch(env, [email]);
+export async function sendEmail(env: Env, email: OutgoingEmail, idempotencyKey?: string): Promise<string> {
+	const [id] = await sendBatch(env, [email], idempotencyKey);
 	return id;
 }
 
-export async function sendBatch(env: Env, emails: OutgoingEmail[]): Promise<string[]> {
+/** idempotencyKey: a key for this exact set of emails, so a retry never sends them twice. */
+export async function sendBatch(env: Env, emails: OutgoingEmail[], idempotencyKey?: string): Promise<string[]> {
 	if (!emails.length) return [];
 	if (!env.RESEND_API_KEY) {
 		if (!isDev(env)) throw new Error('RESEND_API_KEY is not set; refusing to drop email on the live site');
@@ -100,12 +102,12 @@ export async function sendBatch(env: Env, emails: OutgoingEmail[]): Promise<stri
 	const out: string[] = new Array(emails.length);
 	for (let i = 0; i < plain.length; i += 100) {
 		const chunk = plain.slice(i, i + 100);
-		const res = await resendPost(env, '/emails/batch', chunk.map((x) => one(x.e)));
+		const res = await resendPost(env, '/emails/batch', chunk.map((x) => one(x.e)), idempotencyKey && `${idempotencyKey}:b${i}`);
 		const body = (await res.json()) as { data?: { id: string }[] };
 		(body.data ?? []).forEach((d, k) => (out[chunk[k].i] = d.id));
 	}
 	for (const x of withFiles) {
-		const res = await resendPost(env, '/emails', one(x.e));
+		const res = await resendPost(env, '/emails', one(x.e), idempotencyKey && `${idempotencyKey}:a${x.i}`);
 		out[x.i] = ((await res.json()) as { id: string }).id;
 	}
 	for (const id of out) ids.push(id);
