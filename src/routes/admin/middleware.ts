@@ -32,9 +32,9 @@ export const pageMiddleware = async (ctx: Ctx) => {
 	const r = await checkAccess(ctx.env, ctx.request);
 	if (r.email === null) {
 		const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] as string);
-		const body = `<!doctype html><html lang="en-GB"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Sign in again</title>
-<body style="font-family:Arial,sans-serif;max-width:40rem;margin:3rem auto;padding:0 1rem"><h1>Not authorised</h1><p>${esc(r.reason)}.</p>
-<p>This page is protected by Cloudflare Access with two-factor sign-in. <a href="/cdn-cgi/access/logout">Sign out of Access</a>, then open <a href="/admin/rsvps/">the admin page</a> to sign in again.</p></body></html>`;
+		const body = `<!doctype html><html lang="en-GB"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Not authorised: sign in again</title>
+<body style="font-family:Arial,sans-serif;max-width:40rem;margin:3rem auto;padding:0 1rem;color-scheme:light dark"><main><h1>Not authorised</h1><p>${esc(r.reason.charAt(0).toUpperCase() + r.reason.slice(1))}.</p>
+<p>This page is protected by Cloudflare Access with two-factor sign-in. <a href="/cdn-cgi/access/logout">Sign out of Access</a>, then open <a href="/admin/rsvps/">the admin page</a> to sign in again.</p></main></body></html>`;
 		return new Response(body, { status: 401, headers: { 'content-type': 'text/html; charset=utf-8', 'x-robots-tag': 'noindex' } });
 	}
 	const res = await ctx.next();

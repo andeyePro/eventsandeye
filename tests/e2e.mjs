@@ -183,7 +183,7 @@ try {
 		check(`${p} with valid JWT → 200`, (await req('GET', p, undefined, ADMIN)).status === 200);
 	}
 	{ const refused = await req('GET', '/admin/rsvps/', undefined, { 'cf-access-jwt-assertion': jwt({ iat: Math.floor(Date.now() / 1000) - 13 * 3600 }) });
-	  check('a refused admin page explains why and links to sign in again', refused.status === 401 && /sign-in too old/.test(refused.data) && /\/cdn-cgi\/access\/logout/.test(refused.data), String(refused.data).slice(0, 200)); }
+	  check('a refused admin page explains why, in a sentence, and links to sign in again', refused.status === 401 && /<p>Sign-in too old/.test(refused.data) && /\/cdn-cgi\/access\/logout/.test(refused.data) && /<main>/.test(refused.data), String(refused.data).slice(0, 200)); }
 	{ const wrongApp = await req('GET', '/admin/rsvps/', undefined, { 'cf-access-jwt-assertion': jwt({ aud: 'someone-else' }) });
 	  check('a token for another Access application names ACCESS_AUD as the thing to check', /ACCESS_AUD/.test(wrongApp.data), String(wrongApp.data).slice(0, 300));
 	  const none = await req('GET', '/admin/rsvps/');
