@@ -73,7 +73,7 @@ const { inPersonLabel = 'In person', remoteLabel = 'Remotely (online sessions on
 	const busy = (on: boolean) => buttons.forEach((b) => (b.disabled = on));
 	const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 
-	type View = { ok: boolean; error?: string; event: { title: string; page_path: string; open: boolean; extra_question?: string | null }; tours: { id: string; label: string; available: boolean; open: boolean }[]; optins?: { id: string; label: string; starts_at: string; location: string | null; available?: boolean }[]; registration: Record<string, string | null | boolean | string[]>; calendar: { key: string; summary: string; start: string; url: string }[]; polls?: Poll[] };
+	type View = { ok: boolean; error?: string; event: { title: string; page_path: string; open: boolean; timezone?: string; extra_question?: string | null }; tours: { id: string; label: string; available: boolean; open: boolean }[]; optins?: { id: string; label: string; starts_at: string; location: string | null; available?: boolean }[]; registration: Record<string, string | null | boolean | string[]>; calendar: { key: string; summary: string; start: string; url: string }[]; polls?: Poll[] };
 	type Poll = { id: string; question: string; open: boolean; allow_suggestions: boolean; closes_at: string; options: { id: string; label: string; pending: boolean; mine: boolean }[]; ballot: { ranking: string[]; bar: number } | null; notes: string[]; results: { label: string; willing: number; out: number }[] | null };
 
 	function describe(r: View['registration']) {
@@ -135,7 +135,7 @@ const { inPersonLabel = 'In person', remoteLabel = 'Remotely (online sessions on
 			l.className = 'choice';
 			const i = document.createElement('input');
 			i.type = 'checkbox'; i.name = 'optins'; i.value = o.id; i.checked = mine.includes(o.id);
-			const time = new Date(o.starts_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' });
+			const time = new Date(o.starts_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: v.event.timezone || 'Europe/London' });
 			l.replaceChildren(i, ` ${o.label}, ${time}${o.location ? `, ${o.location}` : ''}${o.available === false && !mine.includes(o.id) ? ' (full: waiting list)' : ''}`);
 			return l;
 		}));

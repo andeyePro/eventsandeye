@@ -60,7 +60,7 @@ const HTML = /* html */ `<!doctype html>
 		<form id="settings-form">
 			<div class="row">
 				<div><label for="s-max">In-person maximum</label><input id="s-max" type="number" min="0" required /></div>
-				<div><label for="s-deadline">Registration deadline (UK time)</label><input id="s-deadline" type="datetime-local" required /></div>
+				<div><label for="s-deadline">Registration deadline (<span class="tzl">UK time</span>)</label><input id="s-deadline" type="datetime-local" required /></div>
 				<div><label for="s-travel">Assumed travel time for the "time to leave" reminder (minutes)</label><input id="s-travel" type="number" min="0" required /></div>
 			</div>
 			<button type="submit">Save settings</button>
@@ -94,7 +94,7 @@ const HTML = /* html */ `<!doctype html>
 				<label for="p-q">Question</label><input id="p-q" type="text" required maxlength="200" placeholder="What shall we do on Saturday?" />
 				<label for="p-opts">Options, one per line</label><textarea id="p-opts" style="min-height:6rem"></textarea>
 				<div class="row">
-					<div><label for="p-close">Closes (UK time; blank = when the event ends)</label><input id="p-close" type="datetime-local" /></div>
+					<div><label for="p-close">Closes (<span class="tzl">UK time</span>; blank = when the event ends)</label><input id="p-close" type="datetime-local" /></div>
 					<div><label><input type="checkbox" id="p-sugg" checked style="width:auto" /> Registrants can suggest options</label></div>
 				</div>
 				<button type="submit">Create poll</button>
@@ -129,7 +129,7 @@ const HTML = /* html */ `<!doctype html>
 				<div><label><input type="checkbox" id="m-instr" style="width:auto" /> Include the latest joining instructions</label><p class="small">Your message comes first, then the full joining instructions with any calendar changes. Everyone sent it counts as having the latest version.</p></div>
 			</div>
 			<label><input type="checkbox" id="m-wait" style="width:auto" /> Include people on the in-person waiting list</label>
-			<label for="m-when">Send at (UK time; leave empty to send now)</label><input id="m-when" type="datetime-local" />
+			<label for="m-when">Send at (<span class="tzl">UK time</span>; leave empty to send now)</label><input id="m-when" type="datetime-local" />
 			<button type="button" class="secondary" data-preview="m-body">Preview</button>
 			<button type="button" class="secondary" id="m-count">Count recipients</button>
 			<button type="button" class="secondary" id="m-bcc">Copy BCC list for Gmail</button>
@@ -159,21 +159,23 @@ async function api(path, method = 'GET', body) {
 	if (!d.ok) throw new Error(d.error || 'HTTP ' + res.status);
 	return d;
 }
-// datetime-local values are UK wall-clock time; convert via the Europe/London offset at that moment.
+// datetime-local values are wall-clock time in the event's own zone (TZ, set from the event); convert via that zone's offset at that moment.
+let TZ = 'Europe/London';
+const tzLabel = () => TZ === 'Europe/London' ? 'UK time' : TZ.split('/').pop().replace(/_/g, ' ') + ' time';
 function ukLocalToIso(v) {
 	if (!v) return null;
 	const guess = new Date(v + 'Z');
-	const uk = new Date(guess.toLocaleString('en-US', { timeZone: 'Europe/London' }));
+	const uk = new Date(guess.toLocaleString('en-US', { timeZone: TZ }));
 	const utc = new Date(guess.toLocaleString('en-US', { timeZone: 'UTC' }));
 	return new Date(guess.getTime() - (uk.getTime() - utc.getTime())).toISOString();
 }
 function isoToUkLocal(iso) {
 	if (!iso) return '';
-	const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(iso));
+	const parts = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(iso));
 	const g = (t) => parts.find((p) => p.type === t).value;
 	return g('year') + '-' + g('month') + '-' + g('day') + 'T' + g('hour') + ':' + g('minute');
 }
-const uk = (iso) => iso ? new Date(iso).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/London' }) : '';
+const uk = (iso) => iso ? new Date(iso).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: TZ }) : '';
 let sessions = [], tours = [], latestVersion = 0, eventId = EVENT;
 
 function audience() {
@@ -193,6 +195,8 @@ function sessionEdits() {
 async function load() {
 	const s = await api('/api/admin/summary?event=' + encodeURIComponent(eventId));
 	eventId = s.event.id;
+	TZ = s.event.timezone || 'Europe/London';
+	document.querySelectorAll('.tzl').forEach((x) => { x.textContent = tzLabel(); });
 	const c = s.capacity;
 	sessions = s.sessions; tours = s.tours; latestVersion = s.latest_instructions_version;
 	$('ev-title').textContent = s.event.title + ' – ' + uk(s.event.starts_at);
@@ -215,8 +219,8 @@ async function load() {
 		const id = esc(x.id);
 		const f = (name, label, type, value, extra = '') => '<div><label for="sx-' + name + '-' + id + '">' + label + '</label><input id="sx-' + name + '-' + id + '" type="' + type + '" value="' + esc(value) + '" ' + extra + ' /></div>';
 		return '<fieldset><legend>' + esc(x.label) + ' <span class="small">(' + esc(x.kind) + ', ' + esc(x.mode) + (x.choice_group ? ', optional, booked separately' : '') + ')</span></legend><div class="row">'
-			+ f('start', 'Starts (UK time)', 'datetime-local', isoToUkLocal(x.starts_at), 'required')
-			+ f('end', 'Ends (UK time)', 'datetime-local', isoToUkLocal(x.ends_at), 'required')
+			+ f('start', 'Starts (' + esc(tzLabel()) + ')', 'datetime-local', isoToUkLocal(x.starts_at), 'required')
+			+ f('end', 'Ends (' + esc(tzLabel()) + ')', 'datetime-local', isoToUkLocal(x.ends_at), 'required')
 			+ f('loc', 'Location (blank = event venue)', 'text', x.location ?? '')
 			+ f('url', 'Online link (e.g. Google Meet)', 'url', x.online_url ?? '', 'placeholder="https://meet.google.com/…"')
 			+ f('hname', 'Host name', 'text', x.host_name ?? '')

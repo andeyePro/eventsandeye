@@ -110,7 +110,7 @@ if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production buil
 	interface Status {
 		ok: boolean;
 		error?: string;
-		event: { open: boolean; deadline: string; extra_question?: string | null };
+		event: { open: boolean; deadline: string; timezone?: string; extra_question?: string | null };
 		tours: { id: string; label: string; available: boolean; open: boolean }[];
 		optins?: { id: string; label: string; starts_at: string; location: string | null; available?: boolean }[];
 		polls?: { id: string; question: string; options: { id: string; label: string }[] }[];
@@ -176,10 +176,11 @@ if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production buil
 				(document.getElementById('rsvp-extra-label') as HTMLElement).textContent = `${s.event.extra_question} (optional)`;
 				(document.getElementById('rsvp-extra-field') as HTMLElement).hidden = false;
 			}
-			const deadline = new Date(s.event.deadline).toLocaleString('en-GB', { dateStyle: 'full', timeStyle: 'short', timeZone: 'Europe/London' });
+			const tz = s.event.timezone || 'Europe/London';
+			const deadline = new Date(s.event.deadline).toLocaleString('en-GB', { dateStyle: 'full', timeStyle: 'short', timeZone: tz });
 			// Only the deadline: saying places are full would put people off registering, and the waiting list is how
 			// demand beyond the room shows up.
-			avail.textContent = `Registration closes ${deadline} (UK time).`;
+			avail.textContent = `Registration closes ${deadline} (${tz === 'Europe/London' ? 'UK' : tz.split('/').pop()!.replace(/_/g, ' ')} time).`;
 			tourFs.hidden = !s.tours.length;
 			for (const t of s.tours) {
 				const label = document.createElement('label');
@@ -199,7 +200,7 @@ if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production buil
 				input.type = 'checkbox';
 				input.name = 'optins';
 				input.value = o.id;
-				const time = new Date(o.starts_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' });
+				const time = new Date(o.starts_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: s.event.timezone || 'Europe/London' });
 				label.replaceChildren(input, ` ${o.label}, ${time}${o.location ? `, ${o.location}` : ''}${o.available === false ? ' (full: waiting list)' : ''}`);
 				(document.getElementById('rsvp-optins') as HTMLElement).appendChild(label);
 			}
