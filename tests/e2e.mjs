@@ -188,6 +188,7 @@ try {
 	const page = await req('GET', '/admin/rsvps/', undefined, ADMIN);
 	check('the admin page cannot be framed by another site, and sends no referrer', /frame-ancestors 'none'/.test(page.headers.get('content-security-policy') || '') && page.headers.get('x-frame-options') === 'DENY' && page.headers.get('referrer-policy') === 'no-referrer');
 	check('admin page is HTML with the sessions editor', typeof page.data === 'string' && /id="sessions-form"/.test(page.data) && /Events&amp;I/.test(page.data));
+	check('the quiet save says it is attendees who are not emailed (hosts still get their lists)', /Save without emailing attendees/.test(page.data) && /hosts are still sent/.test(page.data) && !/without emailing anyone/.test(page.data));
 	{
 		const setup = async () => (await req('GET', '/api/admin/events', undefined, ADMIN)).data.setup;
 		let f = await setup();

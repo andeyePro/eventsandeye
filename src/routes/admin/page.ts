@@ -131,8 +131,8 @@ const HTML = /* html */ `<!doctype html>
 		<form id="sessions-form"><div id="sessions-box"></div>
 			<button type="button" class="secondary" id="sess-dry">How many people would get a calendar update?</button>
 			<button type="submit">Save sessions</button>
-			<button type="button" class="secondary" id="sess-quiet">Save without emailing anyone</button>
-			<p class="small">"Save without emailing anyone" changes calendar entries only when each person is next sent their joining instructions (for example a message with "Include the latest joining instructions" ticked), so several changes reach them in one email.</p>
+			<button type="button" class="secondary" id="sess-quiet">Save without emailing attendees</button>
+			<p class="small">"Save without emailing attendees" changes calendar entries only when each person is next sent their joining instructions (for example a message with "Include the latest joining instructions" ticked), so several changes reach them in one email. Session hosts are still sent their updated attendee lists.</p>
 		</form>
 		<details><summary>Add a session</summary>
 			<form id="addsess-form">
@@ -388,7 +388,7 @@ document.body.addEventListener('click', async (e) => {
 	if (!b) return;
 	try {
 		if (b.id === 'sess-quiet') {
-			if (!confirm('Save sessions without emailing anyone? Calendars update with each person\'s next joining-instructions email.')) return;
+			if (!confirm('Save sessions without emailing attendees? Session hosts still get their updated lists. Calendars update with each person\'s next joining-instructions email.')) return;
 			await api('/api/admin/sessions', 'POST', { event: eventId, sessions: sessionEdits(), quiet: true }); toast('Sessions saved. Nobody was emailed.'); load();
 		} else if (b.id === 'sess-dry') {
 			const d = await api('/api/admin/sessions', 'POST', { event: eventId, sessions: sessionEdits(), dry_run: true });
