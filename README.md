@@ -97,7 +97,7 @@ These steps assume your site's repository is checked out locally and Events&I go
    npx wrangler d1 execute events --remote --file seed/my-event.sql
    ```
 
-6. **Turnstile.** In the Cloudflare dashboard, Turnstile → Add widget for your domain (and your project's `pages.dev` address), managed mode. Put the **site key** in the Pages build variable `PUBLIC_TURNSTILE_SITE_KEY` and keep the **secret key** for step 8.
+6. **Turnstile.** In the Cloudflare dashboard, Turnstile → Add widget for your domain (and your project's `pages.dev` address), managed mode. Put the **site key** in the Pages build variable `PUBLIC_TURNSTILE_SITE_KEY` and keep the **secret key** for step 8. The server accepts a token only if Turnstile solved it on the same host name the registration is posted to, so serve the form and its API from one address (not, say, a proxy in front of `*.pages.dev`).
 
 7. **Resend.** Add your domain in Resend, then add the DNS records it shows in Cloudflare DNS with the proxy **off** (DNS only), and click Verify. The records sit on subdomains, so your existing mail keeps working. Create an API key with **sending access** only.
 
@@ -131,7 +131,7 @@ These steps assume your site's repository is checked out locally and Events&I go
     - Routing rules → Custom addresses: create an address such as `polls@reply.example.org` with the action **Send to a Worker**, choosing your cron Worker.
     - Set `POLL_REPLY_EMAIL` to that address in both `wrangler.toml` files, and redeploy the site and the cron Worker. Emails about suggestions then ask for replies there.
 
-    A reply acts only if its From address is `NOTIFY_EMAIL` or one in `ADMIN_EMAILS` (set it for the cron Worker too) and it carries the suggestion's reference, which is signed with `TOKEN_SECRET` and only ever sent to you; anything else is refused. When Email Routing records a DMARC result for the sender's domain (its `Authentication-Results` header), it must be a pass. A From address is easy to forge, so the reference is the real safeguard: do not forward suggestion emails to anyone who should not decide them. Out-of-office replies are ignored. The answer is the first line of the reply: `yes`, `no`, or `use <your wording>`. Wording that matches an existing option merges the suggestion into it.
+    A reply acts only if its From address is `NOTIFY_EMAIL` or one in `ADMIN_EMAILS` (set it for the cron Worker too) and it carries the suggestion's reference, which is signed with `TOKEN_SECRET` and only ever sent to you; anything else is refused. When Email Routing records a DMARC failure for the sender's domain (in its `Authentication-Results` header), the reply is refused. A From address is easy to forge, so the reference is the real safeguard: do not forward suggestion emails to anyone who should not decide them. Out-of-office replies are ignored. The answer is the first line of the reply: `yes`, `no`, or `use <your wording>`. Wording that matches an existing option merges the suggestion into it.
 
 Preview deployments get the same Functions and database binding as production, so either turn previews off (Settings → Builds → Branch control) or deploy previews as static pages only, as [amybo.org's deploy workflow](https://github.com/amy-bo/website/blob/main/.github/workflows/deploy.yml) does.
 

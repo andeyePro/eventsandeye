@@ -75,7 +75,9 @@ async function getOption(env: Env, id: string) {
 	return o;
 }
 async function getBallots(env: Env, pollId: string) {
-	return (await env.DB.prepare('SELECT * FROM poll_ballots WHERE poll_id = ?').bind(pollId).all<BallotRow>()).results;
+	// Confirmed registrations only: a booking-form ranking counts once its address is confirmed, so made-up addresses
+	// cannot sway the totals while their holds last.
+	return (await env.DB.prepare(`SELECT b.* FROM poll_ballots b JOIN registrations r ON r.id = b.registration_id AND r.status = 'confirmed' WHERE b.poll_id = ?`).bind(pollId).all<BallotRow>()).results;
 }
 
 export interface TallyRow { id: string; label: string; willing: number; out: number; first: number; score: number; names?: string[] }
@@ -175,21 +177,24 @@ export async function bookingPolls(env: Env, ev: EventRow) {
 
 type BallotInput = { poll: string; ranking: string[]; bar: number };
 
-/** Rankings sent with a registration, checked before anything is saved. Only active options of this event's open polls. */
+/**
+ * Rankings sent with a registration, checked before anything is saved. Malformed input is refused; a ranking that is
+ * merely out of date (the poll closed, or an option went, while the form was open) is dropped, as the poll is optional
+ * and the registration matters more.
+ */
 export async function parseBookingBallots(env: Env, ev: EventRow, v: unknown): Promise<BallotInput[]> {
 	if (v === undefined || v === null) return [];
 	if (!Array.isArray(v) || v.length > 20) throw new UserError('Invalid poll answers.');
 	const polls = await bookingPolls(env, ev);
 	const out: BallotInput[] = [];
 	for (const raw of v as Record<string, unknown>[]) {
-		const p = polls.find((x) => x.id === raw?.poll);
-		const ranking = Array.isArray(raw?.ranking) ? raw.ranking.map(String) : null;
+		const ranking = Array.isArray(raw?.ranking) && raw.ranking.length <= MAX_OPTIONS ? raw.ranking.map(String) : null;
 		const bar = Number(raw?.bar);
-		if (!p || out.some((x) => x.poll === p.id) || !ranking || new Set(ranking).size !== ranking.length || ranking.some((id) => !p.options.some((o) => o.id === id))
-			|| !Number.isInteger(bar) || bar < 0 || bar > ranking.length) {
-			throw new UserError('The poll has changed since this page was loaded. Please reload it and try again.', 409);
+		if (typeof raw?.poll !== 'string' || out.some((x) => x.poll === raw.poll) || !ranking || new Set(ranking).size !== ranking.length || !Number.isInteger(bar) || bar < 0 || bar > ranking.length) {
+			throw new UserError('Invalid poll answers.');
 		}
-		out.push({ poll: p.id, ranking, bar });
+		const p = polls.find((x) => x.id === raw.poll);
+		if (p && ranking.every((id) => p.options.some((o) => o.id === id))) out.push({ poll: p.id, ranking, bar });
 	}
 	return out;
 }

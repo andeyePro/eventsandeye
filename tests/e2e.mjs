@@ -595,7 +595,13 @@ try {
 		r = await req('GET', `/api/rsvp/status?event=${EVENT}`);
 		const sp = (r.data.polls || []).find((p) => p.id === POLL);
 		check('the booking form gets the open poll and its options', sp && sp.options.map((o) => o.label).join() === 'Skiing,Camping,Hiking,Football,Rugby', JSON.stringify(r.data.polls));
-		check('a booking-form ranking with an unknown option → 409, and no registration', (await register({ name: 'Rosa', email: 'rosa@example.org', attendance: 'remote', polls: [{ poll: POLL, ranking: [SKI, 'nope'], bar: 1 }] })).status === 409 && !(await mailsTo('rosa@example.org')).length);
+		check('malformed booking-form poll answers → 400, and no registration', (await register({ name: 'Rosa', email: 'rosa@example.org', attendance: 'remote', polls: [{ poll: POLL, ranking: [SKI, SKI], bar: 1 }] })).status === 400 && !(await mailsTo('rosa@example.org')).length);
+		const tallyNow = async () => JSON.stringify((await req('GET', `${POLLS}?event=${EVENT}`, undefined, ADMIN)).data.polls.find((p) => p.id === POLL).tally);
+		const t0 = await tallyNow();
+		r = await register({ name: 'Sam', email: 'sam@example.org', attendance: 'remote', polls: [{ poll: POLL, ranking: [RUGBY, 'gone-option'], bar: 2 }, { poll: 'closed-or-gone', ranking: [], bar: 0 }] });
+		check('an out-of-date booking-form ranking is dropped, and the registration still goes through', r.status === 200 && (await mailsTo('sam@example.org')).length === 1, JSON.stringify(r.data));
+		await register({ name: 'Una', email: 'una@example.org', attendance: 'remote', polls: [{ poll: POLL, ranking: [RUGBY, FOOT], bar: 2 }] });
+		check('a ranking from an unconfirmed registration does not count until the address is confirmed', (await tallyNow()) === t0);
 		const rosa = await registerAndConfirm({ name: 'Rosa', email: 'rosa@example.org', attendance: 'remote', polls: [{ poll: POLL, ranking: [RUGBY, FOOT, SKI, CAMP, HIKE], bar: 2 }] });
 		const rv = await view(rosa);
 		const rosaMail = (await mailsTo('rosa@example.org')).at(-1);
@@ -633,6 +639,8 @@ try {
 		check('an organiser\'s address that fails DMARC is refused, and nothing is sent', r.result.action === 'rejected' && /DMARC fail/.test(r.rejected) && (await view(pat)).options.find((o) => o.id === PADDLE).pending && (await outbox()).length === before, JSON.stringify(r));
 		r = await inbound(plain({ subject: `Re: ${sm.subject}`, body: 'Maybe\r\n' }).replace('From:', 'Authentication-Results: mx.cloudflare.net; dmarc=pass header.from=amybo.org\r\nAuthentication-Results: evil.example; dmarc=fail\r\nFrom:'));
 		check('a DMARC pass recorded by Cloudflare (topmost) lets the reply through; headers further down are ignored', r.result.action === 'not-understood', JSON.stringify(r));
+		r = await inbound(plain({ subject: `Re: ${sm.subject}`, body: 'Maybe\r\n' }).replace('From:', 'Authentication-Results: mx.cloudflare.net; dmarc=none header.from=amybo.org\r\nFrom:'));
+		check('a domain without a DMARC policy (dmarc=none) is not refused', r.result.action === 'not-understood', JSON.stringify(r));
 		before = (await outbox()).length;
 		r = await inbound(plain({ subject: `Re: [AMYBO] Poll suggestion (ref ${ref.slice(0, 17)}AAAAAAAAAAAAAAAA)`, body: 'yes\r\n' }));
 		check('a reply with a forged reference is refused', r.result.action === 'rejected' && (await outbox()).length === before, JSON.stringify(r));

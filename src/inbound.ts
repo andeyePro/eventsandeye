@@ -10,7 +10,7 @@ import { readSuggestionRef } from './tokens';
  * Replies to poll-suggestion emails, delivered by Cloudflare Email Routing to the cron Worker's email() handler.
  * A reply acts only if its From address is an organiser's (NOTIFY_EMAIL or ADMIN_EMAILS) and it carries a suggestion
  * reference signed with TOKEN_SECRET, which only ever appears in the email to the organiser. When Cloudflare records
- * a DMARC result for the From domain, it must be a pass. The reference is what really guards a decision, though:
+ * a DMARC result for the From domain, it must not be a failure. The reference is what really guards a decision, though:
  * the From header alone proves little (see the README). Anything else is refused at
  * SMTP time, so a stranger's mail sends nothing back to anyone. Just enough MIME to read a reply: no dependencies.
  *
@@ -233,11 +233,13 @@ export async function handleInbound(env: Env, raw: string, reject: (reason: stri
 	if (raw.length > MAX_INBOUND_BYTES) return no('Message too large.');
 	const head = parseHeaders(raw);
 	if (!head.from || !organisers(env).has(head.from)) return no('This address only accepts replies from the organisers.');
-	// A From address that failed DMARC was not sent by its domain. Refused at SMTP time, so nothing is sent to it.
-	if (head.dmarc && head.dmarc !== 'pass') return no(`The sender's domain did not authenticate this message (DMARC ${head.dmarc}).`);
 	// An organiser's out-of-office could start with "No…": it must never decide anything, nor be answered. Dropped
 	// quietly: refusing it would bounce into the organiser's own inbox.
 	if (head.automatic) return { action: 'ignored', reason: 'automatic reply' };
+	// A From address that failed DMARC was not sent by its domain. Refused at SMTP time, so nothing is sent to it.
+	// "none" (the domain publishes no DMARC policy, common for small organisations) and temporary errors are not
+	// failures: the signed reference still has to match.
+	if (head.dmarc === 'fail' || head.dmarc === 'permerror') return no(`The sender's domain did not authenticate this message (DMARC ${head.dmarc}).`);
 	const text = bodyText(raw);
 	// The subject first; the quoted original as a fallback, for mail apps that rewrite subjects.
 	const optionId = (await readSuggestionRef(env, head.subject)) ?? (await readSuggestionRef(env, text));

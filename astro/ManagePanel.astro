@@ -61,7 +61,7 @@ const { inPersonLabel = 'In person', remoteLabel = 'Remotely (online sessions on
 	<div id="m-polls" hidden></div>
 </div>
 <script>
-	import { BAR, type Focus, rankList, restoreFocus } from './ranking';
+	import { BAR, rankList, restoreFocus } from './ranking';
 	const t = new URLSearchParams(location.search).get('t');
 	// Keep the link out of the address bar and history once read: it is the key to this registration.
 	if (t) history.replaceState(null, '', location.pathname);
@@ -182,12 +182,10 @@ const { inPersonLabel = 'In person', remoteLabel = 'Remotely (online sessions on
 		e.append(...kids);
 		return e;
 	}
-	function renderPolls(list: Poll[], focus?: Focus & { poll: string }) {
+	function renderPolls(list: Poll[]) {
 		polls = list;
 		pollsBox.hidden = !list.length;
 		pollsBox.replaceChildren(...list.map((p) => renderPoll(p)));
-		const section = focus ? pollsBox.querySelector(`[data-poll="${focus.poll}"]`) : null;
-		if (section) restoreFocus(section, focus, section.querySelector('.poll-status'));
 	}
 	function renderPoll(p: Poll) {
 		const ids = order.get(p.id) ?? startOrder(p);
@@ -199,7 +197,13 @@ const { inPersonLabel = 'In person', remoteLabel = 'Remotely (online sessions on
 			const o = p.options.find((x) => x.id === id);
 			return { label: o?.label ?? '', tags: [o?.pending ? 'your suggestion, waiting for the organisers' : o?.mine ? 'your suggestion' : '', fresh.includes(id) ? 'new' : ''].filter(Boolean) };
 		};
-		const ol = rankList(ids, info, p.open, `Your order for: ${p.question}`, (focus) => renderPolls(polls, focus && { ...focus, poll: p.id }));
+		// Only the list is rebuilt after a move: the status region stays put, so screen readers announce the change.
+		const list = (): HTMLOListElement => rankList(ids, info, p.open, `Your order for: ${p.question}`, (focus) => {
+			const next = list();
+			section.querySelector('.rank')!.replaceWith(next);
+			restoreFocus(next, focus, status);
+		});
+		const ol = list();
 		const section = el('section', { className: 'poll' });
 		section.dataset.poll = p.id;
 		const h = el('h2', { id: `poll-${p.id}`, textContent: p.question });

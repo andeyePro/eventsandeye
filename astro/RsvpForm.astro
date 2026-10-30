@@ -121,7 +121,7 @@ if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production buil
 	function renderPolls(polls: NonNullable<Status['polls']>) {
 		pollsBox.hidden = !polls.length;
 		pollsBox.replaceChildren(...polls.map((p) => {
-			const state = pollOrders.get(p.id) ?? { ids: [...p.options.map((o) => o.id), BAR], touched: false };
+			const state = { ids: [...p.options.map((o) => o.id), BAR], touched: false };
 			pollOrders.set(p.id, state);
 			const fs = document.createElement('fieldset');
 			fs.className = 'field poll';
@@ -135,14 +135,15 @@ if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production buil
 			status.setAttribute('role', 'status');
 			status.setAttribute('aria-live', 'polite');
 			const label = (id: string) => ({ label: p.options.find((o) => o.id === id)?.label ?? '', tags: [] });
-			const ol = rankList(state.ids, label, true, `Your order for: ${p.question}`, (focus) => {
+			// Only the list is rebuilt after a move: the status region stays put, so screen readers announce the change.
+			const list = (): HTMLOListElement => rankList(state.ids, label, true, `Your order for: ${p.question}`, (focus) => {
 				state.touched = true;
-				renderPolls(polls);
-				const again = pollsBox.querySelector(`[data-poll="${p.id}"]`);
-				if (again) restoreFocus(again, focus, again.querySelector('[role=status]'));
+				const next = list();
+				fs.querySelector('.rank')!.replaceWith(next);
+				restoreFocus(next, focus, status);
 			});
 			fs.dataset.poll = p.id;
-			fs.append(legend, help, ol, status);
+			fs.append(legend, help, list(), status);
 			return fs;
 		}));
 	}
