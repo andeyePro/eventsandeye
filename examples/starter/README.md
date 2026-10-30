@@ -12,6 +12,6 @@ cp eventsandeye/examples/wrangler.toml wrangler.toml
 npm install
 ```
 
-Then follow the README's set-up from step 4. Change the event id, organisation and contact address in `src/pages/event.astro` and `src/pages/events/confirm.astro`, fill in the brackets in `src/pages/privacy.astro`, and replace `src/layouts/Base.astro` with your own design.
+Then follow the README's set-up from step 4. Change the event id, organisation and contact address in `src/pages/event.astro` and `src/pages/events/confirm.astro`, and give your event the page path `/event/` (emails link to it). Fill in the brackets in `src/pages/privacy.astro`, replace `src/layouts/Base.astro` with your own design, and put your Turnstile site key in a file `.env.production`: `PUBLIC_TURNSTILE_SITE_KEY=<site key>`. `npm run build:test` builds with Cloudflare's test key instead, for trying it locally (README, "Develop and test locally").
 
 Events&I's own tests run against this site: `sh scripts/starter-e2e.sh` in the Events&I repository.

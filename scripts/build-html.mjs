@@ -57,7 +57,7 @@ function fragment(name, mod) {
 	// Inline scripts (Turnstile's loader) as the component has them.
 	const inline = [...body.matchAll(/<script is:inline([^>]*)><\/script>/g)].map((m) => `\n<script${m[1]}></script>`).join('');
 	return {
-		html: `<!-- Events&I ${name}, generated from astro/${name}.astro by scripts/build-html.mjs: do not edit. Replace the capitalised placeholders. -->\n<div class="eai">\n${html}\n</div>${inline}\n<script type="module" src="${mod}.js"></script>\n`,
+		html: `<!-- Events&I ${name}, generated from astro/${name}.astro by scripts/build-html.mjs: do not edit.${Object.values(PLACEHOLDERS).some((v) => html.includes(v)) ? ' Replace the capitalised placeholders.' : ''}${html.includes('href="/privacy/"') ? ' The privacy notice link is /privacy/: change it if yours is elsewhere.' : ''} -->\n<div class="eai">\n${html}\n</div>${inline}\n<script type="module" src="${mod}.js"></script>\n`,
 		css: `/* ${name} */\n${scope(name, style.replace(/\/\*[\s\S]*?\*\//g, '').replace(/:global\(([^)]*)\)/g, '$1'))}\n`,
 	};
 }

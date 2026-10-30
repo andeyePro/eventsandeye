@@ -18,7 +18,8 @@ INSERT OR IGNORE INTO events (id, title, starts_at, ends_at, timezone, location,
 
 -- Sessions.
 --   Core sessions (no choice_group) make up the day. mode: 'in_person', 'online' or 'hybrid' (remote attendees get
---   calendar entries for online and hybrid sessions).
+--   calendar entries for online and hybrid sessions). Their online links (online_url) are added on the admin page
+--   under Sessions, nearer the day, and appear in remote attendees' calendar entries.
 --   Bookable options share the choice_group 'tour': people pick one, each has its own capacity and waiting list.
 --   Opt-in sessions (optin = 1), such as a dinner, are ticked separately and can have a capacity and waiting list
 --   too; people can also register for just these.

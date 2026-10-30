@@ -10,8 +10,10 @@ Website: [events.andeye.com](https://events.andeye.com). Made by [andeye Ltd](ht
 
 - [What it does](#what-it-does)
 - [What you need](#what-you-need)
+- [Quick start](#quick-start)
 - [Set it up](#set-it-up)
 - [Run an event](#run-an-event)
+- [Troubleshooting](#troubleshooting)
 - [Develop and test locally](#develop-and-test-locally)
 - [Settings reference](#settings-reference)
 - [Updating](#updating)
@@ -35,8 +37,21 @@ Website: [events.andeye.com](https://events.andeye.com). Made by [andeye Ltd](ht
 
 - A **Cloudflare account** with your domain on it. Events&I uses Pages, Pages Functions, D1, Workers (for the cron job), Turnstile and Zero Trust Access; small events fit within the free plans.
 - A **[Resend](https://resend.com) account**, with your domain verified for sending.
-- A **static site deployed on Cloudflare Pages**. The ready-made form, confirm and manage panels are [Astro](https://astro.build) components; other sites can copy their markup and scripts.
+- A **static site deployed on Cloudflare Pages** (static output: Astro's Cloudflare adapter, or any `_worker.js`, replaces the `functions/` folder Events&I runs from). The ready-made form, confirm and manage panels are [Astro](https://astro.build) components; [plain HTML versions](html/) suit other sites. No site yet? Start from the [starter site](examples/starter/).
 - **Node.js 22** and `wrangler` (Cloudflare's command-line tool) on your computer.
+
+## Quick start
+
+For someone at home with Cloudflare: the numbered steps below say the same at length, with the reasons.
+
+```sh
+git submodule add https://github.com/andeyePro/eventsandeye.git eventsandeye   # in your site (or start from examples/starter)
+cp -R eventsandeye/examples/functions/. functions/                                 # the API, admin page and /events/next
+cp eventsandeye/examples/wrangler.toml .                                           # then fill it in
+npx wrangler d1 create events && npx wrangler d1 migrations apply events --remote
+```
+
+Then: add the form, check-email, confirm, manage and privacy pages (step 3); a Turnstile widget (6) and a Resend domain (7); the secrets `TOKEN_SECRET`, `RESEND_API_KEY` and `TURNSTILE_SECRET_KEY` (8); Cloudflare Access with two-factor sign-in on `/admin/*` and `/api/admin/*` (9); the cron Worker with the same settings and secrets (10). Deploy, create your event on the admin page, `/admin/rsvps/`, and work through its set-up check until it disappears.
 
 ## Set it up
 
@@ -73,14 +88,16 @@ These steps assume your site's repository is checked out locally and Events&I go
      />
      ```
 
-     The import path is relative to your page; this one is for `src/pages/event.astro`. This is AMYBO's form, live at [amy.bo/event](https://amy.bo/event). `event` is the event id from your seed (step 5) and `controller` is who is responsible for the data, named in the consent text. The wording for the two ways to attend and the tour choice comes from the event (`in_person_label`, `remote_label` and `tour_legend` in your seed), so the form and the manage page always agree; without it they say "In person", "Remotely (online sessions only)" and "Optional tour (in person only)". The props `inPersonLabel`, `remoteLabel` and `tourLegend` override it on a page that needs something different. `privacyHref` (default `/privacy/`) is the privacy notice link in the consent text, and `sourceUrl` the "Registrations via Events&I" link. The components are styled with [Starlight](https://starlight.astro.build)'s CSS variables, with plain fallbacks on other Astro sites. Set the build variable `PUBLIC_TURNSTILE_SITE_KEY` (step 6); the build fails without it, so a test key can never reach your live site.
+     The import path is relative to your page; this one is for `src/pages/event.astro`. This is AMYBO's form, live at [amy.bo/event](https://amy.bo/event). `event` is the event id from your seed (step 5) and `controller` is who is responsible for the data, named in the consent text. The wording for the two ways to attend and the tour choice comes from the event (`in_person_label`, `remote_label` and `tour_legend` in your seed), so the form and the manage page always agree; without it they say "In person", "Remotely (online sessions only)" and "Optional tour (in person only)". The props `inPersonLabel`, `remoteLabel` and `tourLegend` override it on a page that needs something different. `privacyHref` (default `/privacy/`) is the privacy notice link in the consent text, and `sourceUrl` the "Registrations via Events&I" link. The components are styled with [Starlight](https://starlight.astro.build)'s CSS variables, with plain fallbacks on other Astro sites. Set `PUBLIC_TURNSTILE_SITE_KEY` (step 6); the build fails without it, so a test key can never reach your live site.
    - **`/events/check-email/`**, where the form sends people after registering. Include `eventsandeye/astro/SentTo.astro` to show the address the email went to, and ask them to click "Complete registration" in it.
-   - **`/events/confirm/`** with `<ConfirmPanel contactHref="…" />` and **`/events/manage/`** with `<ManagePanel />`, both from `eventsandeye/astro/`. Give these two pages a `noindex` robots tag.
-   - **A privacy notice** (at `/privacy/` unless you change the form's `privacyHref` and, for emails, `PRIVACY_URL`) that covers registrations, session hosts, poll answers and suggestions (a suggester's name goes to the organisers with it), and the 30-day retention.
+   - **`/events/confirm/`** with `<ConfirmPanel contactHref="…" />` and **`/events/manage/`** with `<ManagePanel />`, both from `eventsandeye/astro/`. These two addresses are fixed (emails link to them). Give them a `noindex` robots tag.
+   - **A privacy notice** (at `/privacy/` unless you change the form's `privacyHref` and, for emails, `PRIVACY_URL`) that covers registrations, session hosts, poll answers and suggestions (a suggester's name goes to the organisers with it), the 30-day retention, and the services that handle the data for you: Cloudflare (hosting, the database and Turnstile) and Resend (email, a US company), and where your database is. The starter site's [privacy notice](examples/starter/src/pages/privacy.astro) is a template to adapt.
 
-   **Not using Astro?** [`html/`](html/) has the same three components as plain HTML, with the same markup and scripts: `rsvp-form.html`, `confirm-panel.html` and `manage-panel.html`, generated from the Astro ones, and `sent-to.html` for the check-your-email page. Paste each into its page and replace the capitalised placeholders (event id, organisation, contact link, Turnstile site key), escaping `&`, `<` and `"` in what you type (`A &amp; B Ltd`). Then run `npm install` and `node scripts/build-html.mjs` in `eventsandeye/`, and copy `html/rsvp-form.js`, `confirm-panel.js`, `manage-panel.js` and `events-and-i.css` to your site. Each fragment loads its script by a relative `src`, so either put the scripts beside the pages (with the pages' addresses ending in `/`) or change the `src` to an absolute path; link the stylesheet with `<link rel="stylesheet">`. Every rule in it sits under the fragments' `.eai` wrapper, so it leaves the rest of your site alone; restyle it freely (without Starlight's variables it uses plain fallbacks, so it looks a little different). The wording for attending comes from the event (step 5); to use your own on one page, edit the label's text and add `data-fixed="1"` to its `<span>`.
+   Emails and `/events/next` link to the event's `page_path`, so set it to the page with the form.
 
-4. **Configure.** Copy [`examples/wrangler.toml`](examples/wrangler.toml) to your site's root and replace every example value (see the [settings reference](#settings-reference)).
+   **Not using Astro?** [`html/`](html/) has the same three components as plain HTML, with the same markup and scripts: `rsvp-form.html`, `confirm-panel.html` and `manage-panel.html`, generated from the Astro ones, and `sent-to.html` for the check-your-email page. Paste each into its page and replace the capitalised placeholders (event id, organisation, contact link, Turnstile site key: Cloudflare's test key `1x00000000000000000000AA` for trying it locally), and the form's `/privacy/` link if your notice is elsewhere, escaping `&`, `<` and `"` in what you type (`A &amp; B Ltd`). Then run `npm install` and `node scripts/build-html.mjs` in `eventsandeye/`, and copy `html/rsvp-form.js`, `confirm-panel.js`, `manage-panel.js` and `events-and-i.css` to your site. Each fragment loads its script by a relative `src`, so either put the scripts beside the pages (with the pages' addresses ending in `/`) or change the `src` to an absolute path; link the stylesheet with `<link rel="stylesheet">`. Every rule in it sits under the fragments' `.eai` wrapper, so it leaves the rest of your site alone; restyle it freely (without Starlight's variables it uses plain fallbacks, so it looks a little different). The wording for attending comes from the event (step 5); to use your own on one page, edit the label's text and add `data-fixed="1"` to its `<span>`.
+
+4. **Configure.** Copy [`examples/wrangler.toml`](examples/wrangler.toml) to your site's root (or merge it into the one you have) and fill in what you know; steps 5 and 9 supply the database id and the Access settings. See the [settings reference](#settings-reference). Once a Pages project has a `wrangler.toml`, Cloudflare takes its settings from that file rather than the dashboard ([Cloudflare's docs](https://developers.cloudflare.com/pages/functions/wrangler-configuration/)), so put plain settings there; secrets stay in the dashboard (step 8). Add `.dev.vars` and `.wrangler/` to your `.gitignore`: they hold local secrets and test registrations.
 
 5. **Create the database and your event.**
 
@@ -96,9 +113,9 @@ These steps assume your site's repository is checked out locally and Events&I go
    npx wrangler d1 execute events --remote --file seed/my-event.sql
    ```
 
-6. **Turnstile.** In the Cloudflare dashboard, Turnstile → Add widget for your domain (and your project's `pages.dev` address), managed mode. Put the **site key** in the Pages build variable `PUBLIC_TURNSTILE_SITE_KEY` and keep the **secret key** for step 8. The server accepts a token only if Turnstile solved it on the same host name the registration is posted to, so serve the form and its API from one address (not, say, a proxy in front of `*.pages.dev`).
+6. **Turnstile.** In the Cloudflare dashboard, Turnstile → Add widget for your domain (and your project's `pages.dev` address), managed mode. The **site key** is public: the simplest place for it is a committed `.env.production` file in your site with the line `PUBLIC_TURNSTILE_SITE_KEY=<site key>`, which Astro reads when it builds (a build variable of that name in the Pages dashboard works too). Keep the **secret key** for step 8. The server accepts a token only if Turnstile solved it on the same host name the registration is posted to, so serve the form and its API from one address (not, say, a proxy in front of `*.pages.dev`).
 
-7. **Resend.** Add your domain in Resend, then add the DNS records it shows in Cloudflare DNS with the proxy **off** (DNS only), and click Verify. The records sit on subdomains, so your existing mail keeps working. Create an API key with **sending access** only.
+7. **Resend.** Add your domain in Resend, then add the DNS records it shows in Cloudflare DNS with the proxy **off** (DNS only), and click Verify. The records sit on subdomains, so your existing mail keeps working. Create an API key with **sending access** only. If your domain has no DMARC record yet, add one (a TXT record at `_dmarc`, such as `v=DMARC1; p=none;`): Gmail and Yahoo expect it, and invitations from a domain without one land in spam more often.
 
 8. **Secrets.** In the Pages project → Settings → Variables and secrets, add:
 
@@ -114,15 +131,17 @@ These steps assume your site's repository is checked out locally and Events&I go
 
    If you use Cloudflare's per-application MFA (Authentication → MFA → Authenticator application), its tokens report only `onetimepin`, so set `ACCESS_MFA = "application"` and keep that setting on. Otherwise the code checks the token's sign-in methods itself and names them when it refuses; accept other method names with `ACCESS_MFA_METHODS`.
 
-10. **The cron Worker.** Every five minutes it sends scheduled messages and the rest of big ones, queued calendar updates and host lists held back by a gap, warns about and deletes unconfirmed registrations, and applies the 30-day retention. It also receives replies to poll suggestions if you set that up (step 12). Copy [`examples/cron/wrangler.toml`](examples/cron/wrangler.toml) to `workers/cron/wrangler.toml` in your site, fill it in to match, then:
+10. **The cron Worker.** Every five minutes it sends scheduled messages and the rest of big ones, queued calendar updates and host lists held back by a gap, warns about and deletes unconfirmed registrations, and applies the 30-day retention. It also receives replies to poll suggestions if you set that up (step 12). Copy [`examples/cron/wrangler.toml`](examples/cron/wrangler.toml) to `workers/cron/wrangler.toml` in your site and fill it in with the **same** values as the site's (`SITE_URL`, `EMAIL_FROM` and the rest, and the same database). Give it the **same** `TOKEN_SECRET` as the site (paste the value from step 8; a new one would break every link in the emails the cron sends) and the Resend key, then deploy:
 
     ```sh
-    npx wrangler deploy --config workers/cron/wrangler.toml
     npx wrangler secret put TOKEN_SECRET --config workers/cron/wrangler.toml
     npx wrangler secret put RESEND_API_KEY --config workers/cron/wrangler.toml
+    npx wrangler deploy --config workers/cron/wrangler.toml
     ```
 
-11. **Deploy and try it.** Push your site so Pages builds it, then on the live or preview address: register with your own email, confirm, change and cancel, and open `/admin/rsvps/` to check it asks you to sign in. Check that a calendar invitation shows as an invitation in Gmail and Outlook before opening registration widely.
+    The admin page's set-up check says if the cron has not run, or runs with a different `TOKEN_SECRET`, `SITE_URL` or Resend key.
+
+11. **Deploy and try it.** First turn preview deployments off, or make them static only (see the note under step 12): previews get the live database and settings. Push your site so Pages builds it, then open `/admin/rsvps/`: it should ask you to sign in, and its set-up check should be empty (work through anything it lists). Create your event there if you did not seed it. Then register with your own email, confirm, change and cancel. Check that a calendar invitation shows as an invitation in Gmail and Outlook before opening registration widely. If something goes wrong, see [Troubleshooting](#troubleshooting).
 
 12. **Optional: answer poll suggestions by email.** Without this, suggestions are decided on the admin page (the email about each one links there). To decide by replying, the cron Worker receives the replies through Cloudflare Email Routing:
 
@@ -133,6 +152,25 @@ These steps assume your site's repository is checked out locally and Events&I go
     A reply acts only if its From address is `NOTIFY_EMAIL` or one in `ADMIN_EMAILS` (set it for the cron Worker too) and it carries the suggestion's reference, which is signed with `TOKEN_SECRET` and only ever sent to you; anything else is refused. When Email Routing records a DMARC failure for the sender's domain (in its `Authentication-Results` header), the reply is refused. A From address is easy to forge, so the reference is the real safeguard: do not forward suggestion emails to anyone who should not decide them. Out-of-office replies are ignored. The answer is the first line of the reply: `yes`, `no`, or `use <your wording>`. Wording that matches an existing option merges the suggestion into it.
 
 Preview deployments get the same Functions and database binding as production, so either turn previews off (Settings → Builds → Branch control) or deploy previews as static pages only, as [amybo.org's deploy workflow](https://github.com/amy-bo/website/blob/main/.github/workflows/deploy.yml) does.
+
+## Troubleshooting
+
+Logs: `npx wrangler pages deployment tail` for the site (choose the production deployment) and `npx wrangler tail --config workers/cron/wrangler.toml` for the cron Worker. Start with the admin page's set-up check.
+
+| What you see | What to check |
+| --- | --- |
+| The form says "The spam check failed" | `TURNSTILE_SECRET_KEY` is the widget's secret key; the widget lists the address the form is on (including `*.pages.dev` if you use it); the form and its API are served from the same address. |
+| The form says "Something went wrong" | The site's log. Most often Resend refused the email: the domain in `EMAIL_FROM` is not verified in Resend, or the key lacks sending access. |
+| No email arrives | Resend's dashboard shows whether it was sent; look in spam; add a DMARC record (step 7). |
+| The build fails asking for `PUBLIC_TURNSTILE_SITE_KEY` | Step 6: the site key goes in `.env.production` or a build variable. |
+| The admin page says "not signed in through Cloudflare Access (no Access token reached the site…)" | The Access application must cover this address and path: `/admin/*` and `/api/admin/*` on every address you use. |
+| …"the Access token is for another Access application" | `ACCESS_AUD` must be that application's AUD tag. |
+| …"could not fetch the Access keys" or "issued by another team" | `ACCESS_TEAM_DOMAIN` is your team's domain, such as `example.cloudflareaccess.com`. |
+| …"two-factor sign-in required (this sign-in reported: …)" | Require MFA in the Access policy (step 9), or, with Cloudflare's per-application MFA, set `ACCESS_MFA = "application"`. |
+| …"ADMIN_EMAILS is not set" or "… is not an admin" | List the organisers' addresses in `ADMIN_EMAILS`. |
+| Links in emails go to the wrong address | `SITE_URL`, on the site and the cron Worker. |
+| Links in scheduled messages or reminders say the link is invalid | The cron Worker's `TOKEN_SECRET` differs from the site's (the set-up check says so). |
+| Big messages stay "sending" | The cron Worker finishes them: check it is deployed and its log shows `scheduled run` every five minutes. |
 
 ## Run an event
 
@@ -172,7 +210,7 @@ PUBLIC_TURNSTILE_ALLOW_TEST_KEY=true npm run build
 E2E_DB=events E2E_SEED=eventsandeye/examples/seed.example.sql E2E_NOTIFY=<your NOTIFY_EMAIL> node eventsandeye/tests/e2e.mjs
 ```
 
-The comment at the top of the test lists every setting.
+It loads `/`, `/privacy/`, `/events/confirm/` and `/events/manage/` from your build; set `E2E_PAGES` to a comma-separated list if your site's pages differ. The comment at the top of the test lists every setting.
 
 **Calendar caveat.** How an invitation is shown depends on the recipient's email app: Gmail, Outlook and Apple Mail usually show it as an invitation and add it to the calendar, but some apps only offer the file. The add-to-calendar links and `.ics` download cover the rest. Many calendar apps also apply their own reminder settings instead of the ones in the invitation.
 
@@ -197,7 +235,7 @@ In `wrangler.toml` `[vars]` (the cron Worker needs the same, apart from the Acce
 | `POLL_REPLY_EMAIL` | Optional. The address Email Routing sends to the cron Worker, used as the reply-to of emails about poll suggestions (step 12). |
 | `EVENTSANDEYE_URL` | The "Registrations via Events&I" link in emails (default: this repository). The form uses its `sourceUrl` prop. |
 
-Secrets: `TOKEN_SECRET`, `RESEND_API_KEY`, `TURNSTILE_SECRET_KEY` (step 8). Build variable: `PUBLIC_TURNSTILE_SITE_KEY` (step 6).
+Secrets: `TOKEN_SECRET`, `RESEND_API_KEY`, `TURNSTILE_SECRET_KEY` (step 8). Turnstile's public site key: `PUBLIC_TURNSTILE_SITE_KEY`, at build time (step 6).
 
 ## Updating
 
