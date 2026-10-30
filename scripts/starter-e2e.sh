@@ -26,6 +26,8 @@ rm -rf "$dir/eventsandeye" && mkdir "$dir/eventsandeye"
 sed 's#/events/2026-11-13-london/#/event/#' "$root/examples/seed.example.sql" > "$dir/eventsandeye/examples/seed.example.sql"
 cd "$dir"
 [ -d node_modules ] || npm install --no-audit --no-fund
+# A test build on Cloudflare Pages must fail: it would ship a Turnstile key the live server refuses.
+if CF_PAGES=1 PUBLIC_TURNSTILE_ALLOW_TEST_KEY=true npx astro build >/dev/null 2>&1; then echo "a test build on Cloudflare Pages should have failed" >&2; exit 1; fi
 PUBLIC_TURNSTILE_ALLOW_TEST_KEY=true npx astro build
 E2E_DB=events E2E_SEED=eventsandeye/examples/seed.example.sql E2E_NOTIFY=events@example.org \
 	E2E_PAGES=/,/event/,/events/,/privacy/,/events/check-email/,/events/confirm/,/events/manage/ \

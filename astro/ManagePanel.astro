@@ -85,7 +85,8 @@ const { inPersonLabel, remoteLabel, tourLegend } = Astro.props;
 	#m-polls :global(.rank li.bar) { list-style: none; margin-left: -1.75rem; border: 0; border-top: 3px dashed #b3261e; border-top-color: light-dark(#b3261e, #ff8a80); border-radius: 0; font-weight: 700; color: #b3261e; color: light-dark(#b3261e, #ff8a80); background: transparent; }
 	/* Starlight's dark theme may not set color-scheme, so light-dark() alone could keep the light red. */
 	:global([data-theme='dark']) #m-polls :global(.rank li.bar) { color: #ff8a80; border-top-color: #ff8a80; }
-	#m-polls :global(.tag) { font-size: var(--sl-text-xs, 0.75rem); font-weight: 400; margin-left: 0.5rem; padding: 0.05rem 0.4rem; border-radius: 0.25rem; background: var(--sl-color-gray-6, light-dark(#eef0f3, #2a2d33)); color: var(--sl-color-text, CanvasText); }
+	#m-polls :global(.tag) { font-size: var(--sl-text-xs, 0.75rem); font-weight: 400; margin-left: 0.5rem; padding: 0.05rem 0.4rem; border-radius: 0.25rem; background: #eef0f3; background: light-dark(#eef0f3, #2a2d33); color: var(--sl-color-text, CanvasText); }
+	:global([data-theme]) #m-polls :global(.tag) { background: var(--sl-color-gray-6); }
 	#m-polls :global(.moves) { display: flex; gap: 0.25rem; flex-shrink: 0; }
 	#m-polls :global(.moves button) { min-width: 2.25rem; min-height: 2.25rem; border: 1px solid var(--sl-color-gray-3, #8b8f98); border-radius: 0.3rem; background: transparent; color: inherit; cursor: pointer; }
 	#m-polls :global(.moves button:disabled) { opacity: 0.35; cursor: default; }
@@ -94,7 +95,9 @@ const { inPersonLabel, remoteLabel, tourLegend } = Astro.props;
 	#m-polls :global(.secondary) { background: transparent; color: var(--sl-color-text, inherit); border: 2px solid #0069a0; border-radius: 999px; padding: 0.5rem 1.2rem; font-weight: 700; cursor: pointer; }
 	#m-polls :global(table) { border-collapse: collapse; margin-top: 0.5rem; }
 	#m-polls :global(th), #m-polls :global(td) { padding: 0.25rem 0.75rem 0.25rem 0; text-align: left; }
-	.help { font-size: var(--sl-text-sm, 0.875rem); color: var(--sl-color-gray-2, light-dark(#4b5563, #b0b5bd)); margin: 0; }
+	.help { font-size: var(--sl-text-sm, 0.875rem); color: #4b5563; color: light-dark(#4b5563, #b0b5bd); margin: 0; }
+	/* Starlight's own grey where it is used; elsewhere the plain colours above (var() with light-dark() inside has no fallback in older browsers). */
+	:global([data-theme]) .help { color: var(--sl-color-gray-2); }
 	.actions { display: flex; gap: 1rem; flex-wrap: wrap; }
 	.actions button:disabled { opacity: 0.6; cursor: wait; }
 	#manage :global(.primary) { background: #0069a0; color: #fff; border: 0; border-radius: 999px; padding: 0.6rem 1.4rem; font-weight: 700; cursor: pointer; }

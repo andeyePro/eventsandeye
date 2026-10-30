@@ -12,7 +12,7 @@ import { verifyTurnstile } from '../../turnstile';
 const MIN_MS = 1500;
 export const minMs = (env: Env) => {
 	const n = Number(env.REGISTER_MIN_MS);
-	return isDev(env) && env.REGISTER_MIN_MS !== undefined && Number.isFinite(n) ? n : MIN_MS;
+	return isDev(env) && (env.REGISTER_MIN_MS ?? '').trim() !== '' && Number.isFinite(n) ? n : MIN_MS;
 };
 
 export const onRequestPost = handle(async ({ env, request }) => {

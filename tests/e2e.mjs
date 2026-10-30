@@ -246,8 +246,9 @@ try {
 	check('missing consent → 400', (await register({ consent: false })).status === 400);
 	check('bad email → 400', (await register({ email: 'not-an-email' })).status === 400);
 	check('missing Turnstile token → 403', (await register({ 'cf-turnstile-response': '' })).status === 403);
+	const honeyStart = Date.now();
 	r = await register({ website: 'http://spam.example', email: 'bot@example.org' });
-	check('honeypot → fake success', r.status === 200 && r.data.ok);
+	check('honeypot → fake success, in the usual time (so a bot cannot tell it was caught)', r.status === 200 && r.data.ok && Date.now() - honeyStart >= 200, Date.now() - honeyStart);
 	check('honeypot and rejects send no email', (await outbox()).length === before);
 	check('non-JSON body → 415', (await fetch(`${BASE}/api/rsvp/register`, { method: 'POST', body: 'name=x' })).status === 415);
 

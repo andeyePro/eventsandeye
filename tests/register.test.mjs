@@ -16,4 +16,5 @@ test('a live site always waits 1.5 s, whatever REGISTER_MIN_MS says', () => {
 test('local development may shorten it, and a value that is not a number is ignored', () => {
 	assert.equal(minMs({ DEV_MODE: 'true', REGISTER_MIN_MS: '200' }), 200);
 	assert.equal(minMs({ DEV_MODE: 'true', REGISTER_MIN_MS: 'abc' }), 1500);
+	assert.equal(minMs({ DEV_MODE: 'true', REGISTER_MIN_MS: ' ' }), 1500);
 });

@@ -23,7 +23,7 @@ const { event, controller, contactHref, privacyHref = '/privacy/', sourceUrl = '
 // run on localhost.
 const TEST_KEY = '1x00000000000000000000AA';
 // Cloudflare Pages sets CF_PAGES on its builds: a test build there would ship a key the live server refuses.
-if (import.meta.env.PUBLIC_TURNSTILE_ALLOW_TEST_KEY === 'true' && process.env.CF_PAGES === '1') throw new Error('PUBLIC_TURNSTILE_ALLOW_TEST_KEY is for local test builds only: remove it from this Cloudflare Pages build.');
+if (import.meta.env.PUBLIC_TURNSTILE_ALLOW_TEST_KEY === 'true' && typeof process !== 'undefined' && process.env.CF_PAGES === '1') throw new Error('PUBLIC_TURNSTILE_ALLOW_TEST_KEY is for local test builds only: remove it from this Cloudflare Pages build.');
 const siteKey = import.meta.env.PUBLIC_TURNSTILE_ALLOW_TEST_KEY === 'true' ? TEST_KEY : import.meta.env.PUBLIC_TURNSTILE_SITE_KEY || (import.meta.env.DEV ? TEST_KEY : undefined);
 // A production build without a real site key would ship Cloudflare's always-pass test key and every registration would fail.
 if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production builds (or PUBLIC_TURNSTILE_ALLOW_TEST_KEY=true for local test builds).');
@@ -127,7 +127,9 @@ if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production buil
 		padding: 0.5rem; border: 1px solid var(--sl-color-gray-3, #8b8f98); border-radius: 0.3rem; background: var(--sl-color-bg, Canvas); color: var(--sl-color-text, CanvasText); font: inherit;
 	}
 	fieldset:disabled { opacity: 0.6; }
-	.help { font-size: var(--sl-text-sm, 0.875rem); color: var(--sl-color-gray-2, light-dark(#4b5563, #b0b5bd)); margin: 0; }
+	.help { font-size: var(--sl-text-sm, 0.875rem); color: #4b5563; color: light-dark(#4b5563, #b0b5bd); margin: 0; }
+	/* Starlight's own grey where it is used; elsewhere the plain colours above (var() with light-dark() inside has no fallback in older browsers). */
+	:global([data-theme]) .help { color: var(--sl-color-gray-2); }
 	.hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
 	.submit { justify-self: start; background: var(--sl-color-accent-high, #0069a0); color: var(--sl-color-black, #fff); border: 0; border-radius: 999px; padding: 0.7rem 1.6rem; font-weight: 700; font-size: var(--sl-text-base, 1rem); cursor: pointer; }
 	:global([data-theme='light']) .submit { background: #0069a0; color: #fff; }
