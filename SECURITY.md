@@ -19,4 +19,5 @@ The code in this repository: the registration API and pages, the admin page and 
 ## Known limitations
 
 - Anyone can register any address. The address must be confirmed before a registration counts, unconfirmed registrations hold at most a quarter of the in-person places, and repeat registrations of one address are limited, but someone who registers a person's address before they do can delay that person's own registration until the hold lapses.
+- Registrations are answered after at least 1.5 seconds, so an address already registered (answered with less work) is not told apart by timing. That is a floor: when sending an email takes longer than that, the difference can still show, at the cost of a Turnstile solve and an email to the address for each try.
 - Manage and calendar links carry their token in the address, so they appear in Cloudflare's request logs.

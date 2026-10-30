@@ -168,6 +168,8 @@ Logs: `npx wrangler pages deployment tail` for the site (choose the production d
 | The form says "Something went wrong" | The site's log. Most often Resend refused the email: the domain in `EMAIL_FROM` is not verified in Resend, or the key lacks sending access. |
 | No email arrives | Resend's dashboard shows whether it was sent; look in spam; add a DMARC record (step 7). |
 | The build fails asking for `PUBLIC_TURNSTILE_SITE_KEY` | Step 6: the site key goes in a committed `.env.production`. |
+| The build fails saying `PUBLIC_TURNSTILE_ALLOW_TEST_KEY` is for local test builds only | Remove it from the Pages project's build settings and any committed `.env`: it is only for `npm run build:test` on your computer. |
+| Every registration fails with "The spam check failed" after a deploy | A test build (`build:test`) was deployed: it carries Turnstile's test key, which the live secret refuses. Deploy a normal build. |
 | The admin page says "not signed in through Cloudflare Access (no Access token reached the site…)" | The Access application must cover this address and path: `/admin/*` and `/api/admin/*` on every address you use. |
 | …"the Access token is for another Access application" | `ACCESS_AUD` must be that application's AUD tag. |
 | …"if you did sign in, check ACCESS_TEAM_DOMAIN", "issued by another team", or "not set up yet" | `ACCESS_TEAM_DOMAIN` is your team's domain, such as `example.cloudflareaccess.com`, and `ACCESS_AUD` is set; the site's log names which. |

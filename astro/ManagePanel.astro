@@ -72,18 +72,20 @@ const { inPersonLabel, remoteLabel, tourLegend } = Astro.props;
 	#manage-form :global(.choice) { display: flex; gap: 0.5rem; align-items: flex-start; }
 	#manage-form :global(.choice input) { margin-top: 0.3rem; }
 	#m-tours, #m-optins { display: grid; gap: 0.35rem; }
-	input[type='text'], textarea { padding: 0.5rem; border: 1px solid var(--sl-color-gray-3, #8b8f98); border-radius: 0.3rem; background: var(--sl-color-bg, #fff); color: var(--sl-color-text, inherit); font: inherit; }
+	input[type='text'], textarea { padding: 0.5rem; border: 1px solid var(--sl-color-gray-3, #8b8f98); border-radius: 0.3rem; background: var(--sl-color-bg, Canvas); color: var(--sl-color-text, CanvasText); font: inherit; }
 	fieldset:disabled { opacity: 0.6; }
 	/* :global because the polls are built by the script. */
 	#m-polls { display: grid; gap: 1.5rem; max-width: 40rem; margin-block: 1.5rem; }
 	#m-polls :global(.poll) { display: grid; gap: 0.75rem; }
 	#m-polls :global(h2) { margin: 0; }
 	#m-polls :global(.rank) { list-style: decimal; padding-left: 1.75rem; margin: 0; display: grid; gap: 0.35rem; }
-	#m-polls :global(.rank li) { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.4rem 0.6rem; border: 1px solid var(--sl-color-gray-4, #c7cad1); border-radius: 0.3rem; background: var(--sl-color-bg, #fff); }
+	#m-polls :global(.rank li) { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.4rem 0.6rem; border: 1px solid var(--sl-color-gray-4, #c7cad1); border-radius: 0.3rem; background: var(--sl-color-bg, Canvas); color: var(--sl-color-text, CanvasText); }
 	#m-polls :global(.rank li[draggable='true']) { cursor: grab; }
 	#m-polls :global(.rank li.dragging) { opacity: 0.5; }
-	#m-polls :global(.rank li.bar) { list-style: none; margin-left: -1.75rem; border: 0; border-top: 3px dashed #b3261e; border-radius: 0; font-weight: 700; color: #b3261e; background: transparent; }
-	#m-polls :global(.tag) { font-size: var(--sl-text-xs, 0.75rem); font-weight: 400; margin-left: 0.5rem; padding: 0.05rem 0.4rem; border-radius: 0.25rem; background: var(--sl-color-gray-6, #eef0f3); color: var(--sl-color-text, inherit); }
+	#m-polls :global(.rank li.bar) { list-style: none; margin-left: -1.75rem; border: 0; border-top: 3px dashed #b3261e; border-top-color: light-dark(#b3261e, #ff8a80); border-radius: 0; font-weight: 700; color: #b3261e; color: light-dark(#b3261e, #ff8a80); background: transparent; }
+	/* Starlight's dark theme may not set color-scheme, so light-dark() alone could keep the light red. */
+	:global([data-theme='dark']) #m-polls :global(.rank li.bar) { color: #ff8a80; border-top-color: #ff8a80; }
+	#m-polls :global(.tag) { font-size: var(--sl-text-xs, 0.75rem); font-weight: 400; margin-left: 0.5rem; padding: 0.05rem 0.4rem; border-radius: 0.25rem; background: var(--sl-color-gray-6, light-dark(#eef0f3, #2a2d33)); color: var(--sl-color-text, CanvasText); }
 	#m-polls :global(.moves) { display: flex; gap: 0.25rem; flex-shrink: 0; }
 	#m-polls :global(.moves button) { min-width: 2.25rem; min-height: 2.25rem; border: 1px solid var(--sl-color-gray-3, #8b8f98); border-radius: 0.3rem; background: transparent; color: inherit; cursor: pointer; }
 	#m-polls :global(.moves button:disabled) { opacity: 0.35; cursor: default; }
@@ -92,7 +94,7 @@ const { inPersonLabel, remoteLabel, tourLegend } = Astro.props;
 	#m-polls :global(.secondary) { background: transparent; color: var(--sl-color-text, inherit); border: 2px solid #0069a0; border-radius: 999px; padding: 0.5rem 1.2rem; font-weight: 700; cursor: pointer; }
 	#m-polls :global(table) { border-collapse: collapse; margin-top: 0.5rem; }
 	#m-polls :global(th), #m-polls :global(td) { padding: 0.25rem 0.75rem 0.25rem 0; text-align: left; }
-	.help { font-size: var(--sl-text-sm, 0.875rem); color: var(--sl-color-gray-2, #4b5563); margin: 0; }
+	.help { font-size: var(--sl-text-sm, 0.875rem); color: var(--sl-color-gray-2, light-dark(#4b5563, #b0b5bd)); margin: 0; }
 	.actions { display: flex; gap: 1rem; flex-wrap: wrap; }
 	.actions button:disabled { opacity: 0.6; cursor: wait; }
 	#manage :global(.primary) { background: #0069a0; color: #fff; border: 0; border-radius: 999px; padding: 0.6rem 1.4rem; font-weight: 700; cursor: pointer; }

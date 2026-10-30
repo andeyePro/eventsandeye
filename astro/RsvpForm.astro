@@ -22,6 +22,8 @@ const { event, controller, contactHref, privacyHref = '/privacy/', sourceUrl = '
 // A test build takes the test key even when the real one is set (in .env.production, say): the real widget refuses to
 // run on localhost.
 const TEST_KEY = '1x00000000000000000000AA';
+// Cloudflare Pages sets CF_PAGES on its builds: a test build there would ship a key the live server refuses.
+if (import.meta.env.PUBLIC_TURNSTILE_ALLOW_TEST_KEY === 'true' && process.env.CF_PAGES === '1') throw new Error('PUBLIC_TURNSTILE_ALLOW_TEST_KEY is for local test builds only: remove it from this Cloudflare Pages build.');
 const siteKey = import.meta.env.PUBLIC_TURNSTILE_ALLOW_TEST_KEY === 'true' ? TEST_KEY : import.meta.env.PUBLIC_TURNSTILE_SITE_KEY || (import.meta.env.DEV ? TEST_KEY : undefined);
 // A production build without a real site key would ship Cloudflare's always-pass test key and every registration would fail.
 if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production builds (or PUBLIC_TURNSTILE_ALLOW_TEST_KEY=true for local test builds).');
@@ -112,18 +114,20 @@ if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production buil
 	#rsvp-tours, #rsvp-optins { display: grid; gap: 0.35rem; }
 	#rsvp-polls { display: grid; gap: 1rem; }
 	#rsvp-polls :global(.rank) { list-style: decimal; padding-left: 1.75rem; margin: 0; display: grid; gap: 0.35rem; }
-	#rsvp-polls :global(.rank li) { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.4rem 0.6rem; border: 1px solid var(--sl-color-gray-4, #c7cad1); border-radius: 0.3rem; background: var(--sl-color-bg, #fff); }
+	#rsvp-polls :global(.rank li) { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.4rem 0.6rem; border: 1px solid var(--sl-color-gray-4, #c7cad1); border-radius: 0.3rem; background: var(--sl-color-bg, Canvas); color: var(--sl-color-text, CanvasText); }
 	#rsvp-polls :global(.rank li[draggable='true']) { cursor: grab; }
 	#rsvp-polls :global(.rank li.dragging) { opacity: 0.5; }
-	#rsvp-polls :global(.rank li.bar) { list-style: none; margin-left: -1.75rem; border: 0; border-top: 3px dashed #b3261e; border-radius: 0; font-weight: 700; color: #b3261e; background: transparent; }
+	#rsvp-polls :global(.rank li.bar) { list-style: none; margin-left: -1.75rem; border: 0; border-top: 3px dashed #b3261e; border-top-color: light-dark(#b3261e, #ff8a80); border-radius: 0; font-weight: 700; color: #b3261e; color: light-dark(#b3261e, #ff8a80); background: transparent; }
+	/* Starlight's dark theme may not set color-scheme, so light-dark() alone could keep the light red. */
+	:global([data-theme='dark']) #rsvp-polls :global(.rank li.bar) { color: #ff8a80; border-top-color: #ff8a80; }
 	#rsvp-polls :global(.moves) { display: flex; gap: 0.25rem; flex-shrink: 0; }
 	#rsvp-polls :global(.moves button) { min-width: 2.25rem; min-height: 2.25rem; border: 1px solid var(--sl-color-gray-3, #8b8f98); border-radius: 0.3rem; background: transparent; color: inherit; cursor: pointer; }
 	#rsvp-polls :global(.moves button:disabled) { opacity: 0.35; cursor: default; }
 	input[type='text'], input[type='email'], textarea {
-		padding: 0.5rem; border: 1px solid var(--sl-color-gray-3, #8b8f98); border-radius: 0.3rem; background: var(--sl-color-bg, #fff); color: var(--sl-color-text, inherit); font: inherit;
+		padding: 0.5rem; border: 1px solid var(--sl-color-gray-3, #8b8f98); border-radius: 0.3rem; background: var(--sl-color-bg, Canvas); color: var(--sl-color-text, CanvasText); font: inherit;
 	}
 	fieldset:disabled { opacity: 0.6; }
-	.help { font-size: var(--sl-text-sm, 0.875rem); color: var(--sl-color-gray-2, #4b5563); margin: 0; }
+	.help { font-size: var(--sl-text-sm, 0.875rem); color: var(--sl-color-gray-2, light-dark(#4b5563, #b0b5bd)); margin: 0; }
 	.hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
 	.submit { justify-self: start; background: var(--sl-color-accent-high, #0069a0); color: var(--sl-color-black, #fff); border: 0; border-radius: 999px; padding: 0.7rem 1.6rem; font-weight: 700; font-size: var(--sl-text-base, 1rem); cursor: pointer; }
 	:global([data-theme='light']) .submit { background: #0069a0; color: #fff; }

@@ -13,6 +13,7 @@ git submodule add https://github.com/andeyePro/eventsandeye.git eventsandeye
 cp -R eventsandeye/examples/functions/. functions/
 cp eventsandeye/examples/wrangler.toml wrangler.toml
 mkdir -p workers/cron seed && cp eventsandeye/examples/cron/wrangler.toml workers/cron/
+cp eventsandeye/examples/seed.example.sql seed/my-event.sql   # optional: or create the event on the admin page
 npm install
 ```
 
@@ -26,6 +27,6 @@ npm install
 - `wrangler.toml` and `workers/cron/wrangler.toml`: `name` (the site's is your Cloudflare Pages project's name), the settings and the database id (README steps 4, 5 and 10).
 - `.env.production`: one line, `PUBLIC_TURNSTILE_SITE_KEY=<site key>` (README step 6), committed: the key is public. Until it exists, the live build fails on purpose.
 
-Then follow the README's set-up from step 4. To try it on your computer (README, "Develop and test locally"): `npm run db:migrate:local`, then either `npm run db:seed:local` with a seed in `seed/my-event.sql` or create the event on the admin page, then `npm run build:test` (which uses Cloudflare's test Turnstile key) and `npm run pages:dev`.
+Then follow the README's set-up from step 4. To try it on your computer (README, "Develop and test locally"): `npm run db:migrate:local`, then either `npm run db:seed:local` (after changing `seed/my-event.sql` to describe your event, with `page_path` `/event/`) or create the event on the admin page, then `npm run build:test` (which uses Cloudflare's test Turnstile key) and `npm run pages:dev`.
 
 Events&I's own tests run against this site: `sh scripts/starter-e2e.sh` in the Events&I repository.
