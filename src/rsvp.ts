@@ -737,7 +737,8 @@ const CLAIM_MS = 4 * 60_000;
 /** A message whose pieces fail this many times running is marked failed (the admin page can resume it), so it cannot
  * hold up the others. Counted when a piece is claimed, so a run killed outright counts too. */
 const MAX_ATTEMPTS = 5;
-const PENDING = 'pending', REFUSED = 'refused';
+/** Delivery records of a piece written but not yet sent: plain copies, and copies with joining instructions. */
+const PENDING = 'pending', PENDING_FULL = 'pending-full', REFUSED = 'refused';
 
 /**
  * Sends the next piece of a message. The first piece goes when the message is sent or falls due; the cron Worker sends
@@ -771,7 +772,9 @@ export async function deliverMessage(env: Env, id: string) {
 		}
 		const rows = (await env.DB.prepare('SELECT registration_id AS r, provider_id AS p FROM deliveries WHERE message_id = ?').bind(id).all<{ r: string; p: string | null }>()).results;
 		const handled = new Set(rows.map((x) => x.r));
-		const pending = rows.filter((x) => x.p === PENDING).map((x) => x.r).sort();
+		// A piece written down before, retried as it was recorded: who was in it, and whether they get the instructions.
+		const pendingPlain = rows.filter((x) => x.p === PENDING).map((x) => x.r).sort();
+		const pendingFull = rows.filter((x) => x.p === PENDING_FULL).map((x) => x.r).sort();
 		// Still registered and confirmed; anyone who has cancelled since is simply left out (with any pending row).
 		const regs = new Map((await confirmedRegs(env, claim.event_id)).map((r) => [r.id, r]));
 		// "Include the joining instructions": the version chosen when the message was written, even if a newer one is saved
@@ -782,51 +785,65 @@ export async function deliverMessage(env: Env, id: string) {
 		const sessions = await getSessions(env, claim.event_id);
 		const full = (r: RegistrationRow) => !!instructions && !waitingForPlace(r, sessions);
 		const todo = ids.filter((x) => !handled.has(x) && regs.has(x)).map((x) => regs.get(x)!);
-		if (pending.length) piece = pending.filter((x) => regs.has(x)).map((x) => regs.get(x)!);
+		let plainIds: string[], fullIds: string[];
+		if (pendingPlain.length || pendingFull.length) [plainIds, fullIds] = [pendingPlain, pendingFull];
 		else {
 			const size = claim.piece_size ?? Infinity;
-			const plain = todo.filter((r) => !full(r));
-			piece = (plain.length ? plain.slice(0, Math.min(MESSAGE_PLAIN_CHUNK, size)) : todo.slice(0, Math.min(instructionsChunk(env), size))).sort((x, y) => x.id.localeCompare(y.id));
-			if (piece.length) await env.DB.batch(piece.map((r) => env.DB.prepare('INSERT INTO deliveries (registration_id, kind, message_id, instructions_version, sent_at, provider_id) VALUES (?,?,?,?,?,?)')
-				.bind(r.id, 'message', id, claim.marks_instructions_version, nowIso(), PENDING)));
+			const plainTodo = todo.filter((r) => !full(r));
+			const chosen = (plainTodo.length ? plainTodo.slice(0, Math.min(MESSAGE_PLAIN_CHUNK, size)) : todo.slice(0, Math.min(instructionsChunk(env), size))).map((r) => r.id).sort();
+			[plainIds, fullIds] = plainTodo.length ? [chosen, []] : [[], chosen];
+			// One statement whatever the piece's size (D1 allows 100 bound values a statement).
+			if (chosen.length) await env.DB.prepare(`INSERT INTO deliveries (registration_id, kind, message_id, instructions_version, sent_at, provider_id)
+				SELECT value, 'message', ?, ?, ?, ? FROM json_each(?)`).bind(id, claim.marks_instructions_version, nowIso(), plainIds.length ? PENDING : PENDING_FULL, JSON.stringify(chosen)).run();
 		}
+		piece = [...plainIds, ...fullIds].filter((x) => regs.has(x)).map((x) => regs.get(x)!);
 		const at = Date.parse(claim.started_at ?? now);
-		const done = (r: RegistrationRow, providerId: string) => [
-			env.DB.prepare('UPDATE deliveries SET provider_id = ?, sent_at = ? WHERE message_id = ? AND registration_id = ? AND provider_id = ?').bind(providerId, nowIso(), id, r.id, PENDING),
-			...(claim.marks_instructions_version ? [env.DB.prepare('UPDATE registrations SET instructions_version = MAX(instructions_version, ?) WHERE id = ?').bind(claim.marks_instructions_version, r.id)] : []),
-		];
-		const plain = piece.filter((r) => !full(r)), withInstr = piece.filter(full);
+		// Recorded as sent in two statements however many people: the delivery records and their instructions version.
+		const done = (people: string[]) => env.DB.batch([
+			env.DB.prepare(`UPDATE deliveries SET provider_id = 'sent', sent_at = ? WHERE message_id = ? AND provider_id IN ('${PENDING}', '${PENDING_FULL}') AND registration_id IN (SELECT value FROM json_each(?))`)
+				.bind(nowIso(), id, JSON.stringify(people)),
+			...(claim.marks_instructions_version ? [env.DB.prepare('UPDATE registrations SET instructions_version = MAX(instructions_version, ?) WHERE id IN (SELECT value FROM json_each(?))')
+				.bind(claim.marks_instructions_version, JSON.stringify(people))] : []),
+		]);
+		const plain = piece.filter((r) => plainIds.includes(r.id)), withInstr = piece.filter((r) => fullIds.includes(r.id));
 		if (plain.length) {
 			const emails: OutgoingEmail[] = [];
 			for (const r of plain) emails.push(messageEmail(brand(env), r, claim, await manageUrl(env, r.id, at)));
-			const pids = await sendBatch(env, emails, `msg-${id}-${(await sha256(plain.map((r) => r.id).join(','))).slice(0, 24)}`);
-			await env.DB.batch(plain.flatMap((r, i) => done(r, pids[i] ?? 'sent')));
+			// The key is the piece as recorded, even if someone in it has cancelled since: if Resend took it, a retry for
+			// fewer people under the same key sends nothing again (see email.ts).
+			await sendBatch(env, emails, `msg-${id}-${(await sha256(plainIds.join(','))).slice(0, 24)}`);
+			await done(plain.map((r) => r.id));
 		}
 		if (withInstr.length) {
 			const ev = await getEvent(env, claim.event_id);
 			for (const r of withInstr) {
 				await sendInstructions(env, ev, r, sessions, { intro: { html: mdToHtml(claim.body_md), text: mdToText(claim.body_md) }, subject: claim.subject, kind: 'message_instructions',
 					idempotencyKey: `msg-${id}-${r.id}`, instructions: instructions!, at });
-				await env.DB.batch(done(r, 'sent'));
+				await done([r.id]);
 			}
 		}
 		// Pending rows of people who have since cancelled went with their registrations.
 		const left = todo.filter((r) => !piece.includes(r)).length;
+		// Pieces stay small until the refused address they are narrowing down to has been set aside (then full size again).
 		if (left > 0) await release(`, error = NULL, attempts = 0`);
 		else {
 			await release(`, status = 'sent', sent_at = ?, error = NULL, attempts = 0,
-				recipients_count = (SELECT COUNT(DISTINCT registration_id) FROM deliveries WHERE message_id = ? AND provider_id NOT IN ('${PENDING}', '${REFUSED}'))`, nowIso(), id);
+				recipients_count = (SELECT COUNT(DISTINCT registration_id) FROM deliveries WHERE message_id = ? AND provider_id NOT IN ('${PENDING}', '${PENDING_FULL}', '${REFUSED}'))`, nowIso(), id);
 		}
 		return { sent: piece.length, left };
 	} catch (e) {
 		if (/Resend error 422/.test(String(e)) && piece.length) {
 			// Refused, so nothing in the piece went: try smaller pieces, and at one person, record them as refused.
 			if (piece.length > 1) {
-				await env.DB.prepare('DELETE FROM deliveries WHERE message_id = ? AND provider_id = ?').bind(id, PENDING).run();
+				await env.DB.prepare(`DELETE FROM deliveries WHERE message_id = ? AND provider_id IN ('${PENDING}', '${PENDING_FULL}')`).bind(id).run();
 				await release(`, piece_size = ?, attempts = attempts - 1, error = ?`, Math.max(1, Math.ceil(piece.length / 10)), String(e).slice(0, 500));
 			} else {
-				await env.DB.prepare('UPDATE deliveries SET provider_id = ? WHERE message_id = ? AND provider_id = ?').bind(REFUSED, id, PENDING).run();
-				await release(`, attempts = attempts - 1, error = ?`, `${String(e).slice(0, 400)} (one address refused; the rest carry on)`);
+				await env.DB.prepare(`UPDATE deliveries SET provider_id = ? WHERE message_id = ? AND provider_id IN ('${PENDING}', '${PENDING_FULL}')`).bind(REFUSED, id).run();
+				// Refused by itself before anyone has had it, twice: the refusal is about the message (its sender, say), not
+				// an address, so it stops here with its error rather than setting everyone aside.
+				const tally = await env.DB.prepare(`SELECT SUM(provider_id = '${REFUSED}') AS refused, SUM(provider_id NOT IN ('${REFUSED}', '${PENDING}', '${PENDING_FULL}')) AS sent FROM deliveries WHERE message_id = ?`).bind(id).first<{ refused: number; sent: number }>();
+				if ((tally?.refused ?? 0) >= 2 && !(tally?.sent ?? 0)) await release(`, status = 'failed', error = ?`, `${String(e).slice(0, 400)}: refused for everyone tried, so probably not about an address (check EMAIL_FROM and the message)`);
+				else await release(`, attempts = attempts - 1, piece_size = NULL, error = ?`, `${String(e).slice(0, 400)} (one address refused; the rest carry on)`);
 			}
 			return { sent: 0, left: 1 };
 		}

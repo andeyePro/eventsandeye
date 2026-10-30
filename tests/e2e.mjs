@@ -880,6 +880,13 @@ try {
 		const got = []; for (const p of people) got.push((await mailsTo(p)).filter((m) => /Bulk refused/.test(m.subject)).length);
 		check('…in smaller pieces everyone else gets exactly one copy, and the refused address is left out', refused.status === 'sent' && refused.recipients_count === 12 && got.every((n) => n === 1), JSON.stringify([refused.status, refused.recipients_count, got]));
 		sql(`DELETE FROM registrations WHERE id = 'e2e-fail-send-reg'`);
+		// Refused for everyone it is tried on (a wrong sender, say): it stops with its error rather than setting everyone aside.
+		for (const n of [1, 2]) sql(`INSERT INTO registrations (id, event_id, name, email, attendance, status, consent_at, created_at, updated_at, confirmed_at) VALUES ('e2e-refused-${n}', 'e2e-weekend', 'R', 'fail-send-${n}@example.org', 'remote', 'confirmed', '${at(-100)}', '${at(-100)}', '${at(-100)}', '${at(-100)}')`);
+		r = await req('POST', '/api/admin/messages', { event: 'e2e-weekend', subject: 'All refused', body_md: 'x', audience: {} }, ADMIN);
+		for (let i = 0; i < 4; i++) await cron(Date.now() + i * 1000);
+		const allRefused = (await req('GET', `/api/admin/messages?event=e2e-weekend`, undefined, ADMIN)).data.messages.find((x) => x.subject === 'All refused');
+		check('a message refused for everyone tried is marked failed with its error, not "sent"', allRefused.status === 'failed' && /refused for everyone tried/.test(allRefused.error), JSON.stringify([allRefused.status, allRefused.error]));
+		sql(`DELETE FROM registrations WHERE id IN ('e2e-refused-1', 'e2e-refused-2')`);
 		// An outage: the message stops after five tries, others still go, and it can be resumed.
 		fakeReg('e2e-fail-500-reg', 'fail-500@example.org');
 		r = await req('POST', '/api/admin/messages', { event: B, subject: 'Bulk doomed', body_md: 'x', audience: {} }, ADMIN);
