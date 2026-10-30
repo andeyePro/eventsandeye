@@ -87,7 +87,7 @@ These steps assume your site's repository is checked out locally and Events&I go
    npx wrangler d1 create events --jurisdiction eu   # omit --jurisdiction to let Cloudflare choose
    ```
 
-   Put the printed `database_id` into `wrangler.toml`. Copy [`examples/seed.example.sql`](examples/seed.example.sql) to, say, `seed/my-event.sql`. It describes AMYBO's event of 13 November 2026 ([amy.bo/event](https://amy.bo/event)) as a worked example: change it to describe yours (its comments explain each part), then:
+   Put the printed `database_id` into `wrangler.toml`. You can create your event on the admin page once it is running (Events → New event), or seed it: copy [`examples/seed.example.sql`](examples/seed.example.sql) to, say, `seed/my-event.sql`. It describes AMYBO's event of 13 November 2026 ([amy.bo/event](https://amy.bo/event)) as a worked example: change it to describe yours (its comments explain each part), then:
 
    ```sh
    npx wrangler d1 migrations apply events --remote
@@ -135,6 +135,8 @@ Preview deployments get the same Functions and database binding as production, s
 ## Run an event
 
 Everything day to day happens on the admin page, `/admin/rsvps/`:
+
+- **Events:** switch between events, edit one (title, venue, dates, time zone, the form's wording), create a new one, or clone this one to a new date (programme, latest joining instructions and polls' options; never people, hosts or answers). Sessions can be added there too, and deleted while nobody has booked them. None of this emails anyone.
 
 - **Numbers at a glance:** in-person places, waiting lists, remote attendees, each tour and opt-in session, and unconfirmed registrations.
 - **Settings:** the in-person maximum, registration deadline, travel time, and optionally a minimum gap between attendee lists to each session host (changes in between are gathered into the next list, sent by the cron Worker; within a day of a session every change goes at once). Raising a maximum does not move anyone off a waiting list by itself, and a new travel time emails nobody (calendars catch up with each person's next email).
@@ -213,7 +215,6 @@ cp -Rn eventsandeye/examples/functions/. functions/
 [Open an issue](https://github.com/andeyePro/eventsandeye/issues) if you need any of these, or something else:
 
 - **Any programme shape:** parallel sessions and tracks as well as sequential ones, several optional choice groups, per-session registration for multi-day events.
-- **An event set-up front end:** create events, sessions and joining instructions in the admin page instead of SQL.
 - **Framework-neutral components:** plain HTML and JavaScript versions of the form, confirm and manage panels.
 - **Events&I Plus:** a fully hosted version, so you do not need your own Cloudflare account.
 

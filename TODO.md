@@ -5,7 +5,6 @@
 - [ ] **Site kit v1 for events.andeye.com:** hero, eyebrow, padding, footer and the pink accent (#ff8fab, ruled 2026-10-26) match the kit; og.png is still the old green; still to copy from the private andeye.com repo (requested from andeye_com in brain2 coordination, 2026-10-26): the master `andeye-eye.js` (sha256 must match), `andeyeEye.astro`, the icon set and head tags. Then set `site_kit: 1` on the Events&I card. Discussions must be enabled on the repo for the footer link to work.
 - [ ] **Leave early release** after the first events: collect feedback from attendees, hosts and organisers.
 - [ ] **Generic programmes:** parallel sessions and tracks as well as sequential ones; several choice groups (not just `tour`); per-session attendance for multi-day events; calendar entries per chosen session when attendance is not "the whole day".
-- [ ] **Event set-up front end:** create and edit events, sessions, capacities and joining instructions from the admin page; clone an event.
 - [ ] **Calendar delivery:** test the invitation rendering in Gmail, Outlook (web and desktop), Apple Mail and Thunderbird with real Resend sends; consider a `text/calendar` alternative MIME part if Resend adds support.
 - [ ] **Events&I Plus:** fully hosted multi-tenant version (per-organisation Access, billing, custom domains, organisation branding in emails).
 - [ ] **Waiting lists:** optional auto-promotion with an expiry window, as a per-event setting (off by default).

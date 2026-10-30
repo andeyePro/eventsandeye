@@ -753,6 +753,43 @@ try {
 		await req('POST', '/api/admin/sessions', { event: EVENT, sessions: [{ id: AM.id, host_email: '' }] }, ADMIN);
 	}
 
+	console.log('\nEvent set-up');
+	{
+		const EV = '/api/admin/events';
+		const before = (await outbox()).length;
+		const start = new Date(Date.now() + 60 * 86400_000);
+		const at = (h) => new Date(start.getTime() + h * 3600_000).toISOString();
+		const base = { action: 'create', id: 'e2e-new-event', title: 'New Event, Leeds', timezone: 'Europe/London', starts_at: at(0), ends_at: at(6), deadline: at(-48), in_person_max: 12, page_path: '/events/e2e-new-event/', location: 'Leeds' };
+		check('an event id must be a slug', (await req('POST', EV, { ...base, id: 'Bad Id!' }, ADMIN)).status === 400);
+		check('an unknown time zone is refused', (await req('POST', EV, { ...base, timezone: 'Mars/Olympus' }, ADMIN)).status === 400);
+		check('an event must end after it starts', (await req('POST', EV, { ...base, ends_at: at(-1) }, ADMIN)).status === 400);
+		r = await req('POST', EV, base, ADMIN);
+		check('an organiser creates an event', r.data.ok && r.data.id === 'e2e-new-event', JSON.stringify(r.data));
+		check('the same id twice → 409', (await req('POST', EV, base, ADMIN)).status === 409);
+		check('the event list includes it', (await req('GET', EV, undefined, ADMIN)).data.events.some((x) => x.id === 'e2e-new-event'));
+		r = await req('POST', EV, { action: 'add_session', event: 'e2e-new-event', label: 'Talks', kind: 'talk', mode: 'hybrid', starts_at: at(1), ends_at: at(3) }, ADMIN);
+		const S1 = r.data.id;
+		await req('POST', EV, { action: 'add_session', event: 'e2e-new-event', label: 'Dinner', kind: 'social', mode: 'in_person', optin: true, capacity: 8, starts_at: at(4), ends_at: at(6) }, ADMIN);
+		let sum = (await req('GET', `/api/admin/summary?event=e2e-new-event`, undefined, ADMIN)).data;
+		check('sessions added: a core talk and an opt-in dinner with a capacity', r.data.ok && sum.sessions.length === 2 && sum.sessions.find((x) => x.label === 'Dinner').optin === 1 && sum.sessions.find((x) => x.label === 'Dinner').capacity === 8, JSON.stringify(sum.sessions));
+		r = await req('POST', EV, { action: 'update', event: 'e2e-new-event', title: 'New Event, York', remote_label: 'Online' }, ADMIN);
+		sum = (await req('GET', `/api/admin/summary?event=e2e-new-event`, undefined, ADMIN)).data;
+		check('editing an event changes only what was sent', r.data.ok && sum.event.title === 'New Event, York' && sum.event.remote_label === 'Online' && sum.event.in_person_max === 12 && sum.event.location === 'Leeds', JSON.stringify(sum.event));
+		check('an unused session can be deleted', (await req('POST', EV, { action: 'delete_session', session: S1 }, ADMIN)).data.ok);
+		check('a session people have booked cannot be deleted → 409', (await req('POST', EV, { action: 'delete_session', session: TOUR2 }, ADMIN)).status === 409);
+		const newStart = new Date(Date.parse(seeded.event.starts_at) + 364 * 86400_000).toISOString();
+		r = await req('POST', EV, { action: 'clone', event: EVENT, id: 'e2e-clone', title: 'Next Year', starts_at: newStart, page_path: '/events/e2e-clone/' }, ADMIN);
+		const cl = (await req('GET', `/api/admin/summary?event=e2e-clone`, undefined, ADMIN)).data;
+		const orig = (await req('GET', `/api/admin/summary?event=${EVENT}`, undefined, ADMIN)).data;
+		const shift = Date.parse(newStart) - Date.parse(orig.event.starts_at);
+		check('cloning copies the programme, moved to the new start, without hosts, links or people', r.data.ok && cl.event.title === 'Next Year' && cl.sessions.length === orig.sessions.length
+			&& cl.sessions.every((x, i) => Date.parse(x.starts_at) - Date.parse(orig.sessions[i].starts_at) === shift && !x.host_email && !x.online_url) && cl.registrations.length === 0, JSON.stringify(cl.sessions.map((x) => x.starts_at)));
+		const clInstr = (await req('GET', `/api/admin/instructions?event=e2e-clone`, undefined, ADMIN)).data.versions;
+		const clPolls = (await req('GET', `/api/admin/polls?event=e2e-clone`, undefined, ADMIN)).data.polls;
+		check('…with the latest joining instructions as version 1, and the polls\' options but no answers or suggestions', clInstr.length === 1 && clInstr[0].version === 1 && clPolls.length >= 1 && clPolls.every((p) => p.tally.voters === 0 && p.options.every((o) => o.status === 'active' && !o.suggested_by)), JSON.stringify(clPolls.map((p) => p.options.length)));
+		check('setting up events emailed nobody', (await outbox()).length === before);
+	}
+
 	console.log('\nAdmin removal');
 	const gina = 'gina@example.org', hal = 'hal@example.org';
 	await registerAndConfirm({ name: 'Gina', email: gina, attendance: 'remote' });

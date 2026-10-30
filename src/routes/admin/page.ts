@@ -55,6 +55,58 @@ const HTML = /* html */ `<!doctype html>
 <main>
 	<section aria-labelledby="h-summary"><h2 id="h-summary">Summary</h2><div class="stats" id="stats"></div></section>
 
+	<section aria-labelledby="h-events" id="events">
+		<h2 id="h-events">Events</h2>
+		<label for="ev-pick">Event shown on this page</label><select id="ev-pick"></select>
+		<p class="small">Setting up and editing events emails nobody. Calendars already sent pick up a new title or venue with each person's next email.</p>
+		<details><summary>Edit this event</summary>
+			<form id="ev-form">
+				<div class="row">
+					<div><label for="e-title">Title</label><input id="e-title" type="text" required maxlength="200" /></div>
+					<div><label for="e-loc">Venue address</label><input id="e-loc" type="text" maxlength="300" /></div>
+					<div><label for="e-page">Event page (path on your site)</label><input id="e-page" type="text" required maxlength="200" placeholder="/events/2027-03-12-london/" /></div>
+					<div><label for="e-tz">Time zone</label><input id="e-tz" type="text" required placeholder="Europe/London" /></div>
+					<div><label for="e-start">Starts (<span class="tzl">UK time</span>)</label><input id="e-start" type="datetime-local" required /></div>
+					<div><label for="e-end">Ends (<span class="tzl">UK time</span>)</label><input id="e-end" type="datetime-local" required /></div>
+					<div><label for="e-q">Extra question on the form (optional)</label><input id="e-q" type="text" maxlength="300" /></div>
+					<div><label for="e-lip">Wording for attending in person (optional)</label><input id="e-lip" type="text" maxlength="120" placeholder="In person" /></div>
+					<div><label for="e-lrem">Wording for attending remotely (optional)</label><input id="e-lrem" type="text" maxlength="120" placeholder="Remotely (online sessions only)" /></div>
+					<div><label for="e-ltour">Heading for the tour choice (optional)</label><input id="e-ltour" type="text" maxlength="120" placeholder="Optional tour (in person only)" /></div>
+				</div>
+				<button type="submit">Save event</button>
+			</form>
+		</details>
+		<details><summary>Clone this event</summary>
+			<form id="clone-form">
+				<p class="small">Copies the programme (times moved to the new start, without hosts or online links), the latest joining instructions and the polls' options. Never people or answers.</p>
+				<div class="row">
+					<div><label for="c-id">New event id</label><input id="c-id" type="text" required pattern="[a-z0-9][a-z0-9-]{2,59}" placeholder="2027-03-12-london" /></div>
+					<div><label for="c-title">New title</label><input id="c-title" type="text" maxlength="200" /></div>
+					<div><label for="c-start">New start (<span class="tzl">UK time</span>)</label><input id="c-start" type="datetime-local" required /></div>
+					<div><label for="c-page">New event page</label><input id="c-page" type="text" maxlength="200" /></div>
+				</div>
+				<button type="submit">Clone</button>
+			</form>
+		</details>
+		<details><summary>New event</summary>
+			<form id="new-form">
+				<div class="row">
+					<div><label for="n-id">Event id</label><input id="n-id" type="text" required pattern="[a-z0-9][a-z0-9-]{2,59}" placeholder="2027-03-12-london" /></div>
+					<div><label for="n-title">Title</label><input id="n-title" type="text" required maxlength="200" /></div>
+					<div><label for="n-tz">Time zone</label><input id="n-tz" type="text" required value="Europe/London" /></div>
+					<div><label for="n-start">Starts (in that time zone)</label><input id="n-start" type="datetime-local" required /></div>
+					<div><label for="n-end">Ends</label><input id="n-end" type="datetime-local" required /></div>
+					<div><label for="n-deadline">Registration closes</label><input id="n-deadline" type="datetime-local" required /></div>
+					<div><label for="n-max">In-person maximum</label><input id="n-max" type="number" min="0" required /></div>
+					<div><label for="n-page">Event page (path on your site)</label><input id="n-page" type="text" required maxlength="200" /></div>
+					<div><label for="n-loc">Venue address</label><input id="n-loc" type="text" maxlength="300" /></div>
+				</div>
+				<button type="submit">Create event</button>
+				<p class="small">Then add its sessions and joining instructions below.</p>
+			</form>
+		</details>
+	</section>
+
 	<section aria-labelledby="h-settings">
 		<h2 id="h-settings">Settings</h2>
 		<form id="settings-form">
@@ -78,6 +130,22 @@ const HTML = /* html */ `<!doctype html>
 			<button type="button" class="secondary" id="sess-quiet">Save without emailing anyone</button>
 			<p class="small">"Save without emailing anyone" changes calendar entries only when each person is next sent their joining instructions (for example a message with "Include the latest joining instructions" ticked), so several changes reach them in one email.</p>
 		</form>
+		<details><summary>Add a session</summary>
+			<form id="addsess-form">
+				<div class="row">
+					<div><label for="a-label">Name</label><input id="a-label" type="text" required maxlength="120" /></div>
+					<div><label for="a-kind">Kind</label><select id="a-kind"><option value="talk">Talk</option><option value="tour">Tour</option><option value="social">Social</option><option value="other">Other</option></select></div>
+					<div><label for="a-mode">Where</label><select id="a-mode"><option value="in_person">In person</option><option value="online">Online</option><option value="hybrid">Both</option></select></div>
+					<div><label for="a-type">Who comes</label><select id="a-type"><option value="core">Everyone (part of the day)</option><option value="tour">A tour: each person picks at most one</option><option value="optin">Opt-in, like a dinner</option></select></div>
+					<div><label for="a-start">Starts (<span class="tzl">UK time</span>)</label><input id="a-start" type="datetime-local" required /></div>
+					<div><label for="a-end">Ends (<span class="tzl">UK time</span>)</label><input id="a-end" type="datetime-local" required /></div>
+					<div><label for="a-cap">Capacity (blank = unlimited)</label><input id="a-cap" type="number" min="0" /></div>
+					<div><label for="a-loc">Location (blank = event venue)</label><input id="a-loc" type="text" maxlength="300" /></div>
+				</div>
+				<button type="submit">Add session</button>
+				<p class="small">Adding a session emails nobody. People already registered see it in their calendars with their next email.</p>
+			</form>
+		</details>
 	</section>
 
 	<section aria-labelledby="h-regs">
@@ -163,10 +231,10 @@ async function api(path, method = 'GET', body) {
 // datetime-local values are wall-clock time in the event's own zone (TZ, set from the event); convert via that zone's offset at that moment.
 let TZ = 'Europe/London';
 const tzLabel = () => TZ === 'Europe/London' ? 'UK time' : TZ.split('/').pop().replace(/_/g, ' ') + ' time';
-function ukLocalToIso(v) {
+function ukLocalToIso(v, tz = TZ) {
 	if (!v) return null;
 	const guess = new Date(v + 'Z');
-	const uk = new Date(guess.toLocaleString('en-US', { timeZone: TZ }));
+	const uk = new Date(guess.toLocaleString('en-US', { timeZone: tz }));
 	const utc = new Date(guess.toLocaleString('en-US', { timeZone: 'UTC' }));
 	return new Date(guess.getTime() - (uk.getTime() - utc.getTime())).toISOString();
 }
@@ -198,6 +266,12 @@ async function load() {
 	eventId = s.event.id;
 	TZ = s.event.timezone || 'Europe/London';
 	document.querySelectorAll('.tzl').forEach((x) => { x.textContent = tzLabel(); });
+	const evs = await api('/api/admin/events');
+	$('ev-pick').innerHTML = evs.events.map((x) => '<option value="' + esc(x.id) + '"' + (x.id === eventId ? ' selected' : '') + '>' + esc(x.title) + ' – ' + esc(uk(x.starts_at)) + '</option>').join('');
+	const ev = s.event;
+	$('e-title').value = ev.title; $('e-loc').value = ev.location || ''; $('e-page').value = ev.page_path; $('e-tz').value = ev.timezone;
+	$('e-start').value = isoToUkLocal(ev.starts_at); $('e-end').value = isoToUkLocal(ev.ends_at); $('e-q').value = ev.extra_question || '';
+	$('e-lip').value = ev.in_person_label || ''; $('e-lrem').value = ev.remote_label || ''; $('e-ltour').value = ev.tour_legend || '';
 	const c = s.capacity;
 	sessions = s.sessions; tours = s.tours; latestVersion = s.latest_instructions_version;
 	$('ev-title').textContent = s.event.title + ' – ' + uk(s.event.starts_at);
@@ -228,7 +302,7 @@ async function load() {
 			+ f('hemail', 'Host email (gets the list)', 'email', x.host_email ?? '')
 			+ f('cap', 'Capacity (blank = unlimited)', 'number', x.capacity ?? '', 'min="0"')
 			+ (x.choice_group || x.optin ? f('dl', 'Booking closes (blank = at start)', 'datetime-local', isoToUkLocal(x.booking_deadline)) : '')
-			+ '</div></fieldset>';
+			+ '</div><button type="button" class="danger" data-delsess="' + id + '" data-label="' + esc(x.label) + '">Delete session</button></fieldset>';
 	}).join('');
 
 	const optSel = $('m-optin');
@@ -372,6 +446,48 @@ $('polls-box').addEventListener('click', async (e) => {
 		} else return;
 		loadPolls();
 	} catch (err) { toast(err.message); }
+});
+const goTo = (id) => { location.search = '?event=' + encodeURIComponent(id); };
+$('ev-pick').addEventListener('change', (e) => goTo(e.target.value));
+$('ev-form').addEventListener('submit', async (e) => {
+	e.preventDefault();
+	try {
+		const tz = $('e-tz').value.trim();
+		await api('/api/admin/events', 'POST', { action: 'update', event: eventId, title: $('e-title').value, location: $('e-loc').value, page_path: $('e-page').value, timezone: tz,
+			starts_at: ukLocalToIso($('e-start').value, tz), ends_at: ukLocalToIso($('e-end').value, tz), extra_question: $('e-q').value, in_person_label: $('e-lip').value, remote_label: $('e-lrem').value, tour_legend: $('e-ltour').value });
+		toast('Event saved. Nobody has been emailed.'); load();
+	} catch (err) { toast(err.message); }
+});
+$('clone-form').addEventListener('submit', async (e) => {
+	e.preventDefault();
+	try {
+		const d = await api('/api/admin/events', 'POST', { action: 'clone', event: eventId, id: $('c-id').value, title: $('c-title').value, starts_at: ukLocalToIso($('c-start').value), page_path: $('c-page').value });
+		toast('Cloned.'); goTo(d.id);
+	} catch (err) { toast(err.message); }
+});
+$('new-form').addEventListener('submit', async (e) => {
+	e.preventDefault();
+	const tz = $('n-tz').value.trim();
+	try {
+		const d = await api('/api/admin/events', 'POST', { action: 'create', id: $('n-id').value, title: $('n-title').value, timezone: tz, starts_at: ukLocalToIso($('n-start').value, tz), ends_at: ukLocalToIso($('n-end').value, tz),
+			deadline: ukLocalToIso($('n-deadline').value, tz), in_person_max: Number($('n-max').value), page_path: $('n-page').value, location: $('n-loc').value });
+		toast('Event created.'); goTo(d.id);
+	} catch (err) { toast(err.message); }
+});
+$('addsess-form').addEventListener('submit', async (e) => {
+	e.preventDefault();
+	const type = $('a-type').value;
+	try {
+		await api('/api/admin/events', 'POST', { action: 'add_session', event: eventId, label: $('a-label').value, kind: $('a-kind').value, mode: $('a-mode').value, choice_group: type === 'tour' ? 'tour' : null, optin: type === 'optin',
+			starts_at: ukLocalToIso($('a-start').value), ends_at: ukLocalToIso($('a-end').value), capacity: $('a-cap').value === '' ? null : Number($('a-cap').value), location: $('a-loc').value });
+		toast('Session added. Nobody has been emailed.'); e.target.reset(); load();
+	} catch (err) { toast(err.message); }
+});
+$('sessions-box').addEventListener('click', async (e) => {
+	const b = e.target.closest('button[data-delsess]');
+	if (!b) return;
+	if (!confirm('Delete ' + b.dataset.label + '?')) return;
+	try { await api('/api/admin/events', 'POST', { action: 'delete_session', session: b.dataset.delsess }); toast('Session deleted.'); load(); } catch (err) { toast(err.message); }
 });
 $('instr-form').addEventListener('submit', async (e) => {
 	e.preventDefault();

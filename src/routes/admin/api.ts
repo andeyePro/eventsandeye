@@ -2,6 +2,7 @@
 import { handle, readJson } from '../../http';
 import { mdToHtml } from '../../markdown';
 import { adminPollAction, adminPolls } from '../../polls';
+import { eventAction, listEvents } from '../../setup';
 import {
 	addInstructions, adminDelete, adminSummary, audienceRecipients, cancelMessage, createMessage, listInstructions, listMessages, parseAudience,
 	promote, promoteAll, registrationsCsv, sentLogMarkdown, updateSessions, updateSettings,
@@ -84,3 +85,7 @@ export const pollsPost = handle(async ({ env, request, data }) => {
 	const body = await readJson(request);
 	return adminPollAction(env, { ...body, by: data.adminEmail || 'admin' });
 });
+
+export const eventsGet = handle(async ({ env }) => listEvents(env));
+/** Create, edit or clone events, and add or remove sessions. Nobody is emailed. */
+export const eventsPost = handle(async ({ env, request, data }) => eventAction(env, await readJson(request), data.adminEmail || 'admin'));
