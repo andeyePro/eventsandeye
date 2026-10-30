@@ -352,7 +352,7 @@ async function load() {
 	await loadPolls();
 
 	const ms = await api('/api/admin/messages?event=' + encodeURIComponent(eventId));
-	$('msgs').querySelector('tbody').innerHTML = ms.messages.map((m) => '<tr><td>' + esc(uk(m.sent_at || m.scheduled_at || m.created_at)) + '</td><td>' + esc(m.subject) + '</td><td>' + esc(m.status) + (m.error ? ': ' + esc(m.error) : '') + '</td><td>' + esc(m.recipients_count ?? '') + '</td><td><code>' + esc(m.audience) + '</code></td><td>' + (m.status === 'sending' ? '<span class="small">the rest go out within a few minutes</span> ' : '') + (m.status === 'scheduled' || m.status === 'sending' ? '<button class="danger" data-cancel="' + esc(m.id) + '">Cancel</button>' : '') + '</td></tr>').join('') || '<tr><td colspan="6">Nothing sent yet.</td></tr>';
+	$('msgs').querySelector('tbody').innerHTML = ms.messages.map((m) => '<tr><td>' + esc(uk(m.sent_at || m.scheduled_at || m.created_at)) + '</td><td>' + esc(m.subject) + '</td><td>' + esc(m.status) + (m.error ? ': ' + esc(m.error) : '') + '</td><td>' + esc(m.recipients_count ?? '') + '</td><td><code>' + esc(m.audience) + '</code></td><td>' + (m.status === 'sending' ? '<span class="small">the rest go out within a few minutes</span> ' : '') + (m.status === 'failed' ? '<button data-resume="' + esc(m.id) + '">Resume</button> ' : '') + (m.status === 'scheduled' || m.status === 'sending' ? '<button class="danger" data-cancel="' + esc(m.id) + '">Cancel</button>' : '') + '</td></tr>').join('') || '<tr><td colspan="6">Nothing sent yet.</td></tr>';
 }
 
 $('settings-form').addEventListener('submit', async (e) => {
@@ -392,6 +392,9 @@ document.body.addEventListener('click', async (e) => {
 		} else if (b.dataset.delete) {
 			if (!confirm(b.dataset.confirmed === '1' ? 'Remove ' + b.dataset.name + '? They have confirmed, so they will be emailed that their registration has been cancelled, and their calendar entries removed.' : 'Remove ' + b.dataset.name + '? They never confirmed, so no email is sent (use this for spam, typos or duplicates).')) return;
 			await api('/api/admin/registration', 'DELETE', { id: b.dataset.delete }); toast('Removed.'); load();
+		} else if (b.dataset.resume) {
+			if (!confirm('Carry on sending this message to the people who have not had it yet?')) return;
+			await api('/api/admin/messages', 'POST', { action: 'resume', id: b.dataset.resume }); toast('Resumed: the rest go out within a few minutes.'); load();
 		} else if (b.dataset.cancel) {
 			await api('/api/admin/messages/cancel', 'POST', { id: b.dataset.cancel }); toast('Scheduled message cancelled.'); load();
 		} else if (b.dataset.preview) {

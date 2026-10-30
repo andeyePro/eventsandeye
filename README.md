@@ -146,7 +146,7 @@ Everything day to day happens on the admin page, `/admin/rsvps/`:
 - **Abuse limits, so nobody can use the forms to flood an address:** a confirmed address that registers again gets one reminder every ten minutes at most; an unconfirmed registration can be replaced three times, then the address is left alone until it confirms or the hold lapses; and a registrant whose own changes have triggered ten emails in an hour is asked to wait.
 - **Registrations:** each person's choices, with **Promote** buttons for anyone waiting (a place, a tour or an opt-in session), **Promote all who fit** for the in-person list, and **Remove**. Removing someone who confirmed tells them, as if they had cancelled.
 - **Joining instructions:** add a new version when the details change. It goes automatically to everyone who confirms or is promoted from then on. To send it to people already registered, send a message with "Include the latest joining instructions" ticked.
-- **Messages:** to everyone or a filtered group, now or scheduled, with a preview and a recipient count first. A big message, or one with joining instructions, goes out in pieces over a few minutes (the cron Worker sends the rest), so no request goes over Cloudflare's free-plan limits; the same goes for calendar updates after a session change.
+- **Messages:** to everyone or a filtered group, now or scheduled, with a preview and a recipient count first. A big message, or one with joining instructions, goes out in pieces over a few minutes (the cron Worker sends the rest), to keep each request within Cloudflare's free-plan limits; the same goes for calendar updates after a session change. A message that keeps failing stops after five tries and can be resumed from the admin page without anyone getting it twice; an address Resend refuses is set aside so everyone else still gets it.
 - **Polls:** create a poll with its options, see how many would join each option and who, add, rename or remove options (a removed option leaves everyone's ranking), stop taking suggestions, and close the poll. Suggestions waiting for a decision are listed with **Add for everyone**, **Add in my words…** and **Don't add**. Nobody is emailed about any of this: tell registrants about a poll with a message, and suggesters see what became of their suggestion on their manage page.
 - **Export:** a CSV of registrations, a BCC list, and the sent log.
 
@@ -191,7 +191,7 @@ In `wrangler.toml` `[vars]` (the cron Worker needs the same, apart from the Acce
 | `ACCESS_MFA`, `ACCESS_MFA_METHODS` | How two-factor sign-in is checked (see step 9). |
 | `ACCESS_MAX_AGE_HOURS` | Admin sign-ins older than this must be repeated (default 12). |
 | `EVENTS_INDEX_PATH` | Where `/events/next` goes when no event is coming up (default `/events/`). |
-| `PAID_PLAN` | `"true"` on the Workers paid plan: messages with joining instructions go out in bigger pieces (40 instead of 4 per run). |
+| `PAID_PLAN` | `"true"` on the Workers paid plan: messages with joining instructions go out in bigger pieces (30 instead of 3 per run). |
 | `POLL_REPLY_EMAIL` | Optional. The address Email Routing sends to the cron Worker, used as the reply-to of emails about poll suggestions (step 12). |
 | `EVENTSANDEYE_URL` | The "Registrations via Events&I" link in emails (default: this repository). The form uses its `sourceUrl` prop. |
 

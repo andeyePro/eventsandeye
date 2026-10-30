@@ -156,19 +156,21 @@ export function parseState(json: string | null | undefined): CalendarState {
 	}
 }
 
-export function attachments(env: Env, ev: EventRow, reg: RegistrationRow, requests: { entry: CalEntry; seq: number }[], cancels: EntryState[]): Attachment[] {
+/** at: a fixed time for the files' DTSTAMP, so a retried send is the same email (see email.ts on idempotency). */
+export function attachments(env: Env, ev: EventRow, reg: RegistrationRow, requests: { entry: CalEntry; seq: number }[], cancels: EntryState[], at?: number): Attachment[] {
+	const now = at === undefined ? undefined : new Date(at).toISOString();
 	const organizer = { name: orgName(env), email: fromAddress(env) };
 	const attendee = { name: reg.name, email: reg.email };
 	const out: Attachment[] = [];
 	requests.forEach(({ entry, seq }, i) => out.push({
 		filename: requests.length + cancels.length > 1 ? `invite-${i + 1}.ics` : 'invite.ics',
 		content_type: 'text/calendar; method=REQUEST; charset=UTF-8',
-		content: buildIcs({ method: 'REQUEST', entry, sequence: seq, organizer, attendee, tz: ev.timezone }),
+		content: buildIcs({ method: 'REQUEST', entry, sequence: seq, organizer, attendee, tz: ev.timezone, now }),
 	}));
 	cancels.forEach((c, i) => out.push({
 		filename: `cancel-${i + 1}.ics`,
 		content_type: 'text/calendar; method=CANCEL; charset=UTF-8',
-		content: buildIcs({ method: 'CANCEL', entry: { key: '', uid: c.uid, summary: c.summary, description: 'Cancelled', location: c.location, start: c.start, end: c.end, alarms: [] }, sequence: c.seq, organizer, attendee, tz: ev.timezone }),
+		content: buildIcs({ method: 'CANCEL', entry: { key: '', uid: c.uid, summary: c.summary, description: 'Cancelled', location: c.location, start: c.start, end: c.end, alarms: [] }, sequence: c.seq, organizer, attendee, tz: ev.timezone, now }),
 	}));
 	return out;
 }

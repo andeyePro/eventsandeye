@@ -43,7 +43,14 @@ async function resendPost(env: Env, path: string, body: unknown, idempotencyKey?
 		}
 		// The key was used before: that earlier request was accepted (or is being), so these emails have gone. A body that
 		// differs (fresh links, a later calendar stamp) gives 409 too, and the answer is the same.
-		if (res.status === 409 && idempotencyKey) return new Response(JSON.stringify({ id: 'idempotent-repeat', data: [] }));
+		// Retries carry the same body (fixed links and stamps), so a true repeat gets Resend's stored answer, not a 409. A 409
+		// for another request with the key still in flight is retried later; any other 409 means the key was used for an
+		// accepted send of these emails, so they count as sent.
+		if (res.status === 409 && idempotencyKey) {
+			let name = '';
+			try { name = String(((await res.clone().json()) as { name?: string }).name ?? ''); } catch {}
+			if (name !== 'concurrent_idempotent_requests') return new Response(JSON.stringify({ id: 'idempotent-repeat', data: [] }));
+		}
 		if ((res.status === 429 || res.status >= 500) && attempt < 5) {
 			const after = Number(res.headers.get('retry-after'));
 			await sleep(Number.isFinite(after) && after > 0 ? after * 1000 : 1000 * 2 ** attempt);
@@ -77,20 +84,19 @@ export async function sendBatch(env: Env, emails: OutgoingEmail[], idempotencyKe
 	if (!emails.length) return [];
 	if (!env.RESEND_API_KEY) {
 		if (!isDev(env)) throw new Error('RESEND_API_KEY is not set; refusing to drop email on the live site');
-		// Like Resend: a whole send is refused or accepted (tests use a "fail-send" address to see a refusal), and a key
+		// Like Resend: a whole send is refused or accepted (tests use a "fail-send" address to see a refusal, "fail-500" for
+		// an outage), and a key
 		// already used sends nothing again.
 		if (emails.some((e) => e.to.includes('fail-send'))) throw new Error('Resend error 422 (validation_error)');
+		if (emails.some((e) => e.to.includes('fail-500'))) throw new Error('Resend error 500 (internal_server_error)');
 		if (idempotencyKey && await env.DB.prepare('SELECT 1 FROM dev_outbox WHERE idempotency_key = ?').bind(idempotencyKey).first()) return emails.map(() => 'dev:repeat');
-		const ids: string[] = [];
+		const results = await env.DB.batch(emails.map((e) => env.DB.prepare('INSERT INTO dev_outbox (to_addr, subject, text_body, html_body, attachments, created_at, reply_to, idempotency_key) VALUES (?,?,?,?,?,?,?,?)')
+			.bind(e.to, e.subject, e.text, e.html, JSON.stringify(e.attachments ?? []), nowIso(), e.replyTo || notifyEmail(env), idempotencyKey ?? null)));
 		for (const e of emails) {
-			const r = await env.DB.prepare('INSERT INTO dev_outbox (to_addr, subject, text_body, html_body, attachments, created_at, reply_to, idempotency_key) VALUES (?,?,?,?,?,?,?,?)')
-				.bind(e.to, e.subject, e.text, e.html, JSON.stringify(e.attachments ?? []), nowIso(), e.replyTo || notifyEmail(env), idempotencyKey ?? null)
-				.run();
 			const att = (e.attachments ?? []).map((a) => a.filename).join(', ');
 			console.log(`\n[dev email] To: ${e.to}\nSubject: ${e.subject}${att ? `\nAttachments: ${att}` : ''}\n\n${e.text}\n[/dev email]\n`);
-			ids.push(`dev:${r.meta.last_row_id}`);
 		}
-		return ids;
+		return results.map((r) => `dev:${r.meta.last_row_id}`);
 	}
 	const ids: string[] = [];
 	const one = (e: OutgoingEmail) => ({

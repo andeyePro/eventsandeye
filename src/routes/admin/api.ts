@@ -5,7 +5,7 @@ import { adminPollAction, adminPolls } from '../../polls';
 import { eventAction, listEvents } from '../../setup';
 import {
 	addInstructions, adminDelete, adminSummary, audienceRecipients, cancelMessage, createMessage, listInstructions, listMessages, parseAudience,
-	promote, promoteAll, registrationsCsv, sentLogMarkdown, updateSessions, updateSettings,
+	promote, promoteAll, registrationsCsv, resumeMessage, sentLogMarkdown, updateSessions, updateSettings,
 } from '../../rsvp';
 
 const ev = (request: Request) => new URL(request.url).searchParams.get('event') || '';
@@ -63,6 +63,7 @@ export const messagesPost = handle(async ({ env, request, data }) => {
 	const body = await readJson(request);
 	const event = String(body.event || '');
 	if (body.dry_run === true) return { ok: true, count: (await audienceRecipients(env, event, parseAudience(body.audience))).length };
+	if (body.action === 'resume') return resumeMessage(env, String(body.id || ''));
 	return { ok: true, message: await createMessage(env, event, body, data.adminEmail || 'admin') };
 });
 export const messagesCancel = handle(async ({ env, request }) => cancelMessage(env, String((await readJson(request)).id || '')));

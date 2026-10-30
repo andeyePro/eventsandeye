@@ -61,6 +61,8 @@ export interface RegistrationRow {
 	optins_waiting?: string | null;
 	/** How many times an unconfirmed registration for this address has been replaced (each sends a fresh confirm email). */
 	resends?: number;
+	/** A calendar update is queued for this person (1, plus one per failed try). */
+	calendar_dirty?: number;
 	optins_waitlist_since?: string | null;
 	share_contact: number;
 	status: 'pending' | 'confirmed';
