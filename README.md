@@ -114,7 +114,7 @@ These steps assume your site's repository is checked out locally and Events&I go
 
    If you use Cloudflare's per-application MFA (Authentication → MFA → Authenticator application), its tokens report only `onetimepin`, so set `ACCESS_MFA = "application"` and keep that setting on. Otherwise the code checks the token's sign-in methods itself and names them when it refuses; accept other method names with `ACCESS_MFA_METHODS`.
 
-10. **The cron Worker.** It sends scheduled messages, warns about and deletes unconfirmed registrations, and applies the 30-day retention. Copy [`examples/cron/wrangler.toml`](examples/cron/wrangler.toml) to `workers/cron/wrangler.toml` in your site, fill it in to match, then:
+10. **The cron Worker.** Every five minutes it sends scheduled messages and the rest of big ones, queued calendar updates and host lists held back by a gap, warns about and deletes unconfirmed registrations, and applies the 30-day retention. It also receives replies to poll suggestions if you set that up (step 12). Copy [`examples/cron/wrangler.toml`](examples/cron/wrangler.toml) to `workers/cron/wrangler.toml` in your site, fill it in to match, then:
 
     ```sh
     npx wrangler deploy --config workers/cron/wrangler.toml
@@ -161,7 +161,7 @@ PUBLIC_TURNSTILE_ALLOW_TEST_KEY=true npm run build
 npx wrangler pages dev ./dist --port 8788
 ```
 
-Open http://localhost:8788. With `DEV_MODE=true`, emails (with their calendar attachments) are printed to the console and kept in a local outbox at `/api/dev/outbox` instead of being sent, and the admin page opens without Cloudflare Access.
+Open http://localhost:8788. With `DEV_MODE=true`, emails (with their calendar attachments) are printed to the console and kept in a local outbox at `/api/dev/outbox` instead of being sent, and the admin page opens without Cloudflare Access. In the outbox, an address containing `fail-send` is refused as Resend would refuse it, and one containing `fail-500` fails as in an outage, for trying out how messages recover.
 
 **End-to-end test.** [`tests/e2e.mjs`](tests/e2e.mjs) runs the whole flow against a local D1 database with `wrangler pages dev`, against AMYBO's example seed: registration, confirmation, waiting lists, promotion, calendar invitations and updates, host lists, polls and suggestions (email replies go through `/api/dev/inbound`), scheduled messages, holds, deadlines, cancellation, retention and the Access checks. It writes its own `.dev.vars`, backing yours up and restoring it afterwards. From your site:
 
@@ -176,7 +176,7 @@ The comment at the top of the test lists every setting.
 
 ## Settings reference
 
-In `wrangler.toml` `[vars]` (the cron Worker needs the same, apart from the Access settings):
+In `wrangler.toml` `[vars]` (the cron Worker needs the same, apart from the Access settings; it needs `ADMIN_EMAILS` too if organisers answer poll suggestions by email):
 
 | Setting | What it is |
 | --- | --- |
@@ -205,7 +205,7 @@ Update the submodule (`git submodule update --remote eventsandeye`), then apply 
 npx wrangler d1 migrations apply events --remote
 ```
 
-Migrations only ever add; they never change one that has shipped. Redeploy the cron Worker too, so it runs the same code as the site.
+Migrations only ever add; they never change one that has shipped. Redeploy the cron Worker too, so it runs the same code as the site. The cron Worker matters more than it did: since migration 0009 it finishes big messages and queued calendar updates, so check it is deployed and running (its log shows a `scheduled run` line every five minutes).
 
 New features can bring new function wrappers (polls added `functions/api/rsvp/poll.ts`, `functions/api/admin/polls.ts` and `functions/api/dev/inbound.ts`; event set-up added `functions/api/admin/events.ts`). Copy any you do not have yet, leaving your existing ones alone:
 
