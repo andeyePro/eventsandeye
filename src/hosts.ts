@@ -31,15 +31,21 @@ export function hostLines(s: SessionRow, regs: RegistrationRow[]): HostLine[] {
 	return out;
 }
 
-/** Emails each session host whose list has changed since the last email, showing the differences. */
-export async function syncHosts(env: Env, brand: Brand, ev: EventRow, sessions: SessionRow[]) {
+/**
+ * Emails each session host whose list has changed since the last email, showing the differences. With the event's
+ * host_list_minutes set, a host who had a list less than that long ago waits: the cron Worker calls this again, and
+ * the next list gathers every change since. Within a day of the session, changes go at once.
+ */
+export async function syncHosts(env: Env, brand: Brand, ev: EventRow, sessions: SessionRow[], now = Date.now()) {
 	const hosted = sessions.filter((s) => s.host_email);
 	if (!hosted.length) return 0;
 	const regs = (await env.DB.prepare('SELECT * FROM registrations WHERE event_id = ?').bind(ev.id).all<RegistrationRow>()).results;
 	let sent = 0;
 	for (const s of hosted) {
 		const current = hostLines(s, regs);
-		const snap = await env.DB.prepare('SELECT snapshot FROM host_snapshots WHERE session_id = ?').bind(s.id).first<{ snapshot: string }>();
+		const snap = await env.DB.prepare('SELECT snapshot, sent_at FROM host_snapshots WHERE session_id = ?').bind(s.id).first<{ snapshot: string; sent_at: string }>();
+		const wait = (ev.host_list_minutes ?? 0) * 60_000;
+		if (snap && wait && now < Date.parse(snap.sent_at) + wait && Date.parse(s.starts_at) - now > 86400_000) continue;
 		const prev: HostLine[] = snap ? JSON.parse(snap.snapshot) : [];
 		const key = (l: HostLine) => `${l.name}|${l.detail}|${l.email ?? ''}`;
 		const prevById = new Map(prev.map((l) => [l.id, l]));
@@ -51,7 +57,7 @@ export async function syncHosts(env: Env, brand: Brand, ev: EventRow, sessions: 
 		await sendEmail(env, hostListEmail(brand, ev, s, current, added, removed, changed));
 		const stored = current.map(({ id, name, detail, email }) => ({ id, name, detail, ...(email ? { email } : {}) }));
 		await env.DB.prepare('INSERT INTO host_snapshots (session_id, snapshot, sent_at) VALUES (?,?,?) ON CONFLICT(session_id) DO UPDATE SET snapshot = excluded.snapshot, sent_at = excluded.sent_at')
-			.bind(s.id, JSON.stringify(stored), nowIso()).run();
+			.bind(s.id, JSON.stringify(stored), new Date(now).toISOString()).run();
 		sent++;
 	}
 	return sent;

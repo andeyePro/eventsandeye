@@ -780,7 +780,9 @@ export async function updateSettings(env: Env, eventId: string, input: Record<st
 	const deadline = input.deadline === undefined ? ev.deadline : optDate(input.deadline, 'deadline') ?? ev.deadline;
 	const travel = input.travel_minutes === undefined ? ev.travel_minutes : Number(input.travel_minutes);
 	if (!Number.isInteger(travel) || travel < 0 || travel > 1440) throw new UserError('Travel time must be a whole number of minutes.');
-	await env.DB.prepare('UPDATE events SET in_person_max=?, deadline=?, travel_minutes=? WHERE id=?').bind(max, deadline, travel, eventId).run();
+	const hostMinutes = input.host_list_minutes === undefined ? ev.host_list_minutes ?? 0 : Number(input.host_list_minutes);
+	if (!Number.isInteger(hostMinutes) || hostMinutes < 0 || hostMinutes > 1440) throw new UserError('The gap between host lists must be a whole number of minutes, up to a day.');
+	await env.DB.prepare('UPDATE events SET in_person_max=?, deadline=?, travel_minutes=?, host_list_minutes=? WHERE id=?').bind(max, deadline, travel, hostMinutes, eventId).run();
 	// A new travel time changes everyone's "time to leave" reminder, which is not worth an email to every attendee:
 	// like a quiet session save, each person's calendar catches up with their next email.
 	return { ok: true as const, calendar_updates: 0 };
@@ -951,6 +953,12 @@ export async function runScheduled(env: Env, now = Date.now()) {
 				report.holdsWarned++;
 			} catch (e) { console.error('hold warning failed', r.id, e); }
 		}
+	}
+
+	// Host lists held back by an event's host_list_minutes go out once their interval has passed.
+	const throttled = (await env.DB.prepare('SELECT * FROM events WHERE host_list_minutes > 0 AND ends_at > ?').bind(nowS).all<EventRow>()).results;
+	for (const ev of throttled) {
+		try { await syncHosts(env, brand(env), ev, await getSessions(env, ev.id), now); } catch (e) { console.error('host lists failed', ev.id, e); }
 	}
 
 	// Retention: registrations, their delivery records and host lists are deleted 30 days after the event ends.

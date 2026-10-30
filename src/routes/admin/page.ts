@@ -62,6 +62,7 @@ const HTML = /* html */ `<!doctype html>
 				<div><label for="s-max">In-person maximum</label><input id="s-max" type="number" min="0" required /></div>
 				<div><label for="s-deadline">Registration deadline (<span class="tzl">UK time</span>)</label><input id="s-deadline" type="datetime-local" required /></div>
 				<div><label for="s-travel">Assumed travel time for the "time to leave" reminder (minutes)</label><input id="s-travel" type="number" min="0" required /></div>
+				<div><label for="s-hostgap">At most one list per session host every (minutes; 0 = every change)</label><input id="s-hostgap" type="number" min="0" max="1440" required /></div>
 			</div>
 			<button type="submit">Save settings</button>
 			<p class="small">Raising a maximum does not move anyone off the waiting list by itself: use "Promote" on a person below, or <button type="button" id="promote-all" hidden>Promote all who fit</button> to give places to the waiting list in order, up to the maximum. Each person promoted is emailed the latest joining instructions.</p>
@@ -213,7 +214,7 @@ async function load() {
 	].join('');
 	$('promote-all').hidden = !(c.inPerson.waiting > 0 && c.inPerson.held < c.inPerson.max);
 	$('promote-all').dataset.fit = String(Math.min(c.inPerson.waiting, c.inPerson.max - c.inPerson.held));
-	$('s-max').value = s.event.in_person_max; $('s-deadline').value = isoToUkLocal(s.event.deadline); $('s-travel').value = s.event.travel_minutes;
+	$('s-max').value = s.event.in_person_max; $('s-deadline').value = isoToUkLocal(s.event.deadline); $('s-travel').value = s.event.travel_minutes; $('s-hostgap').value = s.event.host_list_minutes ?? 0;
 
 	$('sessions-box').innerHTML = sessions.map((x) => {
 		const id = esc(x.id);
@@ -272,7 +273,7 @@ async function load() {
 $('settings-form').addEventListener('submit', async (e) => {
 	e.preventDefault();
 	try {
-		const d = await api('/api/admin/settings', 'POST', { event: eventId, in_person_max: Number($('s-max').value), deadline: ukLocalToIso($('s-deadline').value), travel_minutes: Number($('s-travel').value) });
+		const d = await api('/api/admin/settings', 'POST', { event: eventId, in_person_max: Number($('s-max').value), deadline: ukLocalToIso($('s-deadline').value), travel_minutes: Number($('s-travel').value), host_list_minutes: Number($('s-hostgap').value) });
 		toast('Settings saved.' + (d.calendar_updates ? ' ' + d.calendar_updates + ' calendar update(s) sent.' : '')); load();
 	} catch (err) { toast(err.message); }
 });

@@ -18,6 +18,8 @@ export interface EventRow {
 	page_path: string;
 	/** Optional free-text question shown on the booking form (null = none). */
 	extra_question?: string | null;
+	/** At most one host list per session every this many minutes; 0 sends every change. */
+	host_list_minutes?: number;
 }
 
 export interface SessionRow {

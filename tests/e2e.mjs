@@ -732,6 +732,21 @@ try {
 		await req('POST', '/api/admin/sessions', { event: EVENT, sessions: [{ id: AM.id, host_email: 'talkhost@example.org' }] }, ADMIN);
 		await req('POST', '/api/admin/sessions', { event: EVENT, sessions: [{ id: DINNER, host_email: 'dinner2@example.org' }] }, ADMIN);
 		check('saving the same host again sends no note', (await mailsTo('dinner2@example.org')).length === n2 && !(await mailsTo('dinner2@example.org')).some((m) => /no longer hosting/.test(m.subject)));
+		r = await req('POST', '/api/admin/settings', { event: EVENT, host_list_minutes: 60 }, ADMIN);
+		check('host lists can be limited to one an hour', r.data.ok && (await req('GET', `/api/admin/summary?event=${EVENT}`, undefined, ADMIN)).data.event.host_list_minutes === 60);
+		const hostMails = async () => (await mailsTo('talkhost@example.org')).length;
+		const h0 = await hostMails();
+		await registerAndConfirm({ name: 'Vic', email: 'vic@example.org', attendance: 'remote' });
+		await registerAndConfirm({ name: 'Wyn', email: 'wyn@example.org', attendance: 'remote' });
+		check('changes within the hour are held back', (await hostMails()) === h0);
+		await cron(Date.now() + 30 * 60_000);
+		check('…still held half an hour on', (await hostMails()) === h0);
+		await cron(Date.now() + 61 * 60_000);
+		const gathered = await last('talkhost@example.org');
+		check('…and gathered into one list once the hour has passed', (await hostMails()) === h0 + 1 && /\*\*Vic – remote\*\*/.test(gathered.text_body) && /\*\*Wyn – remote\*\*/.test(gathered.text_body), gathered.text_body.slice(0, 400));
+		check('a negative gap is refused', (await req('POST', '/api/admin/settings', { event: EVENT, host_list_minutes: -1 }, ADMIN)).status === 400);
+		await req('POST', '/api/admin/settings', { event: EVENT, host_list_minutes: 0 }, ADMIN);
+		for (const who of ['vic@example.org', 'wyn@example.org']) await req('DELETE', '/api/rsvp/manage', { t: await manageOf(who) });
 		await req('POST', '/api/admin/sessions', { event: EVENT, sessions: [{ id: AM.id, host_email: '' }] }, ADMIN);
 	}
 
