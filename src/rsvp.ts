@@ -1,7 +1,7 @@
 // Events&I – Copyright (C) 2026 andeye Ltd. AGPL-3.0, see ../LICENSE.
 import { attachments, entriesFor, hashEntry, liveState, parseState, plan, saveState } from './calendar';
 import { type Env, fromAddress, notifyEmail, orgName, privacyUrl, siteUrl, sourceUrl } from './env';
-import { sendBatch, sendEmail, type OutgoingEmail } from './email';
+import { IdempotencyConflict, sendBatch, sendEmail, type OutgoingEmail } from './email';
 import { syncHosts } from './hosts';
 import { buildIcs } from './ics';
 import {
@@ -335,7 +335,10 @@ async function syncCalendar(env: Env, ev: EventRow, reg: RegistrationRow, sessio
 	if (!p.requests.length && !p.cancels.length) return false;
 	const files = attachments(env, ev, reg, p.requests, p.cancels, opts.at);
 	const key = opts.at === undefined ? undefined : `cal-${reg.id}-${(await sha256(JSON.stringify(p.state))).slice(0, 24)}`;
-	const pid = await sendEmail(env, calendarUpdateEmail(brand(env), ev, reg, p.requests, p.cancels.map((c) => c.summary), { entries: p.entries, icsUrl: await icsUrlFor(env, reg.id, opts.at) }, murl, files), key);
+	// The key is the planned calendar itself, so a conflict means this same update went before (with other links or
+	// stamps): its state is saved as sent.
+	const pid = await sendEmail(env, calendarUpdateEmail(brand(env), ev, reg, p.requests, p.cancels.map((c) => c.summary), { entries: p.entries, icsUrl: await icsUrlFor(env, reg.id, opts.at) }, murl, files), key)
+		.catch((e) => { if (e instanceof IdempotencyConflict) return 'repeat'; throw e; });
 	await saveState(env, reg.id, p.state);
 	await recordDelivery(env, reg.id, 'calendar_update', pid);
 	return true;
@@ -739,6 +742,12 @@ const CLAIM_MS = 4 * 60_000;
 const MAX_ATTEMPTS = 5;
 /** Delivery records of a piece written but not yet sent: plain copies, and copies with joining instructions. */
 const PENDING = 'pending', PENDING_FULL = 'pending-full', REFUSED = 'refused';
+/** Copies that may or may not have gone (a retry found the key used for a different body, or the piece was too old to
+ * retry safely): never sent again, not counted as delivered, and shown on the admin page. */
+const UNCERTAIN = 'uncertain';
+const NOT_DELIVERED = `('${PENDING}', '${PENDING_FULL}', '${REFUSED}', '${UNCERTAIN}')`;
+/** Resend keeps idempotency keys for a day: a piece pending longer cannot be retried without risking a second copy. */
+const KEY_LIFETIME_MS = 23 * 3600_000;
 
 /**
  * Sends the next piece of a message. The first piece goes when the message is sent or falls due; the cron Worker sends
@@ -770,6 +779,9 @@ export async function deliverMessage(env: Env, id: string) {
 			ids = (await audienceRecipients(env, claim.event_id, JSON.parse(claim.audience))).map((r) => r.id);
 			await env.DB.prepare('UPDATE messages SET recipient_ids = ? WHERE id = ?').bind(JSON.stringify(ids), id).run();
 		}
+		// A piece left pending for longer than Resend keeps its key cannot be retried safely: it may have gone.
+		await env.DB.prepare(`UPDATE deliveries SET provider_id = '${UNCERTAIN}' WHERE message_id = ? AND provider_id IN ('${PENDING}', '${PENDING_FULL}') AND sent_at < ?`)
+			.bind(id, new Date(Date.now() - KEY_LIFETIME_MS).toISOString()).run();
 		const rows = (await env.DB.prepare('SELECT registration_id AS r, provider_id AS p FROM deliveries WHERE message_id = ?').bind(id).all<{ r: string; p: string | null }>()).results;
 		const handled = new Set(rows.map((x) => x.r));
 		// A piece written down before, retried as it was recorded: who was in it, and whether they get the instructions.
@@ -799,6 +811,8 @@ export async function deliverMessage(env: Env, id: string) {
 		piece = [...plainIds, ...fullIds].filter((x) => regs.has(x)).map((x) => regs.get(x)!);
 		const at = Date.parse(claim.started_at ?? now);
 		// Recorded as sent in two statements however many people: the delivery records and their instructions version.
+		const uncertain = (people: string[]) => env.DB.prepare(`UPDATE deliveries SET provider_id = '${UNCERTAIN}' WHERE message_id = ? AND provider_id IN ('${PENDING}', '${PENDING_FULL}') AND registration_id IN (SELECT value FROM json_each(?))`)
+			.bind(id, JSON.stringify(people)).run();
 		const done = (people: string[]) => env.DB.batch([
 			env.DB.prepare(`UPDATE deliveries SET provider_id = 'sent', sent_at = ? WHERE message_id = ? AND provider_id IN ('${PENDING}', '${PENDING_FULL}') AND registration_id IN (SELECT value FROM json_each(?))`)
 				.bind(nowIso(), id, JSON.stringify(people)),
@@ -811,15 +825,26 @@ export async function deliverMessage(env: Env, id: string) {
 			for (const r of plain) emails.push(messageEmail(brand(env), r, claim, await manageUrl(env, r.id, at)));
 			// The key is the piece as recorded, even if someone in it has cancelled since: if Resend took it, a retry for
 			// fewer people under the same key sends nothing again (see email.ts).
-			await sendBatch(env, emails, `msg-${id}-${(await sha256(plainIds.join(','))).slice(0, 24)}`);
-			await done(plain.map((r) => r.id));
+			try {
+				await sendBatch(env, emails, `msg-${id}-${(await sha256(plainIds.join(','))).slice(0, 24)}`);
+				await done(plain.map((r) => r.id));
+			} catch (e) {
+				if (!(e instanceof IdempotencyConflict)) throw e;
+				await uncertain(plain.map((r) => r.id));
+			}
 		}
 		if (withInstr.length) {
 			const ev = await getEvent(env, claim.event_id);
 			for (const r of withInstr) {
-				await sendInstructions(env, ev, r, sessions, { intro: { html: mdToHtml(claim.body_md), text: mdToText(claim.body_md) }, subject: claim.subject, kind: 'message_instructions',
-					idempotencyKey: `msg-${id}-${r.id}`, instructions: instructions!, at });
-				await done([r.id]);
+				try {
+					await sendInstructions(env, ev, r, sessions, { intro: { html: mdToHtml(claim.body_md), text: mdToText(claim.body_md) }, subject: claim.subject, kind: 'message_instructions',
+						idempotencyKey: `msg-${id}-${r.id}`, instructions: instructions!, at });
+					await done([r.id]);
+				} catch (e) {
+					// Their calendar is not marked as updated either: the next email that carries it catches up.
+					if (!(e instanceof IdempotencyConflict)) throw e;
+					await uncertain([r.id]);
+				}
 			}
 		}
 		// Pending rows of people who have since cancelled went with their registrations.
@@ -828,7 +853,7 @@ export async function deliverMessage(env: Env, id: string) {
 		if (left > 0) await release(`, error = NULL, attempts = 0`);
 		else {
 			await release(`, status = 'sent', sent_at = ?, error = NULL, attempts = 0,
-				recipients_count = (SELECT COUNT(DISTINCT registration_id) FROM deliveries WHERE message_id = ? AND provider_id NOT IN ('${PENDING}', '${PENDING_FULL}', '${REFUSED}'))`, nowIso(), id);
+				recipients_count = (SELECT COUNT(DISTINCT registration_id) FROM deliveries WHERE message_id = ? AND provider_id NOT IN ${NOT_DELIVERED})`, nowIso(), id);
 		}
 		return { sent: piece.length, left };
 	} catch (e) {
@@ -841,7 +866,7 @@ export async function deliverMessage(env: Env, id: string) {
 				await env.DB.prepare(`UPDATE deliveries SET provider_id = ? WHERE message_id = ? AND provider_id IN ('${PENDING}', '${PENDING_FULL}')`).bind(REFUSED, id).run();
 				// Refused by itself before anyone has had it, twice: the refusal is about the message (its sender, say), not
 				// an address, so it stops here with its error rather than setting everyone aside.
-				const tally = await env.DB.prepare(`SELECT SUM(provider_id = '${REFUSED}') AS refused, SUM(provider_id NOT IN ('${REFUSED}', '${PENDING}', '${PENDING_FULL}')) AS sent FROM deliveries WHERE message_id = ?`).bind(id).first<{ refused: number; sent: number }>();
+				const tally = await env.DB.prepare(`SELECT SUM(provider_id = '${REFUSED}') AS refused, SUM(provider_id NOT IN ${NOT_DELIVERED}) AS sent FROM deliveries WHERE message_id = ?`).bind(id).first<{ refused: number; sent: number }>();
 				if ((tally?.refused ?? 0) >= 2 && !(tally?.sent ?? 0)) await release(`, status = 'failed', error = ?`, `${String(e).slice(0, 400)}: refused for everyone tried, so probably not about an address (check EMAIL_FROM and the message)`);
 				else await release(`, attempts = attempts - 1, piece_size = NULL, error = ?`, `${String(e).slice(0, 400)} (one address refused; the rest carry on)`);
 			}
@@ -864,14 +889,15 @@ export async function resumeMessage(env: Env, id: string) {
 /** A scheduled message, or the rest of one part sent (its delivery records say who already has it). */
 export async function cancelMessage(env: Env, id: string) {
 	const now = nowIso();
-	const r = await env.DB.prepare(`UPDATE messages SET status='cancelled', recipients_count = (SELECT COUNT(*) FROM deliveries WHERE message_id = ?1)
+	const r = await env.DB.prepare(`UPDATE messages SET status='cancelled', recipients_count = (SELECT COUNT(DISTINCT registration_id) FROM deliveries WHERE message_id = ?1 AND provider_id NOT IN ${NOT_DELIVERED})
 		WHERE id = ?1 AND (status = 'scheduled' OR (status = 'sending' AND (claimed_until IS NULL OR claimed_until < ?2))) RETURNING id`).bind(id, now).first();
 	if (!r) throw new UserError('Only messages that have not finished sending can be cancelled, and not while a part is going out: try again in a few minutes.', 409);
 	return { ok: true as const };
 }
 
 export async function listMessages(env: Env, eventId: string) {
-	return (await env.DB.prepare('SELECT * FROM messages WHERE event_id = ? ORDER BY COALESCE(sent_at, scheduled_at, created_at) DESC').bind(eventId).all<MessageRow>()).results;
+	return (await env.DB.prepare(`SELECT m.*, (SELECT COUNT(*) FROM deliveries d WHERE d.message_id = m.id AND d.provider_id = '${UNCERTAIN}') AS uncertain
+		FROM messages m WHERE m.event_id = ? ORDER BY COALESCE(m.sent_at, m.scheduled_at, m.created_at) DESC`).bind(eventId).all<MessageRow & { uncertain: number }>()).results;
 }
 
 export async function listInstructions(env: Env, eventId: string) {

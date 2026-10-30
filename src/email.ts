@@ -1,6 +1,6 @@
 // Events&I – Copyright (C) 2026 andeye Ltd. AGPL-3.0, see ../LICENSE.
 import { type Env, emailFrom, isDev, notifyEmail } from './env';
-import { nowIso } from './util';
+import { nowIso, sha256 } from './util';
 
 export interface Attachment {
 	filename: string;
@@ -23,6 +23,13 @@ export interface OutgoingEmail {
 }
 
 const RESEND_URL = 'https://api.resend.com';
+
+/** The idempotency key was used before for a different body: whether those emails went is unknown. */
+export class IdempotencyConflict extends Error {
+	constructor() {
+		super('Resend error 409 (invalid_idempotent_request)');
+	}
+}
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
@@ -41,17 +48,17 @@ async function resendPost(env: Env, path: string, body: unknown, idempotencyKey?
 			await sleep(550);
 			return res;
 		}
-		// The key was used before: that earlier request was accepted (or is being), so these emails have gone. A body that
-		// differs (fresh links, a later calendar stamp) gives 409 too, and the answer is the same.
-		// Retries carry the same body (fixed links and stamps), so a true repeat gets Resend's stored answer, not a 409. A 409
-		// for another request with the key still in flight is retried later; any other 409 means the key was used for an
-		// accepted send of these emails, so they count as sent.
+		// A retry with the same key and body gets Resend's stored answer (above). A 409 means the key is in use: by a request
+		// still in flight (wait and try again), or by an earlier one with a different body, which may or may not have gone.
+		// That is reported as such, never taken as sent and never sent again under a new key.
+		let conflict = false;
 		if (res.status === 409 && idempotencyKey) {
 			let name = '';
 			try { name = String(((await res.clone().json()) as { name?: string }).name ?? ''); } catch {}
-			if (name !== 'concurrent_idempotent_requests') return new Response(JSON.stringify({ id: 'idempotent-repeat', data: [] }));
+			if (name !== 'concurrent_idempotent_requests') throw new IdempotencyConflict();
+			conflict = true;
 		}
-		if ((res.status === 429 || res.status >= 500) && attempt < 5) {
+		if ((res.status === 429 || res.status >= 500 || conflict) && attempt < 5) {
 			const after = Number(res.headers.get('retry-after'));
 			await sleep(Number.isFinite(after) && after > 0 ? after * 1000 : 1000 * 2 ** attempt);
 			continue;
@@ -85,13 +92,24 @@ export async function sendBatch(env: Env, emails: OutgoingEmail[], idempotencyKe
 	if (!env.RESEND_API_KEY) {
 		if (!isDev(env)) throw new Error('RESEND_API_KEY is not set; refusing to drop email on the live site');
 		// Like Resend: a whole send is refused or accepted (tests use a "fail-send" address to see a refusal, "fail-500" for
-		// an outage), and a key
-		// already used sends nothing again.
+		// an outage, "crash-after-send" for a send that went but was never heard back), and a key already used sends
+		// nothing again (or, with a different body, is a conflict).
 		if (emails.some((e) => e.to.includes('fail-send'))) throw new Error('Resend error 422 (validation_error)');
 		if (emails.some((e) => e.to.includes('fail-500'))) throw new Error('Resend error 500 (internal_server_error)');
-		if (idempotencyKey && await env.DB.prepare('SELECT 1 FROM dev_outbox WHERE idempotency_key = ?').bind(idempotencyKey).first()) return emails.map(() => 'dev:repeat');
+		// The key with a hash of the body, as Resend compares them: the same body is a repeat, another is a conflict.
+		const stamp = idempotencyKey ? `${idempotencyKey}|${await sha256(JSON.stringify(emails.map((e) => [e.to, e.subject, e.text, e.html, e.attachments ?? []])))}` : null;
+		if (idempotencyKey) {
+			// An exact prefix, not LIKE: keys hold _ and are long (D1 calls such patterns too complex).
+			const was = await env.DB.prepare(`SELECT idempotency_key AS k FROM dev_outbox WHERE substr(idempotency_key, 1, length(?1) + 1) = ?1 || '|' LIMIT 1`).bind(idempotencyKey).first<{ k: string }>();
+			if (was) {
+				if (was.k !== stamp) throw new IdempotencyConflict();
+				return emails.map(() => 'dev:repeat');
+			}
+		}
 		const results = await env.DB.batch(emails.map((e) => env.DB.prepare('INSERT INTO dev_outbox (to_addr, subject, text_body, html_body, attachments, created_at, reply_to, idempotency_key) VALUES (?,?,?,?,?,?,?,?)')
-			.bind(e.to, e.subject, e.text, e.html, JSON.stringify(e.attachments ?? []), nowIso(), e.replyTo || notifyEmail(env), idempotencyKey ?? null)));
+			.bind(e.to, e.subject, e.text, e.html, JSON.stringify(e.attachments ?? []), nowIso(), e.replyTo || notifyEmail(env), stamp)));
+		// "crash-after-send": accepted, then the request dies before the caller hears back (the retry finds the key).
+		if (emails.some((e) => e.to.includes('crash-after-send'))) throw new Error('Resend error 500 (dev: cut off after sending)');
 		for (const e of emails) {
 			const att = (e.attachments ?? []).map((a) => a.filename).join(', ');
 			console.log(`\n[dev email] To: ${e.to}\nSubject: ${e.subject}${att ? `\nAttachments: ${att}` : ''}\n\n${e.text}\n[/dev email]\n`);
@@ -115,8 +133,9 @@ export async function sendBatch(env: Env, emails: OutgoingEmail[], idempotencyKe
 	const out: string[] = new Array(emails.length);
 	for (let i = 0; i < plain.length; i += 100) {
 		const chunk = plain.slice(i, i + 100);
-		// One key per request, the same whichever way a single email goes (with or without attachments).
-		const key = idempotencyKey && (emails.length === 1 ? idempotencyKey : `${idempotencyKey}:${i}`);
+		// One key per request: the bare key when the emails make one request (a message piece, or a single email whichever
+		// endpoint it takes), so a retry of fewer of them uses the same key.
+		const key = idempotencyKey && (plain.length <= 100 && !withFiles.length ? idempotencyKey : `${idempotencyKey}:${i}`);
 		const res = await resendPost(env, '/emails/batch', chunk.map((x) => one(x.e)), key);
 		const body = (await res.json()) as { data?: { id: string }[] };
 		(body.data ?? []).forEach((d, k) => (out[chunk[k].i] = d.id));

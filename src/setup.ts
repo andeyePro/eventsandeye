@@ -158,12 +158,12 @@ async function deleteSession(env: Env, id: string) {
 		`SELECT
 			(SELECT COUNT(*) FROM registrations WHERE event_id = ?2 AND (tour_id = ?1 OR ${listed})) AS booked,
 			(SELECT COUNT(*) FROM host_snapshots WHERE session_id = ?1) AS hosted,
-			(SELECT COUNT(*) FROM messages WHERE event_id = ?2 AND status = 'scheduled' AND instr(audience, '"' || ?1 || '"') > 0) AS messaged,
+			(SELECT COUNT(*) FROM messages WHERE event_id = ?2 AND status IN ('scheduled', 'sending', 'failed') AND instr(audience, '"' || ?1 || '"') > 0) AS messaged,
 			(SELECT COUNT(*) FROM registrations WHERE event_id = ?2 AND status = 'confirmed' AND calendar_state != '{}') AS invited`,
 	).bind(s.id, s.event_id).first<{ booked: number; hosted: number; messaged: number; invited: number }>();
 	if (why?.booked) throw new UserError('People have booked or signed up for this session, so it cannot be deleted. Change its details instead.', 409);
 	if (why?.hosted) throw new UserError('Its host has been sent an attendee list, so it cannot be deleted. Change its details instead.', 409);
-	if (why?.messaged) throw new UserError('A scheduled message is addressed to the people in this session. Cancel it first.', 409);
+	if (why?.messaged) throw new UserError('A message still to be sent is addressed to the people in this session. Cancel it first.', 409);
 	if (!s.choice_group && !s.optin && why?.invited) throw new UserError('Calendar invitations have gone out that may include this session, so it cannot be deleted. Change its details instead.', 409);
 	// Checked again in the delete itself, in case someone books it in between.
 	const r = await env.DB.prepare(`DELETE FROM sessions WHERE id = ?1 AND NOT EXISTS (SELECT 1 FROM registrations WHERE event_id = ?2 AND (tour_id = ?1 OR ${listed}))`).bind(s.id, s.event_id).run();

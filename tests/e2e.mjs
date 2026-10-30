@@ -887,6 +887,26 @@ try {
 		const allRefused = (await req('GET', `/api/admin/messages?event=e2e-weekend`, undefined, ADMIN)).data.messages.find((x) => x.subject === 'All refused');
 		check('a message refused for everyone tried is marked failed with its error, not "sent"', allRefused.status === 'failed' && /refused for everyone tried/.test(allRefused.error), JSON.stringify([allRefused.status, allRefused.error]));
 		sql(`DELETE FROM registrations WHERE id IN ('e2e-refused-1', 'e2e-refused-2')`);
+		// A piece that went but was never recorded (the request cut off): the retry sends nobody a second copy.
+		fakeReg('e2e-crash-reg', 'crash-after-send@example.org');
+		r = await req('POST', '/api/admin/messages', { event: B, subject: 'Bulk crash', body_md: 'x', audience: {} }, ADMIN);
+		await cron(Date.now() + 1000);
+		let crash = (await req('GET', `/api/admin/messages?event=${B}`, undefined, ADMIN)).data.messages.find((x) => x.subject === 'Bulk crash');
+		const crashCopies = (await outbox()).filter((m) => m.subject === 'Bulk crash').length;
+		check('a piece cut off after sending is retried without a second copy to anyone', crash.status === 'sent' && crash.recipients_count === 13 && crashCopies === 13 && !crash.uncertain, JSON.stringify([crash.status, crash.recipients_count, crashCopies, crash.uncertain]));
+		// …and when the retry would differ (the person answered a poll meanwhile, so their instructions copy changes), they
+		// are marked as uncertain rather than sent a second copy.
+		sql(`UPDATE registrations SET attendance = 'in_person', place = 'place' WHERE id = 'e2e-crash-reg'`);
+		const BP = (await req('POST', '/api/admin/polls', { action: 'create', event: B, question: 'Lunch?', options: 'Soup\nSalad' }, ADMIN)).data.id;
+		const BV = (await req('GET', `/api/admin/instructions?event=${B}`, undefined, ADMIN)).data.versions[0].version;
+		r = await req('POST', '/api/admin/messages', { event: B, subject: 'Bulk differs', body_md: 'x', audience: { attendance: 'in_person' }, marks_instructions_version: BV }, ADMIN);
+		sql(`INSERT INTO poll_ballots (poll_id, registration_id, ranking, bar, updated_at) VALUES ('${BP}', 'e2e-crash-reg', '[]', 0, '${at(-1)}')`);
+		await cron(Date.now() + 1000);
+		const differs = (await req('GET', `/api/admin/messages?event=${B}`, undefined, ADMIN)).data.messages.find((x) => x.subject === 'Bulk differs');
+		check('a retry that would differ marks the person uncertain instead of sending again', differs.status === 'sent' && differs.uncertain >= 1 && (await outbox()).filter((m) => m.subject === 'Bulk differs' && m.to_addr === 'crash-after-send@example.org').length === 1, JSON.stringify([differs.status, differs.uncertain, differs.recipients_count]));
+		sql(`DELETE FROM registrations WHERE id = 'e2e-crash-reg'`);
+		await req('POST', '/api/admin/polls', { action: 'delete', poll: BP }, ADMIN);
+		sql(`UPDATE registrations SET attendance = 'remote', place = NULL WHERE event_id = '${B}' AND attendance = 'in_person'`);
 		// An outage: the message stops after five tries, others still go, and it can be resumed.
 		fakeReg('e2e-fail-500-reg', 'fail-500@example.org');
 		r = await req('POST', '/api/admin/messages', { event: B, subject: 'Bulk doomed', body_md: 'x', audience: {} }, ADMIN);
