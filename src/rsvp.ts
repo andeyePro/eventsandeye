@@ -10,7 +10,7 @@ import {
 } from './templates';
 import { modeOf } from './mode';
 import { mdToHtml, mdToText } from './markdown';
-import { adminPolls, voterPolls } from './polls';
+import { adminPolls, unansweredPolls, voterPolls } from './polls';
 import { makeToken } from './tokens';
 import { cleanLine, cleanText, EMAIL_RE, escapeHtml, nowIso, randomToken, ukDateTime } from './util';
 
@@ -309,7 +309,7 @@ async function sendInstructions(env: Env, ev: EventRow, reg: RegistrationRow, se
 	const p = await plan(parseState(reg.calendar_state), entriesFor(env, ev, sessions, reg));
 	const send = opts.resendAllCalendar ? [...p.requests, ...p.unchanged] : p.requests;
 	const files = attachments(env, ev, reg, send, p.cancels);
-	const mail = instructionsEmail(brand(env), ev, reg, sessions, instr, murl, { entries: p.entries, icsUrl: await icsUrlFor(env, reg.id) }, files, opts.intro);
+	const mail = instructionsEmail(brand(env), ev, reg, sessions, instr, murl, { entries: p.entries, icsUrl: await icsUrlFor(env, reg.id) }, files, opts.intro, await unansweredPolls(env, ev, reg.id));
 	if (opts.subject) mail.subject = opts.subject;
 	const pid = await sendEmail(env, mail);
 	await env.DB.prepare('UPDATE registrations SET instructions_version = ?, calendar_state = ? WHERE id = ?').bind(instr.version, JSON.stringify(p.state), reg.id).run();

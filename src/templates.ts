@@ -238,9 +238,11 @@ ${notMeUrl}${textFooter(b)}`;
 
 export function instructionsEmail(
 	b: Brand, ev: EventRow, reg: RegistrationRow, sessions: SessionRow[], instr: { subject: string; body_md: string }, manageUrl: string,
-	cal?: CalendarBlock, attachments?: Attachment[], intro?: { html: string; text: string },
+	cal?: CalendarBlock, attachments?: Attachment[], intro?: { html: string; text: string }, polls: string[] = [],
 ): OutgoingEmail {
 	const st = statusLines(reg, sessions);
+	// Open polls this person has not answered: one line in an email they get anyway, never an email of its own.
+	const ask = polls.length ? `Have your say: ${polls.map((q) => `"${q}"`).join(' and ')}. Put the options in order on your registration page.` : '';
 	const thanks = `Thank you for registering for the ${ev.title}, on ${ukDate(ev.starts_at, ev.timezone)}.`;
 	const body = forAudience(instr.body_md, modeOf(reg));
 	const html = layout(b, instr.subject, `
@@ -250,8 +252,9 @@ ${intro?.html ?? ''}
 ${st.map((l) => `<p><strong>${escapeHtml(l)}</strong></p>`).join('')}
 ${mdToHtml(body)}
 ${calendarHtml(cal, ev.timezone)}
-${button(manageUrl, 'Manage my registration')}`);
-	const text = `Hello ${reg.name},\n\n${intro ? `${intro.text}\n\n` : ''}${thanks}\n\n${st.join('\n')}\n\n${mdToText(body)}${calendarText(cal, ev.timezone)}\n\nView, change or cancel your registration: ${manageUrl}${textFooter(b)}`;
+${ask ? `<p><strong>${escapeHtml(ask)}</strong></p>` : ''}
+${button(manageUrl, ask ? 'Manage my registration and answer' : 'Manage my registration')}`);
+	const text = `Hello ${reg.name},\n\n${intro ? `${intro.text}\n\n` : ''}${thanks}\n\n${st.join('\n')}\n\n${mdToText(body)}${calendarText(cal, ev.timezone)}${ask ? `\n\n${ask}` : ''}\n\nView, change or cancel your registration: ${manageUrl}${textFooter(b)}`;
 	return { to: reg.email, subject: instr.subject, html, text, attachments };
 }
 

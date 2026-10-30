@@ -9,8 +9,9 @@ import { readSuggestionRef } from './tokens';
 /**
  * Replies to poll-suggestion emails, delivered by Cloudflare Email Routing to the cron Worker's email() handler.
  * A reply acts only if its From address is an organiser's (NOTIFY_EMAIL or ADMIN_EMAILS) and it carries a suggestion
- * reference signed with TOKEN_SECRET, which only ever appears in the email to the organiser. The From header alone
- * proves little (see the README), so the reference is what really guards a decision. Anything else is refused at
+ * reference signed with TOKEN_SECRET, which only ever appears in the email to the organiser. When Cloudflare records
+ * a DMARC result for the From domain, it must be a pass. The reference is what really guards a decision, though:
+ * the From header alone proves little (see the README). Anything else is refused at
  * SMTP time, so a stranger's mail sends nothing back to anyone. Just enough MIME to read a reply: no dependencies.
  *
  * The raw message is a "binary string" (one character per byte, see binaryString), so each part is decoded with its own
@@ -147,7 +148,17 @@ function findText(p: Part, depth = 0): { text: string; html: boolean } | null {
 	return null;
 }
 
-export interface ParsedHeaders { from: string | null; subject: string; automatic: boolean }
+export interface ParsedHeaders { from: string | null; subject: string; automatic: boolean; dmarc: string | null }
+
+/**
+ * The DMARC result Cloudflare Email Routing recorded, from the topmost Authentication-Results header if Cloudflare
+ * wrote it (headers added further down are the sender's, and could say anything). null when there is none: Cloudflare
+ * documents adding it, but it has been reported missing on Worker delivery, so its absence alone refuses nothing.
+ */
+export function dmarcResult(header: string | undefined): string | null {
+	if (!header || !/^\s*mx\.cloudflare\.net\b/i.test(header)) return null;
+	return /\bdmarc=([a-z]+)/i.exec(header)?.[1].toLowerCase() ?? null;
+}
 
 /** The headers alone: enough to decide whether to read any further. */
 export function parseHeaders(raw: string): ParsedHeaders {
@@ -156,7 +167,7 @@ export function parseHeaders(raw: string): ParsedHeaders {
 	// Out-of-office and other automatic replies (RFC 3834, and the older headers some mail servers still use).
 	const automatic = (headers.get('auto-submitted') ?? 'no').toLowerCase() !== 'no' || /^(auto_reply|bulk|junk|list)$/i.test(headers.get('precedence') ?? '')
 		|| headers.has('x-autoreply') || headers.has('x-autorespond');
-	return { from: mailbox(headers.get('from') ?? ''), subject: decodeHeader(headers.get('subject') ?? ''), automatic };
+	return { from: mailbox(headers.get('from') ?? ''), subject: decodeHeader(headers.get('subject') ?? ''), automatic, dmarc: dmarcResult(headers.get('authentication-results')) };
 }
 
 /** The text of the message, from the start of its body only. */
@@ -222,6 +233,8 @@ export async function handleInbound(env: Env, raw: string, reject: (reason: stri
 	if (raw.length > MAX_INBOUND_BYTES) return no('Message too large.');
 	const head = parseHeaders(raw);
 	if (!head.from || !organisers(env).has(head.from)) return no('This address only accepts replies from the organisers.');
+	// A From address that failed DMARC was not sent by its domain. Refused at SMTP time, so nothing is sent to it.
+	if (head.dmarc && head.dmarc !== 'pass') return no(`The sender's domain did not authenticate this message (DMARC ${head.dmarc}).`);
 	// An organiser's out-of-office could start with "No…": it must never decide anything, nor be answered. Dropped
 	// quietly: refusing it would bounce into the organiser's own inbox.
 	if (head.automatic) return { action: 'ignored', reason: 'automatic reply' };

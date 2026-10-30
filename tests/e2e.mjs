@@ -572,6 +572,8 @@ try {
 		const pat = await registerAndConfirm({ name: 'Pat', email: 'pat@example.org', attendance: 'remote' });
 		const quinn = await registerAndConfirm({ name: 'Quinn', email: 'quinn@example.org', attendance: 'remote' });
 		const view = async (who) => (await req('GET', `/api/rsvp/manage?t=${encodeURIComponent(who.manage)}`)).data.polls.find((p) => p.id === POLL);
+		const patMail = (await mailsTo('pat@example.org')).at(-1);
+		check('joining instructions invite someone who has not answered an open poll, in the same email', /Joining instructions/.test(patMail.subject) && /Have your say: "What shall we do on Saturday\?"\. Put the options in order on your registration page\./.test(patMail.text_body) && /Manage my registration and answer/.test(patMail.html_body), patMail.text_body.slice(-700));
 		let pv = await view(pat);
 		check('the manage view lists the poll, unanswered, with no results yet', pv && pv.open && pv.options.length === 5 && pv.ballot === null && pv.results === null, JSON.stringify(pv));
 		const vote = (who, ranking, bar) => req('POST', '/api/rsvp/poll', { t: who.manage, poll: POLL, ranking, bar });
@@ -582,6 +584,9 @@ try {
 		check('the line beyond the end → 400', (await vote(pat, [SKI], 2)).status === 400);
 		check('a ranking without a valid manage link → 404', (await req('POST', '/api/rsvp/poll', { t: 'x.y.z', poll: POLL, ranking: [SKI], bar: 1 })).status === 404);
 		r = await vote(quinn, [HIKE, CAMP, SKI, FOOT, RUGBY], 2);
+		await register({ name: 'Quinn', email: 'quinn@example.org', attendance: 'remote' });
+		const qm = await last('quinn@example.org');
+		check('once answered, the reminder of their registration has no poll line', !/Have your say/.test(qm.text_body), qm.subject);
 		ap = (await req('GET', `${POLLS}?event=${EVENT}`, undefined, ADMIN)).data.polls.find((p) => p.id === POLL);
 		const row = (label) => ap.tally.results.find((x) => x.label === label);
 		check('tally: who would join, who would stay at home, first choices, preference', ap.tally.voters === 2 && row('Camping').willing === 2 && row('Hiking').willing === 2 && row('Skiing').willing === 1 && row('Skiing').out === 1 && row('Football').out === 2 && row('Skiing').first === 1 && row('Camping').score === 3 && row('Hiking').score === 3, JSON.stringify(ap.tally));
@@ -614,6 +619,11 @@ try {
 		before = (await outbox()).length;
 		r = await inbound(plain({ from: 'stranger@example.org', subject: `Re: ${sm.subject}`, body: 'yes\r\n' }));
 		check('a reply from someone who is not an organiser is refused, and changes nothing', r.result.action === 'rejected' && !!r.rejected && (await view(pat)).options.find((o) => o.id === PADDLE).pending && (await outbox()).length === before, JSON.stringify(r));
+		r = await inbound(plain({ subject: `Re: ${sm.subject}`, body: 'yes\r\n' }).replace('From:', 'Authentication-Results: mx.cloudflare.net; dkim=none; spf=fail; dmarc=fail header.from=amybo.org\r\nFrom:'));
+		check('an organiser\'s address that fails DMARC is refused, and nothing is sent', r.result.action === 'rejected' && /DMARC fail/.test(r.rejected) && (await view(pat)).options.find((o) => o.id === PADDLE).pending && (await outbox()).length === before, JSON.stringify(r));
+		r = await inbound(plain({ subject: `Re: ${sm.subject}`, body: 'Maybe\r\n' }).replace('From:', 'Authentication-Results: mx.cloudflare.net; dmarc=pass header.from=amybo.org\r\nAuthentication-Results: evil.example; dmarc=fail\r\nFrom:'));
+		check('a DMARC pass recorded by Cloudflare (topmost) lets the reply through; headers further down are ignored', r.result.action === 'not-understood', JSON.stringify(r));
+		before = (await outbox()).length;
 		r = await inbound(plain({ subject: `Re: [AMYBO] Poll suggestion (ref ${ref.slice(0, 17)}AAAAAAAAAAAAAAAA)`, body: 'yes\r\n' }));
 		check('a reply with a forged reference is refused', r.result.action === 'rejected' && (await outbox()).length === before, JSON.stringify(r));
 		r = await inbound(mail({ subject: `Automatic reply: ${sm.subject}`, headers: 'Content-Type: text/plain\r\nAuto-Submitted: auto-replied\r\n', body: 'No one is in the office until Monday.\r\n' }));

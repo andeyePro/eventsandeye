@@ -163,6 +163,15 @@ async function voter(env: Env, regId: string, pollId: unknown) {
 	return { reg, poll, ev };
 }
 
+/** Questions of the open polls this person has not answered, for a line in the emails they get anyway. */
+export async function unansweredPolls(env: Env, ev: EventRow, regId: string) {
+	const rows = (await env.DB.prepare(
+		`SELECT p.* FROM polls p WHERE p.event_id = ? AND NOT EXISTS (SELECT 1 FROM poll_ballots b WHERE b.poll_id = p.id AND b.registration_id = ?)
+		 AND EXISTS (SELECT 1 FROM poll_options o WHERE o.poll_id = p.id AND o.status = 'active') ORDER BY p.sort, p.created_at`,
+	).bind(ev.id, regId).all<PollRow>()).results;
+	return rows.filter((p) => pollOpen(p, ev)).map((p) => p.question);
+}
+
 /** Saves a ranking: option ids, most wanted first, and how many of them (from the top) the person would join. */
 export async function saveBallot(env: Env, regId: string, input: Record<string, unknown>) {
 	const { reg, poll, ev } = await voter(env, regId, input.poll);

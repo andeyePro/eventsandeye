@@ -5,7 +5,8 @@ import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 
 const out = await build({ entryPoints: [new URL('../src/inbound.ts', import.meta.url).pathname], bundle: true, format: 'esm', write: false, platform: 'neutral' });
-const { parseEmail, replyText, parseCommand, decodeHeader, mailbox } = await import(`data:text/javascript;base64,${Buffer.from(out.outputFiles[0].text).toString('base64')}`);
+const mod = await import(`data:text/javascript;base64,${Buffer.from(out.outputFiles[0].text).toString('base64')}`);
+const { parseEmail, parseHeaders, replyText, parseCommand, decodeHeader, mailbox } = mod;
 
 const cmd = (text) => parseCommand(replyText(text));
 
@@ -79,4 +80,13 @@ test('a hostile HTML body is read in linear time', () => {
 	parseEmail(`From: a@example.org\r\nContent-Type: text/html\r\n\r\n${'<'.repeat(900_000)}`);
 	parseEmail(`From: a@example.org\r\nContent-Type: text/html\r\n\r\n${'<style '.repeat(150_000)}`);
 	assert.ok(Date.now() - t < 1000, `took ${Date.now() - t} ms`);
+});
+
+test('DMARC is read only from the Authentication-Results header Cloudflare wrote', () => {
+	const { dmarcResult } = mod;
+	assert.equal(dmarcResult('mx.cloudflare.net; dkim=pass header.d=example.org; spf=pass; dmarc=pass header.from=example.org'), 'pass');
+	assert.equal(dmarcResult('mx.cloudflare.net; dmarc=FAIL header.from=example.org'), 'fail');
+	assert.equal(dmarcResult('evil.example; dmarc=pass'), null);
+	assert.equal(dmarcResult(undefined), null);
+	assert.equal(parseHeaders('From: a@example.org\r\nAuthentication-Results: mx.cloudflare.net; dmarc=none\r\n\r\nyes').dmarc, 'none');
 });

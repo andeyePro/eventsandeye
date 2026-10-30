@@ -104,7 +104,7 @@ const HTML = /* html */ `<!doctype html>
 
 	<section aria-labelledby="h-instr">
 		<h2 id="h-instr">Joining instructions</h2>
-		<p class="small">The latest version is emailed automatically, with calendar invitations, to each person when they confirm (or are promoted from the in-person waiting list), and to anyone who registers again. Saving a new version does <strong>not</strong> email anyone already registered: to update them, write a short message below to "people on an older version" and tick "Include the latest joining instructions".</p>
+		<p class="small">The latest version is emailed automatically, with calendar invitations, to each person when they confirm (or are promoted from the in-person waiting list), and to anyone who registers again. Saving a new version does <strong>not</strong> email anyone already registered: to update them, write a short message below to "people on an older version" and tick "Include the latest joining instructions". If the event has an open poll someone has not answered, their copy ends with a line inviting them to put its options in order.</p>
 		<div id="instr-versions"></div>
 		<form id="instr-form">
 			<label for="i-subject">Subject</label><input id="i-subject" type="text" required maxlength="200" />
