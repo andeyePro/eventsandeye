@@ -2,14 +2,14 @@
 // Events&I – Copyright (C) 2026 andeye Ltd. AGPL-3.0, see ../LICENSE.
 /** Self-service view/change/cancel page, driven by the signed token in ?t=. */
 interface Props {
-	/** Label for the in-person attendance choice, e.g. "In person at White City". */
+	/** Label for the in-person attendance choice, e.g. "In person at White City". Overrides the event's in_person_label. */
 	inPersonLabel?: string;
 	/** Label for the remote attendance choice. */
 	remoteLabel?: string;
 	/** Legend for the tour choices, shown only when the event has tours. */
 	tourLegend?: string;
 }
-const { inPersonLabel = 'In person', remoteLabel = 'Remotely (online sessions only)', tourLegend = 'Optional tour (in person only)' } = Astro.props;
+const { inPersonLabel, remoteLabel, tourLegend } = Astro.props;
 ---
 <div class="not-content" id="manage">
 	<p id="manage-loading" role="status">Loading your registration…</p>
@@ -23,13 +23,13 @@ const { inPersonLabel = 'In person', remoteLabel = 'Remotely (online sessions on
 		<p class="help">Email: <span id="m-email"></span>. To use a different address, cancel and register again.</p>
 		<fieldset class="field">
 			<legend>How will you attend?</legend>
-			<label class="choice"><input type="radio" name="attendance" value="in_person" /> {inPersonLabel}</label>
-			<label class="choice"><input type="radio" name="attendance" value="remote" /> {remoteLabel}</label>
+			<label class="choice"><input type="radio" name="attendance" value="in_person" /> <span id="m-in-person-label" data-fixed={inPersonLabel ? "1" : undefined}>{inPersonLabel ?? "In person"}</span></label>
+			<label class="choice"><input type="radio" name="attendance" value="remote" /> <span id="m-remote-label" data-fixed={remoteLabel ? "1" : undefined}>{remoteLabel ?? "Remotely (online sessions only)"}</span></label>
 			<label class="choice" id="m-extras-choice" hidden><input type="radio" name="attendance" value="extras" /> <span id="m-extras-label">Just the optional sessions</span></label>
 			<p class="help" id="m-closed" hidden>Registration has closed: you can still switch to remote or cancel.</p>
 		</fieldset>
 		<fieldset class="field" id="m-tour-fs" hidden>
-			<legend>{tourLegend}</legend>
+			<legend id="m-tour-legend" data-fixed={tourLegend ? "1" : undefined}>{tourLegend ?? "Optional tour (in person only)"}</legend>
 			<label class="choice"><input type="radio" name="tour_id" value="none" /> No tour, thanks</label>
 			<div id="m-tours"></div>
 		</fieldset>
@@ -73,7 +73,7 @@ const { inPersonLabel = 'In person', remoteLabel = 'Remotely (online sessions on
 	const busy = (on: boolean) => buttons.forEach((b) => (b.disabled = on));
 	const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 
-	type View = { ok: boolean; error?: string; event: { title: string; page_path: string; open: boolean; timezone?: string; extra_question?: string | null }; tours: { id: string; label: string; available: boolean; open: boolean }[]; optins?: { id: string; label: string; starts_at: string; location: string | null; available?: boolean }[]; registration: Record<string, string | null | boolean | string[]>; calendar: { key: string; summary: string; start: string; url: string }[]; polls?: Poll[] };
+	type View = { ok: boolean; error?: string; event: { title: string; page_path: string; open: boolean; timezone?: string; extra_question?: string | null; in_person_label?: string | null; remote_label?: string | null; tour_legend?: string | null }; tours: { id: string; label: string; available: boolean; open: boolean }[]; optins?: { id: string; label: string; starts_at: string; location: string | null; available?: boolean }[]; registration: Record<string, string | null | boolean | string[]>; calendar: { key: string; summary: string; start: string; url: string }[]; polls?: Poll[] };
 	type Poll = { id: string; question: string; open: boolean; allow_suggestions: boolean; closes_at: string; options: { id: string; label: string; pending: boolean; mine: boolean }[]; ballot: { ranking: string[]; bar: number } | null; notes: string[]; results: { label: string; willing: number; out: number }[] | null };
 
 	function describe(r: View['registration']) {
@@ -103,6 +103,11 @@ const { inPersonLabel = 'In person', remoteLabel = 'Remotely (online sessions on
 	}
 	function fill(v: View) {
 		const r = v.registration;
+		// The event's own wording, unless the page set the component's prop (data-fixed).
+		for (const [id, text] of [['m-in-person-label', v.event.in_person_label], ['m-remote-label', v.event.remote_label], ['m-tour-legend', v.event.tour_legend]] as const) {
+			const el = document.getElementById(id);
+			if (el && !el.dataset.fixed && text) el.textContent = text;
+		}
 		document.getElementById('manage-summary')!.textContent = `${v.event.title}: ${describe(r)}`;
 		(form.elements.namedItem('name') as HTMLInputElement).value = String(r.name ?? '');
 		document.getElementById('m-email')!.textContent = String(r.email ?? '');

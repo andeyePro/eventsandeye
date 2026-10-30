@@ -20,6 +20,10 @@ export interface EventRow {
 	extra_question?: string | null;
 	/** At most one host list per session every this many minutes; 0 sends every change. */
 	host_list_minutes?: number;
+	/** The event's wording for attending in person, remotely, and the tours' legend (null = plain defaults). */
+	in_person_label?: string | null;
+	remote_label?: string | null;
+	tour_legend?: string | null;
 }
 
 export interface SessionRow {
@@ -163,7 +167,7 @@ export function statusLines(reg: RegistrationRow, sessions: SessionRow[]): strin
 		const what = optedIn(reg, sessions).map(lower).join(' and ') || 'the optional sessions';
 		return [`You are joining us for ${what} only.`, ...waitingLines(reg, sessions)];
 	}
-	if (reg.attendance === 'remote') lines.push('You are registered to join the talks remotely.');
+	if (reg.attendance === 'remote') lines.push('You are registered to join remotely.');
 	else if (reg.place === 'waitlist') lines.push('You are on the waiting list for an in-person place. We will email you if a place becomes available.');
 	else lines.push('You have an in-person place.');
 	if (reg.attendance === 'in_person' && reg.tour_id) {

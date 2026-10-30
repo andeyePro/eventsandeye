@@ -199,6 +199,9 @@ try {
 	const DINNER = seeded.sessions.find((x) => x.optin)?.id;
 	const YEAR = seeded.event.starts_at.slice(0, 4);
 	check('seeded in-person maximum and tour capacities', seeded.event.in_person_max === 20 && tours.every((t) => t.capacity === 10), JSON.stringify({ max: seeded.event.in_person_max, tours: tours.map((t) => t.capacity) }));
+	sql(`UPDATE events SET remote_label = 'Remotely, on Meet' WHERE id = '${EVENT}'`);
+	check('the form gets the event\'s own wording for attending', (await req('GET', `/api/rsvp/status?event=${EVENT}`)).data.event.remote_label === 'Remotely, on Meet');
+	sql(`UPDATE events SET remote_label = NULL WHERE id = '${EVENT}'`);
 	check('the form and the admin page get the event\'s time zone', (await req('GET', `/api/rsvp/status?event=${EVENT}`)).data.event.timezone === 'Europe/London' && seeded.event.timezone === 'Europe/London' && /class="tzl"/.test(page.data));
 	check('summary without an event id falls back to the latest event', (await req('GET', '/api/admin/summary', undefined, ADMIN)).data.event?.id === EVENT);
 	r = await req('POST', '/api/admin/settings', { event: EVENT, in_person_max: 1 }, ADMIN);

@@ -11,14 +11,14 @@ interface Props {
 	sourceUrl?: string;
 	/** The page shown after a successful registration. */
 	next?: string;
-	/** Label for the in-person attendance choice, e.g. "In person at White City". */
+	/** Label for the in-person attendance choice, e.g. "In person at White City". Overrides the event's in_person_label. */
 	inPersonLabel?: string;
 	/** Label for the remote attendance choice. */
 	remoteLabel?: string;
 	/** Legend for the tour choices, shown only when the event has tours. */
 	tourLegend?: string;
 }
-const { event, controller, contactHref, privacyHref = '/privacy/', sourceUrl = 'https://github.com/andeyePro/eventsandeye', next = '/events/check-email/', inPersonLabel = 'In person', remoteLabel = 'Remotely (online sessions only)', tourLegend = 'Optional tour (in person only)' } = Astro.props;
+const { event, controller, contactHref, privacyHref = '/privacy/', sourceUrl = 'https://github.com/andeyePro/eventsandeye', next = '/events/check-email/', inPersonLabel, remoteLabel, tourLegend } = Astro.props;
 const siteKey = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY || (import.meta.env.DEV || import.meta.env.PUBLIC_TURNSTILE_ALLOW_TEST_KEY === 'true' ? '1x00000000000000000000AA' : undefined);
 // A production build without a real site key would ship Cloudflare's always-pass test key and every registration would fail.
 if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production builds (or PUBLIC_TURNSTILE_ALLOW_TEST_KEY=true for local test builds).');
@@ -37,13 +37,13 @@ if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production buil
 
 	<fieldset class="field">
 		<legend>How will you attend? <span aria-hidden="true">*</span></legend>
-		<label class="choice"><input type="radio" name="attendance" value="in_person" required /> {inPersonLabel}</label>
-		<label class="choice"><input type="radio" name="attendance" value="remote" /> {remoteLabel}</label>
+		<label class="choice"><input type="radio" name="attendance" value="in_person" required /> <span id="rsvp-in-person-label" data-fixed={inPersonLabel ? "1" : undefined}>{inPersonLabel ?? "In person"}</span></label>
+		<label class="choice"><input type="radio" name="attendance" value="remote" /> <span id="rsvp-remote-label" data-fixed={remoteLabel ? "1" : undefined}>{remoteLabel ?? "Remotely (online sessions only)"}</span></label>
 		<label class="choice" id="rsvp-extras-choice" hidden><input type="radio" name="attendance" value="extras" /> <span id="rsvp-extras-label">Just the optional sessions</span></label>
 	</fieldset>
 
 	<fieldset class="field" id="rsvp-tour-fieldset" hidden>
-		<legend>{tourLegend}</legend>
+		<legend id="rsvp-tour-legend" data-fixed={tourLegend ? "1" : undefined}>{tourLegend ?? "Optional tour (in person only)"}</legend>
 		<label class="choice"><input type="radio" name="tour_id" value="none" checked /> No tour, thanks</label>
 		<div id="rsvp-tours"></div>
 	</fieldset>
@@ -110,10 +110,17 @@ if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production buil
 	interface Status {
 		ok: boolean;
 		error?: string;
-		event: { open: boolean; deadline: string; timezone?: string; extra_question?: string | null };
+		event: { open: boolean; deadline: string; timezone?: string; extra_question?: string | null; in_person_label?: string | null; remote_label?: string | null; tour_legend?: string | null };
 		tours: { id: string; label: string; available: boolean; open: boolean }[];
 		optins?: { id: string; label: string; starts_at: string; location: string | null; available?: boolean }[];
 		polls?: { id: string; question: string; options: { id: string; label: string }[] }[];
+	}
+	/** The event's own wording, unless the page set the component's prop (data-fixed). */
+	function useLabels(e: { in_person_label?: string | null; remote_label?: string | null; tour_legend?: string | null }) {
+		for (const [id, text] of [['rsvp-in-person-label', e.in_person_label], ['rsvp-remote-label', e.remote_label], ['rsvp-tour-legend', e.tour_legend]] as const) {
+			const el = document.getElementById(id);
+			if (el && !el.dataset.fixed && text) el.textContent = text;
+		}
 	}
 	// Polls are optional here: only a list someone has rearranged is sent, so nobody is counted in by default.
 	const pollsBox = document.getElementById('rsvp-polls')!;
@@ -167,6 +174,7 @@ if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production buil
 		.then((r) => r.json() as Promise<Status>)
 		.then((s) => {
 			if (!s.ok) throw new Error(s.error);
+			useLabels(s.event);
 			if (!s.event.open) {
 				avail.textContent = 'Registration for this event has closed.';
 				form.querySelectorAll('input,textarea,button').forEach((el) => ((el as HTMLInputElement).disabled = true));

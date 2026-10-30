@@ -7,11 +7,14 @@
 -- so INSERT OR IGNORE keeps a rerun from overwriting those edits.
 
 -- The event. in_person_max is the room's capacity; registration closes at deadline; travel_minutes sets the
--- "time to leave" calendar reminder; page_path is the page with the booking form; extra_question is optional.
-INSERT OR IGNORE INTO events (id, title, starts_at, ends_at, timezone, location, in_person_max, deadline, travel_minutes, page_path, extra_question) VALUES
+-- "time to leave" calendar reminder; page_path is the page with the booking form; extra_question is optional, and so
+-- are the wording of the two ways to attend and of the tour choice on the form and manage page (NULL = plain defaults).
+INSERT OR IGNORE INTO events (id, title, starts_at, ends_at, timezone, location, in_person_max, deadline, travel_minutes, page_path, extra_question,
+  in_person_label, remote_label, tour_legend) VALUES
   ('2026-11-13-london', 'AMYBO Event, London', '2026-11-13T10:30:00Z', '2026-11-13T22:00:00Z', 'Europe/London',
    'I-HUB, Imperial College White City campus, 84 Wood Lane, London W12 0BZ', 20, '2026-11-06T12:00:00Z', 60, '/events/2026-11-13-london/',
-   'Staying on for Saturday 14 November? Tell us if you would like to do something together, and what you fancy.');
+   'Staying on for Saturday 14 November? Tell us if you would like to do something together, and what you fancy.',
+   'In person at White City', 'Remotely, talks only, on Google Meet', 'Optional lab tour (in person only)');
 
 -- Sessions.
 --   Core sessions (no choice_group) make up the day. mode: 'in_person', 'online' or 'hybrid' (remote attendees get

@@ -62,6 +62,9 @@ export async function latestInstructions(env: Env, eventId: string) {
 		.first<{ event_id: string; version: number; subject: string; body_md: string; change_note: string | null; created_at: string }>();
 }
 
+/** The event's own wording for the forms; null where the components' defaults should be used. */
+export const eventLabels = (ev: EventRow) => ({ in_person_label: ev.in_person_label ?? null, remote_label: ev.remote_label ?? null, tour_legend: ev.tour_legend ?? null });
+
 export const registrationOpen = (ev: EventRow, now = Date.now()) => now < Date.parse(ev.deadline);
 /** Optional sessions can be booked or changed until their own deadline, by default their start. */
 export const sessionBookingOpen = (s: SessionRow, now = Date.now()) => now < Date.parse(s.booking_deadline ?? s.starts_at);
@@ -425,7 +428,7 @@ export async function manageView(env: Env, id: string) {
 	const ics = await icsUrlFor(env, reg.id);
 	return {
 		ok: true as const,
-		event: { id: ev.id, title: ev.title, starts_at: ev.starts_at, deadline: ev.deadline, timezone: ev.timezone, page_path: ev.page_path, open: registrationOpen(ev), extra_question: ev.extra_question ?? null },
+		event: { id: ev.id, title: ev.title, starts_at: ev.starts_at, deadline: ev.deadline, ...eventLabels(ev), timezone: ev.timezone, page_path: ev.page_path, open: registrationOpen(ev), extra_question: ev.extra_question ?? null },
 		tours: cap.tours.map((t) => ({ id: t.id, label: t.label, available: t.available, open: t.open })),
 		optins: sessions.filter((s) => s.optin).map((s) => ({ id: s.id, label: s.label, starts_at: s.starts_at, location: s.location, available: !!cap.optins.find((o) => o.id === s.id)?.available })),
 		registration: publicStatus(reg, sessions),
