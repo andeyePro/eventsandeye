@@ -82,7 +82,7 @@ if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production buil
 		</label>
 	</div>
 
-	<div class="cf-turnstile" data-sitekey={siteKey} data-response-field-name="cf-turnstile-response"></div>
+	<div class="cf-turnstile" data-sitekey={siteKey} data-action="eventsandeye-register" data-response-field-name="cf-turnstile-response"></div>
 
 	<p class="help"><span aria-hidden="true">*</span> Required</p>
 	<!-- Disabled until the script runs: without it the form would post personal data to this page and go nowhere. -->
