@@ -19,7 +19,11 @@ const HTML = /* html */ `<!doctype html>
 	body { margin: 0; }
 	header { background: #fff; border-bottom: 1px solid var(--line); padding: 0.8rem 1.5rem; display: flex; gap: 1rem; align-items: baseline; flex-wrap: wrap; }
 	header h1 { font-size: 1.3rem; margin: 0; }
-	main { padding: 1rem 1.5rem 4rem; display: grid; gap: 1.5rem; max-width: 1250px; }
+	main { padding: 1rem 1.5rem 4rem; display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.5rem; max-width: 1250px; }
+	/* Without this, display:inline-block on buttons beats the hidden attribute. */
+	[hidden] { display: none !important; }
+	summary { padding: 0.3rem 0; cursor: pointer; }
+	@media (max-width: 40rem) { header, main { padding-left: 0.75rem; padding-right: 0.75rem; } section { padding: 0.75rem; } }
 	section { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 1rem 1.25rem; }
 	h2 { font-size: 1.15rem; margin: 0 0 0.75rem; color: var(--blue); }
 	.stats { display: flex; gap: 1rem; flex-wrap: wrap; }
@@ -153,7 +157,7 @@ const HTML = /* html */ `<!doctype html>
 	</section>
 
 	<section aria-labelledby="h-regs">
-		<h2 id="h-regs">Registrations</h2>
+		<h2 id="h-regs" tabindex="-1">Registrations</h2>
 		<p><a class="button secondary" id="csv-link" href="#">Download CSV</a> <a class="button secondary" id="log-link" href="#">Download sent log (markdown)</a></p>
 		<div style="overflow-x:auto"><table id="regs"><caption class="small" style="text-align:left">Waiting lists are in order of confirmation. Unconfirmed = email not yet confirmed.</caption><thead><tr><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Attendance</th><th scope="col">Tour</th><th scope="col">Affiliation</th><th scope="col">Needs</th><th scope="col">Extra</th><th scope="col">Shares email with hosts</th><th scope="col">Instr. v</th><th scope="col">Actions</th></tr></thead><tbody></tbody></table></div>
 	</section>
@@ -227,7 +231,11 @@ const $ = (id) => document.getElementById(id);
 const toast = (msg) => { const t = $('toast'); t.textContent = msg; setTimeout(() => { if (t.textContent === msg) t.textContent = ''; }, 7000); };
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 async function api(path, method = 'GET', body) {
-	const res = await fetch(path, { method, headers: body ? { 'content-type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined, credentials: 'same-origin' });
+	let res;
+	// When the Access session runs out, Access redirects to its sign-in page on another site, which fetch cannot follow.
+	try { res = await fetch(path, { method, headers: body ? { 'content-type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined, credentials: 'same-origin', redirect: 'manual' }); }
+	catch { throw new Error('Could not reach the server. Check your connection, then reload the page (your sign-in may have run out).'); }
+	if (res.type === 'opaqueredirect' || res.status === 0) throw new Error('Your sign-in has run out: reload the page to sign in again. Nothing was saved or sent.');
 	const d = await res.json().catch(() => ({ ok: false, error: 'HTTP ' + res.status }));
 	if (!d.ok) throw new Error(d.error || 'HTTP ' + res.status);
 	return d;
@@ -339,7 +347,8 @@ async function load() {
 	$('regs').querySelector('tbody').innerHTML = s.registrations.map((r) => {
 		const tour = tours.find((t) => t.id === r.tour_id);
 		const pend = r.status === 'pending' ? '<span class="tag pending">unconfirmed</span> ' : '';
-		const where = r.attendance === 'remote' ? 'Remote' : !r.place ? '<span class="tag ok">' + esc(s.sessions.filter((x) => x.optin && (r.optins || '').split(',').includes(x.id)).map((x) => x.label).join(', ') || 'Opt-in') + ' only</span>' : r.place === 'waitlist' ? '<span class="tag wait">in person: waiting since ' + esc(uk(r.waitlist_since)) + '</span>' : '<span class="tag ok">in person</span>';
+		const where = r.attendance === 'remote' ? 'Remote' : !r.place ? (() => { const chosen = s.sessions.filter((x) => x.optin && (r.optins || '').split(',').includes(x.id)); const waiting = (r.optins_waiting || '').split(','); const all = chosen.length && chosen.every((x) => waiting.includes(x.id));
+			return '<span class="tag ' + (all ? 'wait' : 'ok') + '">' + esc(chosen.map((x) => x.label).join(', ') || 'Opt-in') + ' only' + (all ? ': waiting' : '') + '</span>'; })() : r.place === 'waitlist' ? '<span class="tag wait">in person: waiting since ' + esc(uk(r.waitlist_since)) + '</span>' : '<span class="tag ok">in person</span>';
 		const waitingFor = (r.optins_waiting || '').split(',');
 		const optSessions = r.attendance === 'in_person' && r.optins ? s.sessions.filter((x) => x.optin && r.optins.split(',').includes(x.id)) : [];
 		const opts = optSessions.map((x) => waitingFor.includes(x.id) ? '<span class="tag wait">' + esc(x.label) + ': waiting</span>' : esc(x.label));
@@ -389,7 +398,7 @@ document.body.addEventListener('click', async (e) => {
 	try {
 		if (b.id === 'sess-quiet') {
 			if (!confirm('Save sessions without emailing attendees? Session hosts still get their updated lists. Calendars update with each person\'s next joining-instructions email.')) return;
-			await api('/api/admin/sessions', 'POST', { event: eventId, sessions: sessionEdits(), quiet: true }); toast('Sessions saved. Nobody was emailed.'); load();
+			await api('/api/admin/sessions', 'POST', { event: eventId, sessions: sessionEdits(), quiet: true }); toast('Sessions saved. No attendee was emailed; hosts get their updated lists.'); load();
 		} else if (b.id === 'sess-dry') {
 			const d = await api('/api/admin/sessions', 'POST', { event: eventId, sessions: sessionEdits(), dry_run: true });
 			toast(d.calendar_updates + ' person(s) would get updated calendar invitations.');
@@ -400,14 +409,15 @@ document.body.addEventListener('click', async (e) => {
 			toast('Promoted and emailed ' + total + (d.still_waiting ? '; ' + d.still_waiting + ' still waiting.' : '.')); load();
 		} else if (b.dataset.promote) {
 			if (!confirm('Promote this person? They will be emailed the latest joining instructions.')) return;
-			await api('/api/admin/promote', 'POST', { id: b.dataset.id, what: b.dataset.promote, session: b.dataset.session }); toast('Promoted and emailed.'); load();
+			await api('/api/admin/promote', 'POST', { id: b.dataset.id, what: b.dataset.promote, session: b.dataset.session }); toast('Promoted and emailed.'); load().then(() => $('h-regs').focus());
 		} else if (b.dataset.delete) {
 			if (!confirm(b.dataset.confirmed === '1' ? 'Remove ' + b.dataset.name + '? They have confirmed, so they will be emailed that their registration has been cancelled, and their calendar entries removed.' : 'Remove ' + b.dataset.name + '? They never confirmed, so no email is sent (use this for spam, typos or duplicates).')) return;
-			await api('/api/admin/registration', 'DELETE', { id: b.dataset.delete }); toast('Removed.'); load();
+			await api('/api/admin/registration', 'DELETE', { id: b.dataset.delete }); toast('Removed.'); load().then(() => $('h-regs').focus());
 		} else if (b.dataset.resume) {
 			if (!confirm('Carry on sending this message to the people who have not had it yet?')) return;
 			await api('/api/admin/messages', 'POST', { action: 'resume', id: b.dataset.resume }); toast('Resumed: the rest go out within a few minutes.'); load();
 		} else if (b.dataset.cancel) {
+			if (!confirm('Cancel this scheduled message? It will not be sent, and this cannot be undone.')) return;
 			await api('/api/admin/messages/cancel', 'POST', { id: b.dataset.cancel }); toast('Scheduled message cancelled.'); load();
 		} else if (b.dataset.preview) {
 			const d = await api('/api/admin/preview', 'POST', { body_md: $(b.dataset.preview).value });
@@ -528,6 +538,7 @@ $('instr-form').addEventListener('submit', async (e) => {
 $('msg-form').addEventListener('submit', async (e) => {
 	e.preventDefault();
 	const when = $('m-when').value ? ukLocalToIso($('m-when').value) : null;
+	if (when && Date.parse(when) < Date.now()) { toast('That time has passed. Choose a later time, or leave "Send at" empty to send now.'); $('m-when').focus(); return; }
 	try {
 		const count = (await api('/api/admin/messages', 'POST', { event: eventId, dry_run: true, audience: audience() })).count;
 		if (!confirm((when ? 'Schedule for ' + uk(when) : 'Send now') + ' to ' + count + ' recipient(s)?')) return;

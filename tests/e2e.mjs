@@ -555,6 +555,9 @@ try {
 	}
 	check('filter by tour: 11:15 → 1 person', (await req('POST', '/api/admin/messages', { event: EVENT, dry_run: true, audience: { tour_id: TOUR2 } }, ADMIN)).data.count === 1);
 	check('HTML in messages is escaped', !/<script>/.test((await req('POST', '/api/admin/preview', { body_md: '<script>alert(1)</script>' }, ADMIN)).data.html));
+	{ const before = (await outbox()).length;
+	  const past = await req('POST', '/api/admin/messages', { event: EVENT, subject: 'Too late', body_md: 'x', audience: {}, scheduled_at: new Date(Date.now() - 3600_000).toISOString() }, ADMIN);
+	  check('a message scheduled for a time already gone is refused, not sent at once', past.status === 400 && /That time has passed/.test(past.data.error) && (await outbox()).length === before, JSON.stringify(past.data)); }
 	const inAnHour = new Date(Date.now() + 3600_000).toISOString();
 	r = await req('POST', '/api/admin/messages', { event: EVENT, subject: 'Reminder', body_md: 'See you soon', audience: { attendance: 'in_person' }, scheduled_at: inAnHour }, ADMIN);
 	const schedId = r.data.message.id;

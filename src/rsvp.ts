@@ -748,6 +748,8 @@ export async function createMessage(env: Env, eventId: string, input: Record<str
 	if (input.scheduled_at) {
 		const t = Date.parse(String(input.scheduled_at));
 		if (Number.isNaN(t)) throw new UserError('Invalid schedule time.');
+		// A time already gone is a mistake (the organiser asked for later, not now): sending at once would surprise them.
+		if (t < Date.now() - 60_000) throw new UserError('That time has passed. Choose a later time, or leave "Send at" empty to send now.');
 		if (t > Date.now() + 60_000) scheduled_at = new Date(t).toISOString();
 	}
 	const marks = Number.isInteger(input.marks_instructions_version) && (input.marks_instructions_version as number) > 0 ? (input.marks_instructions_version as number) : null;
