@@ -1,7 +1,7 @@
 // Events&I – Copyright (C) 2026 andeye Ltd. AGPL-3.0, see ../LICENSE.
 /**
  * Minimal RFC 5545 / RFC 5546 (iTIP) calendar builder: one VEVENT per file, as iTIP requires a single UID per
- * message. Times are written in the event's time zone with a VTIMEZONE when it is Europe/London, otherwise in UTC.
+ * message. Times are written in the event's time zone, with a VTIMEZONE for it (UTC if the zone is unknown).
  */
 
 export interface CalEntry {
@@ -66,8 +66,64 @@ export function localStamp(iso: string, tz: string): string {
 	return `${g('year')}${g('month')}${g('day')}T${g('hour')}${g('minute')}${g('second')}`;
 }
 
+const knownZone = (tz: string) => {
+	try {
+		new Intl.DateTimeFormat('en-GB', { timeZone: tz });
+		return tz !== 'UTC' && tz !== 'Etc/UTC';
+	} catch {
+		return false;
+	}
+};
+
+/** The zone's offset from UTC in minutes at an instant, from its wall-clock time there. */
+function offsetMinutes(ms: number, tz: string): number {
+	const s = localStamp(new Date(ms).toISOString(), tz);
+	const wall = Date.UTC(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8), +s.slice(9, 11), +s.slice(11, 13), +s.slice(13, 15));
+	return Math.round((wall - Math.floor(ms / 1000) * 1000) / 60000);
+}
+const fmtOffset = (m: number) => `${m < 0 ? '-' : '+'}${String(Math.floor(Math.abs(m) / 60)).padStart(2, '0')}${String(Math.abs(m) % 60).padStart(2, '0')}`;
+const wallStamp = (ms: number) => utcStamp(new Date(ms).toISOString()).slice(0, 15);
+
+/**
+ * A VTIMEZONE for any zone, without a time zone database of our own: the runtime's Intl data gives the offset at any
+ * instant, so each change of offset within a year either side of the event is found by search and written as an
+ * observance of its own (no RRULEs to get wrong). Calendar apps need only the rules around the event's own dates.
+ */
+export function vtimezone(tz: string, aroundIso: string): string[] {
+	if (tz === 'Europe/London') return LONDON_VTIMEZONE;
+	const DAY = 86400_000, from = Date.parse(aroundIso) - 366 * DAY, to = Date.parse(aroundIso) + 366 * DAY;
+	const changes: { at: number; before: number; after: number }[] = [];
+	let prev = offsetMinutes(from, tz);
+	for (let t = from + 6 * 3600_000; t <= to; t += 6 * 3600_000) {
+		const cur = offsetMinutes(t, tz);
+		if (cur === prev) continue;
+		let lo = t - 6 * 3600_000, hi = t; // the change is in (lo, hi]
+		while (hi - lo > 60_000) {
+			const mid = lo + Math.floor((hi - lo) / 120_000) * 60_000;
+			if (offsetMinutes(mid, tz) === prev) lo = mid; else hi = mid;
+		}
+		changes.push({ at: hi, before: prev, after: cur });
+		prev = cur;
+	}
+	const first = offsetMinutes(from, tz);
+	const offsets = [first, ...changes.map((c) => c.after)];
+	const standard = Math.min(...offsets);
+	const block = (startWall: number, before: number, after: number) => {
+		const kind = after > standard ? 'DAYLIGHT' : 'STANDARD';
+		return [`BEGIN:${kind}`, `TZOFFSETFROM:${fmtOffset(before)}`, `TZOFFSETTO:${fmtOffset(after)}`, `DTSTART:${wallStamp(startWall)}`, `END:${kind}`];
+	};
+	return [
+		'BEGIN:VTIMEZONE', `TZID:${tz}`,
+		// In force from before the first change found; its DTSTART is the start of the search window, in local time.
+		...block(from + first * 60_000, first, first),
+		// Each change starts at the local time it happened, counted in the offset it replaced (RFC 5545 §3.6.5).
+		...changes.flatMap((c) => block(c.at + c.before * 60_000, c.before, c.after)),
+		'END:VTIMEZONE',
+	];
+}
+
 function dt(prop: string, iso: string, tz: string): string {
-	return tz === 'Europe/London' ? `${prop};TZID=Europe/London:${localStamp(iso, tz)}` : `${prop}:${utcStamp(iso)}`;
+	return knownZone(tz) ? `${prop};TZID=${tz}:${localStamp(iso, tz)}` : `${prop}:${utcStamp(iso)}`;
 }
 
 export function buildIcs(opts: {
@@ -81,7 +137,7 @@ export function buildIcs(opts: {
 }): string {
 	const { method, entry, sequence, organizer, attendee, tz } = opts;
 	const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//andeye Ltd//Events&I//EN', 'CALSCALE:GREGORIAN', `METHOD:${method}`];
-	if (tz === 'Europe/London') lines.push(...LONDON_VTIMEZONE);
+	if (knownZone(tz)) lines.push(...vtimezone(tz, entry.start));
 	lines.push(
 		'BEGIN:VEVENT',
 		`UID:${entry.uid}`,
