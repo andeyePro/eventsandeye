@@ -487,6 +487,18 @@ try {
 	check('with "include the latest joining instructions", the message opens a full copy of them under its own subject', m.subject === 'Room confirmed' && /Room \*\*G01\*\*|Room G01/.test(m.text_body) && /Bring ID/.test(m.text_body) && /What's changed/.test(m.text_body), m.subject + ' | ' + m.text_body.slice(0, 300));
 	check('…and carries calendar changes saved quietly earlier (the new dinner location)', m.att.some((x) => /METHOD:REQUEST/.test(x.content) && /provisionally at The Broadcaster/.test(x.content.replace(/\r\n /g, ''))), m.att.map((x) => (/LOCATION:[^\r\n]*/.exec(x.content) || [''])[0]).join(' | '));
 	check('recipients now recorded as having the new version', (await req('POST', '/api/admin/messages', { event: EVENT, dry_run: true, audience: { below_version: V } }, ADMIN)).data.count === 0);
+	{
+		const regs = (await req('GET', `/api/admin/summary?event=${EVENT}`, undefined, ADMIN)).data.registrations.filter((x) => x.status === 'confirmed');
+		const has = (list, id) => (list || '').split(',').includes(id);
+		const count = async (audience) => (await req('POST', '/api/admin/messages', { event: EVENT, dry_run: true, audience }, ADMIN)).data.count;
+		const dinner = regs.filter((x) => x.attendance === 'in_person' && has(x.optins, DINNER) && !has(x.optins_waiting, DINNER) && x.place !== 'waitlist').length;
+		const dinnerAll = regs.filter((x) => x.attendance === 'in_person' && has(x.optins, DINNER)).length;
+		const extras = regs.filter((x) => x.attendance === 'in_person' && !x.place && !(x.optins || '').split(',').filter(Boolean).every((o) => has(x.optins_waiting, o))).length;
+		const day = regs.filter((x) => x.attendance === 'in_person' && x.place === 'place').length;
+		check('filter by opt-in session: just the people with a dinner place', dinner > 0 && (await count({ optin: DINNER })) === dinner, `${dinner} vs ${await count({ optin: DINNER })}`);
+		check('…and with the waiting list ticked, those waiting for it too', (await count({ optin: DINNER, include_waitlist: true })) === dinnerAll, `${dinnerAll}`);
+		check('"in person for the day" and "only coming to opt-in sessions" split "in person"', (await count({ attendance: 'extras' })) === extras && (await count({ attendance: 'day' })) === day && (await count({ attendance: 'in_person' })) === extras + day, `${extras} ${day}`);
+	}
 	check('filter by tour: 11:15 → 1 person', (await req('POST', '/api/admin/messages', { event: EVENT, dry_run: true, audience: { tour_id: TOUR2 } }, ADMIN)).data.count === 1);
 	check('HTML in messages is escaped', !/<script>/.test((await req('POST', '/api/admin/preview', { body_md: '<script>alert(1)</script>' }, ADMIN)).data.html));
 	const inAnHour = new Date(Date.now() + 3600_000).toISOString();

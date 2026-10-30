@@ -638,7 +638,9 @@ export async function adminDelete(env: Env, id: string) {
 }
 
 export interface Audience {
-	attendance?: 'all' | 'in_person' | 'remote';
+	/** in_person: everyone coming in person; day: those with a day place (or waiting for one); extras: those coming only to opt-in sessions. */
+	attendance?: 'all' | 'in_person' | 'day' | 'remote' | 'extras';
+	optin?: string; // an opt-in session id: only people signed up for it (waiting for it too, with include_waitlist)
 	tour_id?: string; // a tour session id, 'none' for no tour, or undefined for any
 	below_version?: number; // only people whose last joining instructions are older than this version
 	include_waitlist?: boolean; // include people waiting for an in-person place
@@ -647,7 +649,8 @@ export interface Audience {
 export function parseAudience(v: unknown): Audience {
 	const a = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>;
 	return {
-		attendance: a.attendance === 'in_person' || a.attendance === 'remote' ? a.attendance : 'all',
+		attendance: ['in_person', 'day', 'remote', 'extras'].includes(a.attendance as string) ? (a.attendance as Audience['attendance']) : 'all',
+		optin: typeof a.optin === 'string' && a.optin ? a.optin : undefined,
 		tour_id: typeof a.tour_id === 'string' && a.tour_id ? a.tour_id : undefined,
 		below_version: Number.isInteger(a.below_version) && (a.below_version as number) > 0 ? (a.below_version as number) : undefined,
 		include_waitlist: a.include_waitlist === true,
@@ -657,7 +660,15 @@ export function parseAudience(v: unknown): Audience {
 export async function audienceRecipients(env: Env, eventId: string, a: Audience): Promise<RegistrationRow[]> {
 	const where = [`event_id = ?`, `status = 'confirmed'`];
 	const binds: unknown[] = [eventId];
-	if (a.attendance && a.attendance !== 'all') { where.push('attendance = ?'); binds.push(a.attendance); }
+	// "In person" includes people coming only to an opt-in session (no place); "day" and "extras" split them.
+	if (a.attendance === 'in_person') where.push(`attendance = 'in_person'`);
+	else if (a.attendance === 'day') where.push(`attendance = 'in_person' AND place IS NOT NULL`);
+	else if (a.attendance === 'extras') where.push(`attendance = 'in_person' AND place IS NULL`);
+	else if (a.attendance === 'remote') where.push(`attendance = 'remote'`);
+	if (a.optin) {
+		where.push(`attendance = 'in_person' AND ${listedIn('optins', '?')}`); binds.push(a.optin);
+		if (!a.include_waitlist) { where.push(`NOT ${listedIn('optins_waiting', '?')}`); binds.push(a.optin); }
+	}
 	if (!a.include_waitlist) where.push(`NOT (attendance = 'in_person' AND place = 'waitlist')`);
 	if (a.tour_id === 'none') where.push('tour_id IS NULL');
 	else if (a.tour_id) { where.push('tour_id = ?'); binds.push(a.tour_id); }

@@ -122,7 +122,8 @@ const HTML = /* html */ `<!doctype html>
 			<label for="m-subject">Subject</label><input id="m-subject" type="text" required maxlength="200" />
 			<label for="m-body">Message (markdown). Each person gets their own copy starting "Hello &lt;name&gt;," with their manage link at the end.</label><textarea id="m-body" required></textarea>
 			<div class="row">
-				<div><label for="m-att">Attendance</label><select id="m-att"><option value="all">Everyone</option><option value="in_person">In person</option><option value="remote">Remote</option></select></div>
+				<div><label for="m-att">Attendance</label><select id="m-att"><option value="all">Everyone</option><option value="in_person">In person</option><option value="day">In person for the day</option><option value="remote">Remote</option><option value="extras">Only coming to opt-in sessions</option></select></div>
+				<div><label for="m-optin">Signed up for</label><select id="m-optin"><option value="">Any</option></select></div>
 				<div><label for="m-tour">Tour</label><select id="m-tour"><option value="">Any</option><option value="none">No tour</option></select></div>
 				<div><label for="m-below">Only people whose joining instructions are older than version</label><input id="m-below" type="number" min="1" placeholder="(everyone)" /></div>
 				<div><label><input type="checkbox" id="m-instr" style="width:auto" /> Include the latest joining instructions</label><p class="small">Your message comes first, then the full joining instructions with any calendar changes. Everyone sent it counts as having the latest version.</p></div>
@@ -176,7 +177,7 @@ const uk = (iso) => iso ? new Date(iso).toLocaleString('en-GB', { dateStyle: 'me
 let sessions = [], tours = [], latestVersion = 0, eventId = EVENT;
 
 function audience() {
-	return { attendance: $('m-att').value, tour_id: $('m-tour').value || undefined, below_version: $('m-below').value ? Number($('m-below').value) : undefined, include_waitlist: $('m-wait').checked };
+	return { attendance: $('m-att').value, optin: $('m-optin').value || undefined, tour_id: $('m-tour').value || undefined, below_version: $('m-below').value ? Number($('m-below').value) : undefined, include_waitlist: $('m-wait').checked };
 }
 function sessionEdits() {
 	return sessions.map((s) => {
@@ -225,6 +226,10 @@ async function load() {
 			+ '</div></fieldset>';
 	}).join('');
 
+	const optSel = $('m-optin');
+	optSel.querySelectorAll('option[data-o]').forEach((o) => o.remove());
+	for (const x of sessions.filter((y) => y.optin)) { const o = document.createElement('option'); o.value = x.id; o.textContent = x.label; o.dataset.o = '1'; optSel.append(o); }
+	optSel.parentElement.hidden = !sessions.some((y) => y.optin);
 	const tourSel = $('m-tour');
 	tourSel.querySelectorAll('option[data-t]').forEach((o) => o.remove());
 	for (const t of tours) { const o = document.createElement('option'); o.value = t.id; o.textContent = t.label; o.dataset.t = '1'; tourSel.append(o); }

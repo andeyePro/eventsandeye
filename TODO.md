@@ -11,7 +11,6 @@
 - [ ] **Events&I Plus:** fully hosted multi-tenant version (per-organisation Access, billing, custom domains, organisation branding in emails).
 - [ ] **Waiting lists:** optional auto-promotion with an expiry window, as a per-event setting (off by default).
 - [ ] **Waiting for the day but ticking the dinner (decision needed):** someone on the in-person waiting list who ticks an opt-in session is given a place at it, but gets no joining instructions or calendar entry until they have a day place. Either hold such people on the session's waiting list until they get a day place, or send them the session's instructions as if they came for it only.
-- [ ] **Messages to just the opt-in sessions:** the audience filter has no "dinner only" or "signed up for X" option, and "In person" also reaches people coming only to the dinner.
 - [ ] **Host list debounce:** a change of attendance re-emails every affected host at once; sending each host at most one list an hour from the cron would cut the noise during a busy sign-up day (self-service changes are capped at 10 emails an hour per registration for now).
 - [ ] **Accessibility review** of the Astro components in a real browser, including colour contrast (the axe scan in jsdom cannot check contrast).
 - [ ] **"Save without emailing anyone" and hosts:** a quiet session save still emails hosts their changed lists (and, since 2026-10-30, a replaced host the note to delete theirs). Either relabel the button ("without emailing attendees") or hold host emails back too.
