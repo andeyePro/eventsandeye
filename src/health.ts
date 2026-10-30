@@ -1,6 +1,6 @@
 // Events&I – Copyright (C) 2026 andeye Ltd. AGPL-3.0, see ../LICENSE.
 import { isLocalRequest, teamDomain } from './access';
-import { type Env, isDev } from './env';
+import { type Env, isDev, siteUrl } from './env';
 
 /**
  * The admin page's set-up check: settings left at their example values or missing, a cron Worker that is not running or
@@ -31,7 +31,7 @@ export async function recordCronRun(env: Env, now = Date.now()) {
 	} catch (e) { console.error('could not record the cron run (apply the database migrations)', e); }
 }
 
-const EXAMPLES = /REPLACE_WITH|example\.org|example\.cloudflareaccess\.com|Example Organisers|SC000000/;
+const EXAMPLES = /REPLACE_WITH|(^|[@./\s])example\.(org|cloudflareaccess\.com)\b|Example Organisers|SC000000/;
 
 export async function setupChecks(env: Env, request: Request, now = Date.now()): Promise<SetupFinding[]> {
 	const out: SetupFinding[] = [];
@@ -65,23 +65,25 @@ export async function setupChecks(env: Env, request: Request, now = Date.now()):
 	if (env.ACCESS_MFA === 'application') out.push({ level: 'note', text: 'ACCESS_MFA is "application": the two-factor check relies on the Access application requiring MFA. Keep that setting on in Zero Trust.' });
 
 	// Migrations: wrangler records them in d1_migrations.
+	// By name, not the newest row: a site may keep migrations of its own in the same table.
 	try {
-		const row = await env.DB.prepare('SELECT name FROM d1_migrations ORDER BY id DESC LIMIT 1').first<{ name: string }>();
-		if (row && row.name < LATEST_MIGRATION) error(`The database is missing migrations (the latest applied is ${row.name}; this version needs ${LATEST_MIGRATION}). Run \`npx wrangler d1 migrations apply <database> --remote\`.`);
+		const row = await env.DB.prepare('SELECT 1 AS ok FROM d1_migrations WHERE name = ?').bind(LATEST_MIGRATION).first<{ ok: number }>();
+		if (!row) error(`The database is missing migrations: this version needs ${LATEST_MIGRATION}. Run \`npx wrangler d1 migrations apply <database> --remote\`.`);
 	} catch {}
 
-	let cron: CronStatus | null = null;
+	let cron: CronStatus | null = null, readable = true;
 	try {
 		const row = await env.DB.prepare(`SELECT value FROM status WHERE key = 'cron'`).first<{ value: string }>();
 		cron = row ? JSON.parse(row.value) : null;
-	} catch {}
+	} catch { readable = false; } // no status table yet: the missing migration above says what to do
+	if (!readable) return out;
 	if (!cron) error('The cron Worker has not run yet. It sends scheduled messages and the rest of big ones, deletes unconfirmed registrations and deletes everything 30 days after the event: deploy it (README step 10). Its first run, within five minutes, clears this.');
 	else {
 		const late = now - Date.parse(cron.at);
 		if (late > CRON_LATE_MS) warning(`The cron Worker last ran ${Math.round(late / 60_000)} minutes ago; it should run every five. Check it is deployed and look at its log (\`npx wrangler tail --config workers/cron/wrangler.toml\`).`);
 		if (cron.secret !== (await secretPrint(env))) error('The cron Worker\'s TOKEN_SECRET is not the same as the site\'s, so links in the emails it sends do not work. Set it to the same value: `npx wrangler secret put TOKEN_SECRET --config workers/cron/wrangler.toml`.');
-		if ((cron.site || '') !== (env.SITE_URL ?? '')) error(`The cron Worker's SITE_URL (${cron.site || 'not set'}) is not the site's (${env.SITE_URL || 'not set'}), so links in the emails it sends go elsewhere: make them the same in workers/cron/wrangler.toml.`);
-		if ((cron.from || '') !== (env.EMAIL_FROM ?? '')) warning(`The cron Worker's EMAIL_FROM (${cron.from || 'not set'}) is not the site's (${env.EMAIL_FROM || 'not set'}).`);
+		if (siteUrl({ ...env, SITE_URL: cron.site }) !== siteUrl(env)) error(`The cron Worker's SITE_URL (${cron.site || 'not set'}) is not the site's (${env.SITE_URL || 'not set'}), so links in the emails it sends go elsewhere: make them the same in workers/cron/wrangler.toml.`);
+		if ((cron.from || '').trim() !== (env.EMAIL_FROM ?? '').trim()) warning(`The cron Worker's EMAIL_FROM (${cron.from || 'not set'}) is not the site's (${env.EMAIL_FROM || 'not set'}).`);
 		if (!dev && !cron.resend) error('The cron Worker has no RESEND_API_KEY, so scheduled messages and the rest of big ones cannot be sent: `npx wrangler secret put RESEND_API_KEY --config workers/cron/wrangler.toml`.');
 	}
 	return out;

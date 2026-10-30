@@ -67,7 +67,8 @@ export async function checkAccess(env: Env, request: Request): Promise<AccessRes
 async function checkJwt(env: Env, request: Request): Promise<AccessResult> {
 	const token = request.headers.get('cf-access-jwt-assertion');
 	if (!token) return { email: null, reason: 'not signed in through Cloudflare Access (no Access token reached the site: check that the Access application covers this address)' };
-	if (!env.ACCESS_AUD) return { email: null, reason: 'ACCESS_AUD is not set' };
+	// Before the signature is checked, anyone can reach these answers: set-up details go to the log, not the reply.
+	if (!env.ACCESS_AUD) { console.error('Access check: ACCESS_AUD is not set'); return { email: null, reason: 'the admin page is not set up yet (see the site\'s log)' }; }
 	const parts = token.split('.');
 	if (parts.length !== 3) return { email: null, reason: 'not signed in through Cloudflare Access' };
 	let header: { kid?: string; alg?: string }, payload: { aud?: string | string[]; exp?: number; nbf?: number; iat?: number; iss?: string; email?: string; amr?: unknown; type?: string };
@@ -78,10 +79,12 @@ async function checkJwt(env: Env, request: Request): Promise<AccessResult> {
 		return { email: null, reason: 'not signed in through Cloudflare Access' };
 	}
 	if (header.alg !== 'RS256') return { email: null, reason: 'not signed in through Cloudflare Access' };
-	const jwk = (await keys(env)).find((k) => k.kid === header.kid) ?? (await keys(env, true)).find((k) => k.kid === header.kid);
+	let published = await keys(env);
+	let jwk = published.find((k) => k.kid === header.kid);
+	if (!jwk) { published = await keys(env, true); jwk = published.find((k) => k.kid === header.kid); }
 	if (!jwk) {
-		if (!teamDomain(env)) return { email: null, reason: 'ACCESS_TEAM_DOMAIN is not set' };
-		return { email: null, reason: (await keys(env)).length ? 'the Access token was signed by a key this team does not publish (check ACCESS_TEAM_DOMAIN)' : `could not fetch the Access keys from ${certsUrl(env)} (check ACCESS_TEAM_DOMAIN)` };
+		console.error(!teamDomain(env) ? 'Access check: ACCESS_TEAM_DOMAIN is not set' : published.length ? `Access check: a token signed by a key ${teamDomain(env)} does not publish (check ACCESS_TEAM_DOMAIN)` : `Access check: could not fetch the Access keys from ${certsUrl(env)} (check ACCESS_TEAM_DOMAIN)`);
+		return { email: null, reason: 'not signed in through Cloudflare Access (if you did sign in, check ACCESS_TEAM_DOMAIN: the site\'s log says more)' };
 	}
 	const key = await crypto.subtle.importKey('jwk', { kty: jwk.kty, n: jwk.n, e: jwk.e, alg: 'RS256', ext: true }, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify']);
 	const ok = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', key, base64urlDecode(parts[2]), new TextEncoder().encode(`${parts[0]}.${parts[1]}`));

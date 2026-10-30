@@ -280,7 +280,7 @@ async function load() {
 	if (!evs) $('events').hidden = true;
 	else if (!evs.events.length) {
 		// A new installation: nothing to show but the form to create the first event.
-		document.querySelectorAll('main > section').forEach((x) => { x.hidden = x.id !== 'events' && !(x.id === 'setup' && evs.setup.length); });
+		document.querySelectorAll('main > section').forEach((x) => { if (x.id !== 'setup') x.hidden = x.id !== 'events'; });
 		$('ev-pick').hidden = true; $('ev-pick').previousElementSibling.textContent = 'No events yet: create the first one.';
 		$('ev-form').closest('details').hidden = true; $('clone-form').closest('details').hidden = true; $('new-details').open = true;
 		return;

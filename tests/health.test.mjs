@@ -14,8 +14,11 @@ function db({ migration = LATEST_MIGRATION, cron = null } = {}) {
 	return {
 		state,
 		prepare: (sql) => ({
-			bind: (...args) => ({ run: async () => { state.cron = args[0]; } }),
-			first: async () => /d1_migrations/.test(sql) ? (migration ? { name: migration } : null) : state.cron ? { value: state.cron } : null,
+			bind: (...args) => ({
+				run: async () => { state.cron = args[0]; },
+				first: async () => (args[0] === migration ? { ok: 1 } : null),
+			}),
+			first: async () => (state.cron ? { value: state.cron } : null),
 		}),
 	};
 }
@@ -48,7 +51,7 @@ test('example values, test keys and DEV_MODE on a live site are reported', async
 test('missing secrets, a missing migration and a cron Worker that never ran are errors', async () => {
 	const env = { ...good, RESEND_API_KEY: undefined, TOKEN_SECRET: 'short' };
 	const f = await setupChecks({ ...env, DB: db({ migration: '0009_chunked_sending.sql' }) }, req());
-	for (const re of [/RESEND_API_KEY is not set/, /TOKEN_SECRET is missing or shorter/, /missing migrations.*0009_chunked_sending.*0010_status/, /cron Worker has not run yet/]) {
+	for (const re of [/RESEND_API_KEY is not set/, /TOKEN_SECRET is missing or shorter/, /missing migrations.*0010_status/, /cron Worker has not run yet/]) {
 		assert.ok(f.some((x) => x.level === 'error' && re.test(x.text)), `${re}: ${JSON.stringify(f)}`);
 	}
 });

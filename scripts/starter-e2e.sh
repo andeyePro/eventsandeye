@@ -2,12 +2,20 @@
 # Events&I – Copyright (C) 2026 andeye Ltd. AGPL-3.0, see ../LICENSE.
 # Runs the end-to-end test from a throwaway copy of examples/starter, so it needs no host site:
 #   sh scripts/starter-e2e.sh            (from the repository root; needs Node 22 and network access to npm)
-# Set STARTER_DIR to keep the copy somewhere (it is reused, so later runs skip npm install).
+# Set STARTER_DIR to keep the copy somewhere outside the repository (it is reused, so later runs skip npm install
+# until the starter's package.json changes).
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
-dir=${STARTER_DIR:-$(mktemp -d)}
-mkdir -p "$dir"
-# The site's own files, refreshed on every run; node_modules is kept.
+if [ -n "${STARTER_DIR:-}" ]; then
+	mkdir -p "$STARTER_DIR"
+	dir=$(cd "$STARTER_DIR" && pwd)
+	case "$dir/" in "$root/"*) echo "STARTER_DIR must be outside the repository (it is copied into the starter)" >&2; exit 1 ;; esac
+else
+	dir=$(mktemp -d)
+	trap 'rm -rf "$dir"' EXIT
+fi
+# The site's own files, refreshed on every run; node_modules is kept while package.json is unchanged.
+if ! cmp -s "$root/examples/starter/package.json" "$dir/package.json"; then rm -rf "$dir/node_modules"; fi
 cp -R "$root/examples/starter/." "$dir/"
 cp "$root/examples/wrangler.toml" "$dir/wrangler.toml"
 rm -rf "$dir/functions" && cp -R "$root/examples/functions" "$dir/functions"

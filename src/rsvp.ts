@@ -256,8 +256,9 @@ export async function register(env: Env, eventId: string, input: RegistrationInp
 	const unheld = c.attendance === 'in_person' && !c.extras && cap.inPerson.available && cap.inPerson.pendingHeld >= holdLimit(ev);
 	const place = c.attendance === 'in_person' && !c.extras ? (cap.inPerson.available && !unheld ? 'place' : 'waitlist') : null;
 	const tourCap = tour ? cap.tours.find((t) => t.id === tour.id)! : null;
-	const tour_place = tourCap ? (tourCap.available ? 'place' : 'waitlist') : null;
-	const optins_waiting = joinIds(ids(c.optins).filter((o) => !cap.optins.find((x) => x.id === o)!.available));
+	// Beyond the hold limit nothing is held, tours and opt-in sessions included: confirming decides all of them.
+	const tour_place = tourCap ? (tourCap.available && !unheld ? 'place' : 'waitlist') : null;
+	const optins_waiting = joinIds(ids(c.optins).filter((o) => unheld || !cap.optins.find((x) => x.id === o)!.available));
 	const id = randomToken(16);
 	try {
 		await env.DB.prepare(
@@ -411,10 +412,13 @@ export async function confirm(env: Env, id: string) {
 		if (reg.attendance === 'in_person' && reg.place) place = cap.inPerson.available ? 'place' : 'waitlist';
 		if (reg.tour_id) tour_place = cap.tours.find((t) => t.id === reg!.tour_id)?.available ? 'place' : 'waitlist';
 		optins_waiting = joinIds(ids(reg.optins).filter((o) => !cap.optins.find((x) => x.id === o)?.available));
-	} else if (reg.attendance === 'in_person' && reg.place === 'waitlist') {
-		// Registered when the event was full or the hold limit was reached: a place freed since, with nobody confirmed
-		// waiting for it, goes to whoever confirms first.
-		if ((await capacity(env, ev, sessions, now)).inPerson.available) place = 'place';
+	} else if (reg.attendance === 'in_person' && (reg.place === 'waitlist' || reg.tour_place === 'waitlist' || reg.optins_waiting)) {
+		// Registered when something was full or the hold limit was reached: a place freed since, with nobody confirmed
+		// waiting for it, goes to whoever confirms first. Only what was waiting is looked at; what is held stays held.
+		const cap = await capacity(env, ev, sessions, now);
+		if (reg.place === 'waitlist' && cap.inPerson.available) place = 'place';
+		if (reg.tour_place === 'waitlist' && cap.tours.find((t) => t.id === reg!.tour_id)?.available) tour_place = 'place';
+		optins_waiting = joinIds(ids(reg.optins_waiting).filter((o) => !cap.optins.find((x) => x.id === o)?.available));
 	}
 	// A place given now, not held since registering: two people confirming into the last one at once are checked below.
 	const granted = place === 'place' && (reg.place !== 'place' || !!reg.hold_expires_at && reg.hold_expires_at <= now);
@@ -433,9 +437,16 @@ export async function confirm(env: Env, id: string) {
 	}
 	reg = (await getRegistration(env, id))!;
 	if (granted && (await capacity(env, ev, sessions, now)).inPerson.held > ev.in_person_max) {
-		await env.DB.prepare(`UPDATE registrations SET place='waitlist', waitlist_since=? WHERE id=?`).bind(now, id).run();
-		joinsWaitlist = true;
-		reg = (await getRegistration(env, id))!;
+		// Over by one: the place goes to whichever registered first (by rowid, as in demoteIfLatest), so of two people
+		// confirming at once exactly one keeps it.
+		const ahead = await env.DB.prepare(
+			`SELECT COUNT(*) AS n FROM registrations WHERE event_id = ? AND attendance = 'in_person' AND place = 'place' AND ${HELD} AND rowid < (SELECT rowid FROM registrations WHERE id = ?)`,
+		).bind(ev.id, now, id).first<{ n: number }>();
+		if ((ahead?.n ?? 0) >= ev.in_person_max) {
+			await env.DB.prepare(`UPDATE registrations SET place='waitlist', waitlist_since=? WHERE id=?`).bind(now, id).run();
+			joinsWaitlist = true;
+			reg = (await getRegistration(env, id))!;
+		}
 	}
 
 	if (!waitingForPlace(reg, sessions)) await sendInstructions(env, ev, reg, sessions);
@@ -1169,7 +1180,7 @@ export async function runScheduled(env: Env, now = Date.now()) {
 	for (const [eventId, regs] of warn) {
 		try {
 			const ev = await getEvent(env, eventId);
-			const what = (r: RegistrationRow) => r.attendance === 'in_person' ? (r.place === 'place' ? 'held in-person place' : r.place === 'waitlist' ? 'waiting-list request' : 'sign-up for the optional sessions') : 'remote registration';
+			const what = (r: RegistrationRow) => r.attendance === 'in_person' ? (r.place === 'place' ? 'held in-person place' : r.place === 'waitlist' ? 'registration (waiting list, or a place if one is free when they confirm)' : 'sign-up for the optional sessions') : 'remote registration';
 			const shown = regs.slice(0, 20);
 			await sendEmail(env, notification(brand(env), regs.length === 1 ? `Unconfirmed registration half way to expiry: ${ev.title}` : `${regs.length} unconfirmed registrations half way to expiry: ${ev.title}`, [
 				...shown.map((r) => `${r.name} registered at ${ukDateTime(r.created_at, ev.timezone)} but has not confirmed their email address. Their ${what(r)} will be deleted at ${ukDateTime(r.hold_expires_at!, ev.timezone)} unless they confirm.`),

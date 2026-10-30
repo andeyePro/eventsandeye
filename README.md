@@ -167,7 +167,7 @@ Logs: `npx wrangler pages deployment tail` for the site (choose the production d
 | The build fails asking for `PUBLIC_TURNSTILE_SITE_KEY` | Step 6: the site key goes in `.env.production` or a build variable. |
 | The admin page says "not signed in through Cloudflare Access (no Access token reached the site…)" | The Access application must cover this address and path: `/admin/*` and `/api/admin/*` on every address you use. |
 | …"the Access token is for another Access application" | `ACCESS_AUD` must be that application's AUD tag. |
-| …"could not fetch the Access keys" or "issued by another team" | `ACCESS_TEAM_DOMAIN` is your team's domain, such as `example.cloudflareaccess.com`. |
+| …"if you did sign in, check ACCESS_TEAM_DOMAIN", "issued by another team", or "not set up yet" | `ACCESS_TEAM_DOMAIN` is your team's domain, such as `example.cloudflareaccess.com`, and `ACCESS_AUD` is set; the site's log names which. |
 | …"two-factor sign-in required (this sign-in reported: …)" | Require MFA in the Access policy (step 9), or, with Cloudflare's per-application MFA, set `ACCESS_MFA = "application"`. |
 | …"ADMIN_EMAILS is not set" or "… is not an admin" | List the organisers' addresses in `ADMIN_EMAILS`. |
 | Links in emails go to the wrong address | `SITE_URL`, on the site and the cron Worker. |

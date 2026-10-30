@@ -992,6 +992,16 @@ try {
 		const sum = await status();
 		check('the first to confirm take the free places; once the five holds and three confirmed fill the room, the next joins the waiting list', r.data.registration?.place === 'waitlist' && sum.capacity.inPerson.confirmed === 3 && sum.capacity.inPerson.held === 8, JSON.stringify([r.data, sum.capacity.inPerson]));
 		for (const e of who.slice(0, 5)) await req('POST', '/api/rsvp/decline', { t: await confirmOf(e) });
+
+		// One place left and two people, neither holding it, confirming at the same moment: exactly one gets it.
+		const H2 = 'e2e-holds-race';
+		await req('POST', EV, { action: 'create', id: H2, title: 'Smaller Room', timezone: 'Europe/London', starts_at: at(24), ends_at: at(28), deadline: at(0), in_person_max: 6, page_path: '/events/e2e-holds-race/', location: 'Room' }, ADMIN);
+		await req('POST', EV, { action: 'add_session', event: H2, label: 'Talk', mode: 'in_person', starts_at: at(25), ends_at: at(26) }, ADMIN);
+		const race = Array.from({ length: 7 }, (_, i) => `race${i}@example.org`);
+		for (const e of race) await register({ event: H2, name: 'Racer', email: e });
+		const [x, y] = await Promise.all(race.slice(5).map(async (e) => (await req('POST', '/api/rsvp/confirm', { t: await confirmOf(e) })).data.registration?.place));
+		check('two people confirming into the last place at once: one gets it, the other the waiting list', [x, y].sort().join() === 'place,waitlist', JSON.stringify([x, y]));
+		for (const e of race.slice(0, 5)) await req('POST', '/api/rsvp/decline', { t: await confirmOf(e) });
 	}
 
 	console.log('\nAdmin removal');
