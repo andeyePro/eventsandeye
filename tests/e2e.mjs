@@ -163,7 +163,8 @@ try {
 	{
 		const r = await req('GET', '/events/next');
 		const loc = r.headers.get('location') || '';
-		check('/events/next redirects to the next event page', r.status === 302 && /\/events\/[^/]+\/$/.test(new URL(loc, BASE).pathname) && !new URL(loc, BASE).pathname.endsWith('/events/next/'), `${r.status} ${loc}`);
+		const to = new URL(loc, BASE).pathname;
+		check('/events/next redirects to the next event\'s page, which exists', r.status === 302 && to !== '/events/next/' && to.endsWith('/') && (await req('GET', to)).status === 200, `${r.status} ${loc}`);
 	}
 
 	console.log('\nAdmin protection (Cloudflare Access JWT)');

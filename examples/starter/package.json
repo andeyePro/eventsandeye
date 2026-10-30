@@ -7,7 +7,8 @@
     "build": "astro build",
     "build:test": "PUBLIC_TURNSTILE_ALLOW_TEST_KEY=true astro build",
     "pages:dev": "wrangler pages dev ./dist --port 8788",
-    "db:local": "wrangler d1 migrations apply events --local && wrangler d1 execute events --local --file seed/my-event.sql"
+    "db:migrate:local": "wrangler d1 migrations apply events --local",
+    "db:seed:local": "wrangler d1 execute events --local --file seed/my-event.sql"
   },
   "dependencies": {
     "astro": "^5.18.2"

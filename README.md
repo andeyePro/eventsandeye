@@ -49,6 +49,7 @@ git submodule add https://github.com/andeyePro/eventsandeye.git eventsandeye   #
 cp -R eventsandeye/examples/functions/. functions/                                 # the API, admin page and /events/next
 cp eventsandeye/examples/wrangler.toml .                                           # then fill it in
 npm install -D wrangler @cloudflare/workers-types
+npx wrangler login
 npx wrangler d1 create events                    # put the database_id it prints into wrangler.toml, then:
 npx wrangler d1 migrations apply events --remote
 ```
@@ -101,6 +102,8 @@ These steps assume your site's repository is checked out locally and Events&I go
 
 4. **Configure.** Copy [`examples/wrangler.toml`](examples/wrangler.toml) to your site's root (or merge it into the one you have) and fill in what you know; steps 5 and 9 supply the database id and the Access settings. See the [settings reference](#settings-reference). Once a Pages project has a `wrangler.toml`, Cloudflare takes its settings from that file rather than the dashboard ([Cloudflare's docs](https://developers.cloudflare.com/pages/functions/wrangler-configuration/)), so put plain settings there; secrets stay in the dashboard (step 8). Add `.dev.vars` and `.wrangler/` to your `.gitignore`: they hold local secrets and test registrations.
 
+   If your site is not on Cloudflare Pages yet, create the project now: in the Cloudflare dashboard, Workers & Pages → Create → Pages → connect your Git repository, with the build command `npm run build` and the output folder `dist` (for Astro). Give it the same name as `name` in `wrangler.toml`, and note its `*.pages.dev` address for steps 6 and 9. Its first build fails until the Turnstile site key is in place (step 6), which is expected.
+
 5. **Create the database and your event.**
 
    ```sh
@@ -115,7 +118,7 @@ These steps assume your site's repository is checked out locally and Events&I go
    npx wrangler d1 execute events --remote --file seed/my-event.sql
    ```
 
-6. **Turnstile.** In the Cloudflare dashboard, Turnstile → Add widget for your domain (and your project's `pages.dev` address), managed mode. The **site key** is public: the simplest place for it is a committed `.env.production` file in your site with the line `PUBLIC_TURNSTILE_SITE_KEY=<site key>`, which Astro reads when it builds (a build variable of that name in the Pages dashboard works too). Keep the **secret key** for step 8. The server accepts a token only if Turnstile solved it on the same host name the registration is posted to, so serve the form and its API from one address (not, say, a proxy in front of `*.pages.dev`).
+6. **Turnstile.** In the Cloudflare dashboard, Turnstile → Add widget for your domain (and your project's `pages.dev` address), managed mode. The **site key** is public: the simplest place for it is a committed `.env.production` file in your site with the line `PUBLIC_TURNSTILE_SITE_KEY=<site key>`, which Astro reads when it builds. Keep the **secret key** for step 8. The server accepts a token only if Turnstile solved it on the same host name the registration is posted to, so serve the form and its API from one address (not, say, a proxy in front of `*.pages.dev`).
 
 7. **Resend.** Add your domain in Resend, then add the DNS records it shows in Cloudflare DNS with the proxy **off** (DNS only), and click Verify. The records sit on subdomains, so your existing mail keeps working. Create an API key with **sending access** only. If your domain has no DMARC record yet, add one (a TXT record at `_dmarc`, such as `v=DMARC1; p=none;`): Gmail and Yahoo expect it, and invitations from a domain without one land in spam more often.
 
@@ -133,7 +136,7 @@ These steps assume your site's repository is checked out locally and Events&I go
 
    If you use Cloudflare's per-application MFA (Authentication → MFA → Authenticator application), its tokens report only `onetimepin`, so set `ACCESS_MFA = "application"` and keep that setting on. Otherwise the code checks the token's sign-in methods itself and names them when it refuses; accept other method names with `ACCESS_MFA_METHODS`.
 
-10. **The cron Worker.** Every five minutes it sends scheduled messages and the rest of big ones, queued calendar updates and host lists held back by a gap, warns about and deletes unconfirmed registrations, and applies the 30-day retention. It also receives replies to poll suggestions if you set that up (step 12). Copy [`examples/cron/wrangler.toml`](examples/cron/wrangler.toml) to `workers/cron/wrangler.toml` in your site and fill it in with the **same** values as the site's (`SITE_URL`, `EMAIL_FROM` and the rest, and the same database). Give it the **same** `TOKEN_SECRET` as the site (paste the value from step 8; a new one would break every link in the emails the cron sends) and the Resend key, then deploy:
+10. **The cron Worker.** Every five minutes it sends scheduled messages and the rest of big ones, queued calendar updates and host lists held back by a gap, warns about and deletes unconfirmed registrations, and applies the 30-day retention. It also receives replies to poll suggestions if you set that up (step 12). Copy [`examples/cron/wrangler.toml`](examples/cron/wrangler.toml) to `workers/cron/wrangler.toml` in your site (`mkdir -p workers/cron && cp eventsandeye/examples/cron/wrangler.toml workers/cron/`) and fill it in: its own `name` (such as `my-site-cron`), and otherwise the **same** values as the site's (`SITE_URL`, `EMAIL_FROM` and the rest, and the same database). Give it the **same** `TOKEN_SECRET` as the site (paste the value from step 8; a new one would break every link in the emails the cron sends) and the Resend key, then deploy:
 
     ```sh
     npx wrangler secret put TOKEN_SECRET --config workers/cron/wrangler.toml
@@ -164,7 +167,7 @@ Logs: `npx wrangler pages deployment tail` for the site (choose the production d
 | The form says "The spam check failed" | `TURNSTILE_SECRET_KEY` is the widget's secret key; the widget lists the address the form is on (including `*.pages.dev` if you use it); the form and its API are served from the same address. |
 | The form says "Something went wrong" | The site's log. Most often Resend refused the email: the domain in `EMAIL_FROM` is not verified in Resend, or the key lacks sending access. |
 | No email arrives | Resend's dashboard shows whether it was sent; look in spam; add a DMARC record (step 7). |
-| The build fails asking for `PUBLIC_TURNSTILE_SITE_KEY` | Step 6: the site key goes in `.env.production` or a build variable. |
+| The build fails asking for `PUBLIC_TURNSTILE_SITE_KEY` | Step 6: the site key goes in a committed `.env.production`. |
 | The admin page says "not signed in through Cloudflare Access (no Access token reached the site…)" | The Access application must cover this address and path: `/admin/*` and `/api/admin/*` on every address you use. |
 | …"the Access token is for another Access application" | `ACCESS_AUD` must be that application's AUD tag. |
 | …"if you did sign in, check ACCESS_TEAM_DOMAIN", "issued by another team", or "not set up yet" | `ACCESS_TEAM_DOMAIN` is your team's domain, such as `example.cloudflareaccess.com`, and `ACCESS_AUD` is set; the site's log names which. |
@@ -203,9 +206,9 @@ PUBLIC_TURNSTILE_ALLOW_TEST_KEY=true npm run build
 npx wrangler pages dev ./dist --port 8788
 ```
 
-Open http://localhost:8788. With `DEV_MODE=true`, emails (with their calendar attachments) are printed to the console and kept in a local outbox at `/api/dev/outbox` instead of being sent, and the admin page opens without Cloudflare Access. In the outbox, an address containing `fail-send` is refused as Resend would refuse it, and one containing `fail-500` fails as in an outage, for trying out how messages recover.
+Open http://localhost:8788. The example seed describes an event on 13 November 2026 with registration closing on 6 November: after that, move its dates (or create an event on the admin page) to try the form. With `DEV_MODE=true`, emails (with their calendar attachments) are printed to the console and kept in a local outbox at `/api/dev/outbox` instead of being sent, and the admin page opens without Cloudflare Access. In the outbox, an address containing `fail-send` is refused as Resend would refuse it, and one containing `fail-500` fails as in an outage, for trying out how messages recover.
 
-**End-to-end test.** `sh scripts/starter-e2e.sh`, from this repository, runs it on a throwaway copy of the [starter site](examples/starter/) and needs nothing else. [`tests/e2e.mjs`](tests/e2e.mjs) runs the whole flow against a local D1 database with `wrangler pages dev`, against AMYBO's example seed: registration, confirmation, waiting lists, promotion, calendar invitations and updates, host lists, polls and suggestions (email replies go through `/api/dev/inbound`), scheduled messages, holds, deadlines, cancellation, retention and the Access checks. It writes its own `.dev.vars`, backing yours up and restoring it afterwards. From your site:
+**End-to-end test.** `sh scripts/starter-e2e.sh`, from this repository, runs it on a throwaway copy of the [starter site](examples/starter/); it needs only Node 22 and access to npm. [`tests/e2e.mjs`](tests/e2e.mjs) runs the whole flow against a local D1 database with `wrangler pages dev`, against AMYBO's example seed: registration, confirmation, waiting lists, promotion, calendar invitations and updates, host lists, polls and suggestions (email replies go through `/api/dev/inbound`), scheduled messages, holds, deadlines, cancellation, retention and the Access checks. It writes its own `.dev.vars`, backing yours up and restoring it afterwards. From your site:
 
 ```sh
 PUBLIC_TURNSTILE_ALLOW_TEST_KEY=true npm run build

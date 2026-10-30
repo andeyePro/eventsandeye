@@ -22,9 +22,11 @@ rm -rf "$dir/functions" && cp -R "$root/examples/functions" "$dir/functions"
 # eventsandeye/ is a copy, not a link: Pages Functions bundling and Astro both resolve it as a plain folder.
 rm -rf "$dir/eventsandeye" && mkdir "$dir/eventsandeye"
 (cd "$root" && tar cf - --exclude=./node_modules --exclude=./.git --exclude=./.vss --exclude=./examples/starter --exclude=./site .) | (cd "$dir/eventsandeye" && tar xf -)
+# The example seed's event lives at /events/2026-11-13-london/ on amybo.org; on the starter its form is /event/.
+sed 's#/events/2026-11-13-london/#/event/#' "$root/examples/seed.example.sql" > "$dir/eventsandeye/examples/seed.example.sql"
 cd "$dir"
 [ -d node_modules ] || npm install --no-audit --no-fund
 PUBLIC_TURNSTILE_ALLOW_TEST_KEY=true npx astro build
 E2E_DB=events E2E_SEED=eventsandeye/examples/seed.example.sql E2E_NOTIFY=events@example.org \
-	E2E_PAGES=/,/event/,/privacy/,/events/check-email/,/events/confirm/,/events/manage/ \
+	E2E_PAGES=/,/event/,/events/,/privacy/,/events/check-email/,/events/confirm/,/events/manage/ \
 	node eventsandeye/tests/e2e.mjs

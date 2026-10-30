@@ -19,7 +19,10 @@ interface Props {
 	tourLegend?: string;
 }
 const { event, controller, contactHref, privacyHref = '/privacy/', sourceUrl = 'https://github.com/andeyePro/eventsandeye', next = '/events/check-email/', inPersonLabel, remoteLabel, tourLegend } = Astro.props;
-const siteKey = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY || (import.meta.env.DEV || import.meta.env.PUBLIC_TURNSTILE_ALLOW_TEST_KEY === 'true' ? '1x00000000000000000000AA' : undefined);
+// A test build takes the test key even when the real one is set (in .env.production, say): the real widget refuses to
+// run on localhost.
+const TEST_KEY = '1x00000000000000000000AA';
+const siteKey = import.meta.env.PUBLIC_TURNSTILE_ALLOW_TEST_KEY === 'true' ? TEST_KEY : import.meta.env.PUBLIC_TURNSTILE_SITE_KEY || (import.meta.env.DEV ? TEST_KEY : undefined);
 // A production build without a real site key would ship Cloudflare's always-pass test key and every registration would fail.
 if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production builds (or PUBLIC_TURNSTILE_ALLOW_TEST_KEY=true for local test builds).');
 ---

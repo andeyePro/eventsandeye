@@ -7,7 +7,7 @@
 -- so INSERT OR IGNORE keeps a rerun from overwriting those edits.
 
 -- The event. in_person_max is the room's capacity; registration closes at deadline; travel_minutes sets the
--- "time to leave" calendar reminder; page_path is the page with the booking form; extra_question is optional, and so
+-- "time to leave" calendar reminder; page_path is the page with the booking form (on the starter site, /event/); extra_question is optional, and so
 -- are the wording of the two ways to attend and of the tour choice on the form and manage page (NULL = plain defaults).
 INSERT OR IGNORE INTO events (id, title, starts_at, ends_at, timezone, location, in_person_max, deadline, travel_minutes, page_path, extra_question,
   in_person_label, remote_label, tour_legend) VALUES
