@@ -85,7 +85,8 @@ const steps = copy.journey.steps;
 
   /* ---------- hero ---------- */
 
-  .hero { position: relative; padding: clamp(56px, 9vh, 96px) 0 clamp(24px, 4vh, 48px); text-align: center; }
+  /* clip, not hidden: the glow below is wider than a phone, and phones widen the page to fit it otherwise */
+  .hero { position: relative; overflow-x: clip; padding: clamp(56px, 9vh, 96px) 0 clamp(24px, 4vh, 48px); text-align: center; }
   .hero::before {
     content: "";
     position: absolute;
@@ -258,6 +259,7 @@ const steps = copy.journey.steps;
   </div>
 </header>
 
+<main>
 <section class="what" id="what">
   <div class="wrap">
     <div class="eyebrow-row">
@@ -294,7 +296,7 @@ const steps = copy.journey.steps;
             <span class="wtitle">{copy.journey.window_title}</span>
           </div>
           {steps.map((s, i) => (
-            <article class="msg" id={`msg-${s.id}`} hidden={i !== 0} aria-label={`Example email: ${s.subject}`}>
+            <article class="msg" id={`msg-${s.id}`} hidden={i !== 0} tabindex="0" aria-label={`Example email: ${s.subject}`}>
               <p class="nojs-label eyebrow">{s.label}</p>
               <div class="msg-head">From <b>{s.from}</b><span class="msg-subject">{s.subject}</span></div>
               <p class="msg-org">{s.from}</p>
@@ -354,6 +356,7 @@ const steps = copy.journey.steps;
     <AndeyeEye variant="events" weight="fill" background="#0c0f16" class="who-mark" />
   </div>
 </section>
+</main>
 
 <footer>
   <div class="wrap">
