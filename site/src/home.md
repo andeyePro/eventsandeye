@@ -96,6 +96,12 @@ features:
       text: Email everyone or a filtered group, now or scheduled, with a per-person delivery record you can review.
     - title: Self-service for attendees
       text: Every email carries a personal link to view, change or cancel. Cancelling deletes their details.
+    - title: Polls with a "count me out" line
+      text: "Ask what to do on the Saturday: everyone ranks the options and draws a line below which they'd stay at home. Their own ideas reach you by email, to add with a reply."
+    - title: Set up on the admin page
+      text: Create an event, add its sessions and joining instructions, or clone last year's to a new date, without touching a database.
+    - title: Any time zone
+      text: Times, forms and calendar invitations follow the event's own time zone, summer time included.
     - title: Private by design
       text: Your own Cloudflare account, double opt-in, an admin page behind two-factor sign-in, and attendees' details deleted 30 days after the event.
 needs:
@@ -105,7 +111,7 @@ needs:
   items:
     - A Cloudflare account with your domain on it
     - A Resend account for sending email
-    - A site on Cloudflare Pages (the ready-made form is an Astro component, styled for Astro Starlight sites, with plain fallbacks elsewhere)
+    - A site on Cloudflare Pages (the ready-made form is an Astro component, styled for Astro Starlight sites, and also comes as plain HTML for any other site)
   cta_label: Read the setup guide
   cta_href: "https://github.com/andeyePro/eventsandeye#set-it-up"
 who:
