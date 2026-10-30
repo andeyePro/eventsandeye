@@ -592,6 +592,16 @@ try {
 		check('tally: who would join, who would stay at home, first choices, preference', ap.tally.voters === 2 && row('Camping').willing === 2 && row('Hiking').willing === 2 && row('Skiing').willing === 1 && row('Skiing').out === 1 && row('Football').out === 2 && row('Skiing').first === 1 && row('Camping').score === 3 && row('Hiking').score === 3, JSON.stringify(ap.tally));
 		check('tally sorted by who would join, and the organiser sees names', ['Camping', 'Hiking'].includes(ap.tally.results[0].label) && ap.tally.results.at(-1).willing === 0 && row('Camping').names.join() === 'Pat,Quinn', JSON.stringify(ap.tally.results.map((x) => x.label)));
 
+		r = await req('GET', `/api/rsvp/status?event=${EVENT}`);
+		const sp = (r.data.polls || []).find((p) => p.id === POLL);
+		check('the booking form gets the open poll and its options', sp && sp.options.map((o) => o.label).join() === 'Skiing,Camping,Hiking,Football,Rugby', JSON.stringify(r.data.polls));
+		check('a booking-form ranking with an unknown option → 409, and no registration', (await register({ name: 'Rosa', email: 'rosa@example.org', attendance: 'remote', polls: [{ poll: POLL, ranking: [SKI, 'nope'], bar: 1 }] })).status === 409 && !(await mailsTo('rosa@example.org')).length);
+		const rosa = await registerAndConfirm({ name: 'Rosa', email: 'rosa@example.org', attendance: 'remote', polls: [{ poll: POLL, ranking: [RUGBY, FOOT, SKI, CAMP, HIKE], bar: 2 }] });
+		const rv = await view(rosa);
+		const rosaMail = (await mailsTo('rosa@example.org')).at(-1);
+		check('ranking on the booking form is saved with the registration, and the joining instructions do not ask again', rv.ballot && rv.ballot.ranking[0] === RUGBY && rv.ballot.bar === 2 && !/Have your say/.test(rosaMail.text_body), JSON.stringify(rv.ballot));
+		await req('DELETE', '/api/rsvp/manage', { t: rosa.manage });
+
 		console.log('\nPoll suggestions');
 		before = (await mailsTo(NOTIFY)).length;
 		const suggest = (who, label) => req('POST', '/api/rsvp/poll', { t: who.manage, poll: POLL, suggest: label });

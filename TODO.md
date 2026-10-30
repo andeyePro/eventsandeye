@@ -17,7 +17,7 @@
 - [ ] **Host changes:** when a session's host email changes, tell the previous host to delete the list they were sent.
 - [ ] **Framework-neutral wording:** the form's attendance labels and the change-of-attendance email intro in `src/rsvp.ts` should come from event/session data rather than props.
 - [ ] **Framework-neutral components:** plain HTML/JS versions of the booking, confirm and manage panels for non-Astro sites.
-- [ ] **Polls, next steps:** rank on the booking form as well as the manage page; mention an open poll in the joining-instructions email (an organiser message is the only way today); several polls side by side are supported but untested in a real browser on small screens; drag and drop is mouse-only (touch and keyboard use the arrow buttons).
+- [ ] **Polls, next steps:** several polls side by side are supported but untested in a real browser on small screens; drag and drop is mouse-only (touch and keyboard use the arrow buttons); suggestions are only on the manage page, as the booking form's address is not confirmed yet.
 - [ ] **Poll email replies:** try real replies from Gmail, Outlook and Apple Mail through Email Routing, and check that Cloudflare's `Authentication-Results` header reaches the Worker (it has been reported missing on Worker delivery; replies without it are accepted on the From address and signed reference alone).
 - [ ] **Packaging:** publish to npm with typed exports for the route handlers.
 

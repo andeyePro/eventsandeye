@@ -163,6 +163,43 @@ async function voter(env: Env, regId: string, pollId: unknown) {
 	return { reg, poll, ev };
 }
 
+/** Open polls with their options, for the booking form (no suggestions there: the address is not confirmed yet). */
+export async function bookingPolls(env: Env, ev: EventRow) {
+	const out = [];
+	for (const p of (await getPolls(env, ev.id)).filter((x) => pollOpen(x, ev))) {
+		const options = (await getOptions(env, p.id)).filter((o) => o.status === 'active');
+		if (options.length) out.push({ id: p.id, question: p.question, options: options.map((o) => ({ id: o.id, label: o.label })) });
+	}
+	return out;
+}
+
+type BallotInput = { poll: string; ranking: string[]; bar: number };
+
+/** Rankings sent with a registration, checked before anything is saved. Only active options of this event's open polls. */
+export async function parseBookingBallots(env: Env, ev: EventRow, v: unknown): Promise<BallotInput[]> {
+	if (v === undefined || v === null) return [];
+	if (!Array.isArray(v) || v.length > 20) throw new UserError('Invalid poll answers.');
+	const polls = await bookingPolls(env, ev);
+	const out: BallotInput[] = [];
+	for (const raw of v as Record<string, unknown>[]) {
+		const p = polls.find((x) => x.id === raw?.poll);
+		const ranking = Array.isArray(raw?.ranking) ? raw.ranking.map(String) : null;
+		const bar = Number(raw?.bar);
+		if (!p || out.some((x) => x.poll === p.id) || !ranking || new Set(ranking).size !== ranking.length || ranking.some((id) => !p.options.some((o) => o.id === id))
+			|| !Number.isInteger(bar) || bar < 0 || bar > ranking.length) {
+			throw new UserError('The poll has changed since this page was loaded. Please reload it and try again.', 409);
+		}
+		out.push({ poll: p.id, ranking, bar });
+	}
+	return out;
+}
+
+export async function saveBookingBallots(env: Env, regId: string, ballots: BallotInput[]) {
+	if (!ballots.length) return;
+	await env.DB.batch(ballots.map((b) => env.DB.prepare('INSERT OR REPLACE INTO poll_ballots (poll_id, registration_id, ranking, bar, updated_at) VALUES (?,?,?,?,?)')
+		.bind(b.poll, regId, JSON.stringify(b.ranking), b.bar, nowIso())));
+}
+
 /** Questions of the open polls this person has not answered, for a line in the emails they get anyway. */
 export async function unansweredPolls(env: Env, ev: EventRow, regId: string) {
 	const rows = (await env.DB.prepare(

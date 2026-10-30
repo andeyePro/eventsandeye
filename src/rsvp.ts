@@ -10,7 +10,7 @@ import {
 } from './templates';
 import { modeOf } from './mode';
 import { mdToHtml, mdToText } from './markdown';
-import { adminPolls, unansweredPolls, voterPolls } from './polls';
+import { adminPolls, parseBookingBallots, saveBookingBallots, unansweredPolls, voterPolls } from './polls';
 import { makeToken } from './tokens';
 import { cleanLine, cleanText, EMAIL_RE, escapeHtml, nowIso, randomToken, ukDateTime } from './util';
 
@@ -166,6 +166,8 @@ export interface RegistrationInput {
 	optins?: unknown;
 	consent?: unknown;
 	share_contact?: unknown;
+	/** Poll rankings from the booking form: [{ poll, ranking, bar }]. */
+	polls?: unknown;
 }
 
 const truthy = (v: unknown) => v === true || v === 'on' || v === 'true' || v === 1 || v === '1';
@@ -210,6 +212,7 @@ export async function register(env: Env, eventId: string, input: RegistrationInp
 	const tour = c.tour_id ? sessions.find((s) => s.id === c.tour_id)! : null;
 	if (tour && !sessionBookingOpen(tour)) throw new UserError(`Booking for the ${tour.label} has closed.`, 409);
 	for (const s of sessions.filter((x) => ids(c.optins).includes(x.id))) if (!sessionBookingOpen(s)) throw new UserError(`Booking for the ${s.label} has closed.`, 409);
+	const ballots = await parseBookingBallots(env, ev, input.polls);
 
 	const existing = await env.DB.prepare('SELECT * FROM registrations WHERE event_id = ? AND email = ?').bind(ev.id, email).first<RegistrationRow>();
 	if (existing && existing.status === 'confirmed') {
@@ -259,6 +262,8 @@ export async function register(env: Env, eventId: string, input: RegistrationInp
 	for (const o of after.optins) {
 		if (o.capacity != null && o.held > o.capacity && ids(c.optins).includes(o.id) && !ids(optins_waiting).includes(o.id)) await demoteOptinIfLatest(env, id, o.id, nowS);
 	}
+	// Saved with the registration and deleted with it (a confirmed address registering again keeps its own answers above).
+	await saveBookingBallots(env, id, ballots);
 	const reg = (await getRegistration(env, id))!;
 	let pid: string;
 	try {

@@ -1,5 +1,6 @@
 // Events&I – Copyright (C) 2026 andeye Ltd. AGPL-3.0, see ../../../LICENSE.
 import { handle } from '../../http';
+import { bookingPolls } from '../../polls';
 import { capacity, getEvent, getSessions, registrationOpen } from '../../rsvp';
 
 /** Public availability for the booking form. Shows whether places are free, never names or exact holders. */
@@ -14,5 +15,6 @@ export const onRequestGet = handle(async ({ env, request }) => {
 		in_person_available: cap.inPerson.available,
 		tours: cap.tours.map((t) => ({ id: t.id, label: t.label, available: t.available, open: t.open })),
 		optins: sessions.filter((s) => s.optin).map((s) => ({ id: s.id, label: s.label, starts_at: s.starts_at, location: s.location, available: !!cap.optins.find((o) => o.id === s.id)?.available })),
+		polls: await bookingPolls(env, ev),
 	};
 });
