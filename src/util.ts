@@ -78,7 +78,9 @@ export function ukDates(startIso: string, endIso: string, timeZone = 'Europe/Lon
 	// An event that runs past midnight (a late dinner, say) belongs to the day it started: an end before 6am counts as
 	// the evening before.
 	const endHour = Number(new Intl.DateTimeFormat('en-GB', { hour: '2-digit', hourCycle: 'h23', timeZone }).format(new Date(endIso)));
-	const a = part(startIso), b = part(new Date(Date.parse(endIso) - (endHour < 6 ? (endHour + 1) * 3600_000 : 1)).toISOString());
+	const a = part(startIso), late = part(new Date(Date.parse(endIso) - 1).toISOString());
+	const nextDay = late.year !== a.year || late.month !== a.month || late.day !== a.day;
+	const b = nextDay && endHour < 6 ? part(new Date(Date.parse(endIso) - (endHour + 1) * 3600_000).toISOString()) : late;
 	if (a.year === b.year && a.month === b.month && a.day === b.day) return ukDate(startIso, timeZone);
 	if (a.year !== b.year) return `${a.weekday} ${a.day} ${a.month} ${a.year} to ${b.weekday} ${b.day} ${b.month} ${b.year}`;
 	if (a.month !== b.month) return `${a.weekday} ${a.day} ${a.month} to ${b.weekday} ${b.day} ${b.month} ${b.year}`;

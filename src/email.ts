@@ -41,6 +41,9 @@ async function resendPost(env: Env, path: string, body: unknown, idempotencyKey?
 			await sleep(550);
 			return res;
 		}
+		// The key was used before: that earlier request was accepted (or is being), so these emails have gone. A body that
+		// differs (fresh links, a later calendar stamp) gives 409 too, and the answer is the same.
+		if (res.status === 409 && idempotencyKey) return new Response(JSON.stringify({ id: 'idempotent-repeat', data: [] }));
 		if ((res.status === 429 || res.status >= 500) && attempt < 5) {
 			const after = Number(res.headers.get('retry-after'));
 			await sleep(Number.isFinite(after) && after > 0 ? after * 1000 : 1000 * 2 ** attempt);
@@ -74,10 +77,14 @@ export async function sendBatch(env: Env, emails: OutgoingEmail[], idempotencyKe
 	if (!emails.length) return [];
 	if (!env.RESEND_API_KEY) {
 		if (!isDev(env)) throw new Error('RESEND_API_KEY is not set; refusing to drop email on the live site');
+		// Like Resend: a whole send is refused or accepted (tests use a "fail-send" address to see a refusal), and a key
+		// already used sends nothing again.
+		if (emails.some((e) => e.to.includes('fail-send'))) throw new Error('Resend error 422 (validation_error)');
+		if (idempotencyKey && await env.DB.prepare('SELECT 1 FROM dev_outbox WHERE idempotency_key = ?').bind(idempotencyKey).first()) return emails.map(() => 'dev:repeat');
 		const ids: string[] = [];
 		for (const e of emails) {
-			const r = await env.DB.prepare('INSERT INTO dev_outbox (to_addr, subject, text_body, html_body, attachments, created_at, reply_to) VALUES (?,?,?,?,?,?,?)')
-				.bind(e.to, e.subject, e.text, e.html, JSON.stringify(e.attachments ?? []), nowIso(), e.replyTo || notifyEmail(env))
+			const r = await env.DB.prepare('INSERT INTO dev_outbox (to_addr, subject, text_body, html_body, attachments, created_at, reply_to, idempotency_key) VALUES (?,?,?,?,?,?,?,?)')
+				.bind(e.to, e.subject, e.text, e.html, JSON.stringify(e.attachments ?? []), nowIso(), e.replyTo || notifyEmail(env), idempotencyKey ?? null)
 				.run();
 			const att = (e.attachments ?? []).map((a) => a.filename).join(', ');
 			console.log(`\n[dev email] To: ${e.to}\nSubject: ${e.subject}${att ? `\nAttachments: ${att}` : ''}\n\n${e.text}\n[/dev email]\n`);
@@ -102,12 +109,14 @@ export async function sendBatch(env: Env, emails: OutgoingEmail[], idempotencyKe
 	const out: string[] = new Array(emails.length);
 	for (let i = 0; i < plain.length; i += 100) {
 		const chunk = plain.slice(i, i + 100);
-		const res = await resendPost(env, '/emails/batch', chunk.map((x) => one(x.e)), idempotencyKey && `${idempotencyKey}:b${i}`);
+		// One key per request, the same whichever way a single email goes (with or without attachments).
+		const key = idempotencyKey && (emails.length === 1 ? idempotencyKey : `${idempotencyKey}:${i}`);
+		const res = await resendPost(env, '/emails/batch', chunk.map((x) => one(x.e)), key);
 		const body = (await res.json()) as { data?: { id: string }[] };
 		(body.data ?? []).forEach((d, k) => (out[chunk[k].i] = d.id));
 	}
 	for (const x of withFiles) {
-		const res = await resendPost(env, '/emails', one(x.e), idempotencyKey && `${idempotencyKey}:a${x.i}`);
+		const res = await resendPost(env, '/emails', one(x.e), idempotencyKey && (emails.length === 1 ? idempotencyKey : `${idempotencyKey}:a${x.i}`));
 		out[x.i] = ((await res.json()) as { id: string }).id;
 	}
 	for (const id of out) ids.push(id);

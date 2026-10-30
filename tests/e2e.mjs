@@ -860,7 +860,7 @@ try {
 		const V = (await req('GET', `/api/admin/instructions?event=${B}`, undefined, ADMIN)).data.versions[0].version;
 		r = await req('POST', '/api/admin/messages', { event: B, subject: 'Bulk news', body_md: 'News.', audience: {}, marks_instructions_version: V }, ADMIN);
 		let msg = r.data.message;
-		check('a message with joining instructions to 12: the first 5 go at once, the rest are left sending', msg.status === 'sending' && (await count(/Bulk news/)) === 5, JSON.stringify(msg));
+		check('a message with joining instructions to 12: the first 4 go at once, the rest are left sending', msg.status === 'sending' && (await count(/Bulk news/)) === 4, JSON.stringify(msg));
 		await cron(); await cron();
 		msg = (await req('GET', `/api/admin/messages?event=${B}`, undefined, ADMIN)).data.messages.find((x) => x.id === msg.id);
 		const each = []; for (const p of people) each.push((await mailsTo(p)).filter((m) => /Bulk news/.test(m.subject)).length);
@@ -869,7 +869,18 @@ try {
 		check('a message part sent can be cancelled', (await req('POST', '/api/admin/messages/cancel', { id: r.data.message.id }, ADMIN)).data.ok);
 		await cron();
 		msg = (await req('GET', `/api/admin/messages?event=${B}`, undefined, ADMIN)).data.messages.find((x) => x.id === r.data.message.id);
-		check('…and no more of it goes out', msg.status === 'cancelled' && msg.recipients_count === 5 && (await count(/Bulk stop/)) === 5, JSON.stringify(msg));
+		check('…and no more of it goes out', msg.status === 'cancelled' && msg.recipients_count === 4 && (await count(/Bulk stop/)) === 4, JSON.stringify(msg));
+		// A message that keeps failing (a refused address in its piece) cannot hold up the others, and gives up after five tries.
+		sql(`INSERT INTO registrations (id, event_id, name, email, attendance, status, place, consent_at, created_at, updated_at, confirmed_at) VALUES ('e2e-fail-send-reg', '${B}', 'Refused', 'fail-send@example.org', 'in_person', 'confirmed', 'place', '${at(-100)}', '${at(-100)}', '${at(-100)}', '${at(-100)}')`);
+		r = await req('POST', '/api/admin/messages', { event: B, subject: 'Bulk doomed', body_md: 'x', audience: {} }, ADMIN);
+		check('a piece Resend refuses: nobody gets a copy, and the message says why and waits to be retried', r.data.message.status === 'sending' && /422/.test(r.data.message.error) && (await count(/Bulk doomed/)) === 0, JSON.stringify(r.data.message).slice(0, 300));
+		r = await req('POST', '/api/admin/messages', { event: B, subject: 'Bulk later', body_md: 'x', audience: { attendance: 'remote' }, scheduled_at: new Date(Date.now() + 120_000).toISOString() }, ADMIN);
+		await cron(Date.now() + 180_000);
+		check('…a message falling due meanwhile still goes out', (await count(/Bulk later/)) === 12);
+		for (let i = 0; i < 5; i++) await cron(Date.now() + 240_000 + i * 60_000);
+		const doomed = (await req('GET', `/api/admin/messages?event=${B}`, undefined, ADMIN)).data.messages.find((x) => x.subject === 'Bulk doomed');
+		check('…and after five failed tries it is marked failed', doomed.status === 'failed' && doomed.attempts === 5 && (await count(/Bulk doomed/)) === 0, JSON.stringify([doomed.status, doomed.attempts]));
+		sql(`DELETE FROM registrations WHERE id = 'e2e-fail-send-reg'`);
 		for (const p of people) await req('DELETE', '/api/rsvp/manage', { t: await manageOf(p) });
 	}
 

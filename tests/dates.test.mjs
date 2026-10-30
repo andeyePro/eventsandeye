@@ -23,3 +23,7 @@ test('an event that runs past midnight is still one day', () => {
 	assert.equal(ukDates('2026-11-13T10:30:00Z', '2026-11-14T00:30:00Z'), 'Friday 13 November 2026');
 	assert.equal(ukDates('2026-11-13T10:30:00Z', '2026-11-14T09:00:00Z'), 'Friday 13 to Saturday 14 November 2026');
 });
+
+test('an event entirely in the small hours is one day, not a backwards range', () => {
+	assert.equal(ukDates('2026-11-14T00:30:00Z', '2026-11-14T03:00:00Z'), 'Saturday 14 November 2026');
+});

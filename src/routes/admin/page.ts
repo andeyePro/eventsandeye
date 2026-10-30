@@ -517,7 +517,8 @@ $('msg-form').addEventListener('submit', async (e) => {
 		const count = (await api('/api/admin/messages', 'POST', { event: eventId, dry_run: true, audience: audience() })).count;
 		if (!confirm((when ? 'Schedule for ' + uk(when) : 'Send now') + ' to ' + count + ' recipient(s)?')) return;
 		const sent = await api('/api/admin/messages', 'POST', { event: eventId, subject: $('m-subject').value, body_md: $('m-body').value, audience: audience(), scheduled_at: when, marks_instructions_version: $('m-instr').checked ? latestVersion : undefined });
-		toast(when ? 'Scheduled.' : sent.message && sent.message.status === 'sending' ? 'Sending: the first copies have gone, and the rest go out within a few minutes.' : 'Sent.'); e.target.reset(); load();
+		const m = sent.message || {};
+		toast(when ? 'Scheduled.' : m.status === 'sending' && m.error ? 'Not sent yet: ' + m.error + '. It will be tried again within a few minutes; do not send it again.' : m.status === 'sending' ? 'Sending: the first copies have gone, and the rest go out within a few minutes.' : 'Sent.'); e.target.reset(); load();
 	} catch (err) { toast(err.message); }
 });
 load().catch((err) => { document.querySelector('main').innerHTML = '<section><h2>Not available</h2><p>' + esc(err.message) + '</p><p class="small">This page needs Cloudflare Access sign-in, and an event id (?event=...).</p></section>'; });

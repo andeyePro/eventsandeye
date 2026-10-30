@@ -43,6 +43,8 @@ export interface Env {
 	 * suggestions use it as their reply-to, so an organiser can answer "yes", "no" or "use <wording>" by email. Optional:
 	 * without it, suggestions are decided on the admin page. */
 	POLL_REPLY_EMAIL?: string;
+	/** "true" on the Workers paid plan: messages carrying joining instructions go out in bigger pieces. */
+	PAID_PLAN?: string;
 	/** Local development only: JSON Web Key Set used instead of the Access certs URL, for tests. */
 	ACCESS_JWKS_JSON?: string;
 }

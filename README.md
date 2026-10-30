@@ -191,6 +191,7 @@ In `wrangler.toml` `[vars]` (the cron Worker needs the same, apart from the Acce
 | `ACCESS_MFA`, `ACCESS_MFA_METHODS` | How two-factor sign-in is checked (see step 9). |
 | `ACCESS_MAX_AGE_HOURS` | Admin sign-ins older than this must be repeated (default 12). |
 | `EVENTS_INDEX_PATH` | Where `/events/next` goes when no event is coming up (default `/events/`). |
+| `PAID_PLAN` | `"true"` on the Workers paid plan: messages with joining instructions go out in bigger pieces (40 instead of 4 per run). |
 | `POLL_REPLY_EMAIL` | Optional. The address Email Routing sends to the cron Worker, used as the reply-to of emails about poll suggestions (step 12). |
 | `EVENTSANDEYE_URL` | The "Registrations via Events&I" link in emails (default: this repository). The form uses its `sourceUrl` prop. |
 
