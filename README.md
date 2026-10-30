@@ -206,7 +206,7 @@ npx wrangler d1 migrations apply events --remote
 
 Migrations only ever add; they never change one that has shipped. Redeploy the cron Worker too, so it runs the same code as the site.
 
-New features can bring new function wrappers (polls added `functions/api/rsvp/poll.ts`, `functions/api/admin/polls.ts` and `functions/api/dev/inbound.ts`). Copy any you do not have yet, leaving your existing ones alone:
+New features can bring new function wrappers (polls added `functions/api/rsvp/poll.ts`, `functions/api/admin/polls.ts` and `functions/api/dev/inbound.ts`; event set-up added `functions/api/admin/events.ts`). Copy any you do not have yet, leaving your existing ones alone:
 
 ```sh
 cp -Rn eventsandeye/examples/functions/. functions/

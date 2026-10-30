@@ -65,7 +65,7 @@ const HTML = /* html */ `<!doctype html>
 					<div><label for="e-title">Title</label><input id="e-title" type="text" required maxlength="200" /></div>
 					<div><label for="e-loc">Venue address</label><input id="e-loc" type="text" maxlength="300" /></div>
 					<div><label for="e-page">Event page (path on your site)</label><input id="e-page" type="text" required maxlength="200" placeholder="/events/2027-03-12-london/" /></div>
-					<div><label for="e-tz">Time zone</label><input id="e-tz" type="text" required placeholder="Europe/London" /></div>
+					<div><label for="e-tz">Time zone</label><input id="e-tz" type="text" required placeholder="Europe/London" /><p class="small">A new zone keeps the event and its sessions at the same moment; only how times are shown changes.</p></div>
 					<div><label for="e-start">Starts (<span class="tzl">UK time</span>)</label><input id="e-start" type="datetime-local" required /></div>
 					<div><label for="e-end">Ends (<span class="tzl">UK time</span>)</label><input id="e-end" type="datetime-local" required /></div>
 					<div><label for="e-q">Extra question on the form (optional)</label><input id="e-q" type="text" maxlength="300" /></div>
@@ -83,7 +83,7 @@ const HTML = /* html */ `<!doctype html>
 					<div><label for="c-id">New event id</label><input id="c-id" type="text" required pattern="[a-z0-9][a-z0-9-]{2,59}" placeholder="2027-03-12-london" /></div>
 					<div><label for="c-title">New title</label><input id="c-title" type="text" maxlength="200" /></div>
 					<div><label for="c-start">New start (<span class="tzl">UK time</span>)</label><input id="c-start" type="datetime-local" required /></div>
-					<div><label for="c-page">New event page</label><input id="c-page" type="text" maxlength="200" /></div>
+					<div><label for="c-page">New event page</label><input id="c-page" type="text" required maxlength="200" placeholder="/events/2027-03-12-london/" /></div>
 				</div>
 				<button type="submit">Clone</button>
 			</form>
@@ -264,8 +264,10 @@ function sessionEdits() {
 }
 
 async function load() {
-	const evs = await api('/api/admin/events');
-	if (!evs.events.length) {
+	// A site updated without copying functions/api/admin/events.ts has no events API: the page works without that section.
+	const evs = await api('/api/admin/events').catch(() => null);
+	if (!evs) $('events').hidden = true;
+	else if (!evs.events.length) {
 		// A new installation: nothing to show but the form to create the first event.
 		document.querySelectorAll('main > section').forEach((x) => { x.hidden = x.id !== 'events'; });
 		$('ev-pick').hidden = true; $('ev-pick').previousElementSibling.textContent = 'No events yet: create the first one.';
@@ -276,7 +278,7 @@ async function load() {
 	eventId = s.event.id;
 	TZ = s.event.timezone || 'Europe/London';
 	document.querySelectorAll('.tzl').forEach((x) => { x.textContent = tzLabel(); });
-	$('ev-pick').innerHTML = evs.events.map((x) => '<option value="' + esc(x.id) + '"' + (x.id === eventId ? ' selected' : '') + '>' + esc(x.title) + ' – ' + esc(uk(x.starts_at)) + '</option>').join('');
+	if (evs) $('ev-pick').innerHTML = evs.events.map((x) => '<option value="' + esc(x.id) + '"' + (x.id === eventId ? ' selected' : '') + '>' + esc(x.title) + ' – ' + esc(uk(x.starts_at)) + '</option>').join('');
 	const ev = s.event;
 	$('e-title').value = ev.title; $('e-loc').value = ev.location || ''; $('e-page').value = ev.page_path; $('e-tz').value = ev.timezone;
 	$('e-start').value = isoToUkLocal(ev.starts_at); $('e-end').value = isoToUkLocal(ev.ends_at); $('e-q').value = ev.extra_question || '';
@@ -462,8 +464,9 @@ $('ev-form').addEventListener('submit', async (e) => {
 	e.preventDefault();
 	try {
 		const tz = $('e-tz').value.trim();
+		// The times shown are in the event's current zone, so they are read in it: a new zone keeps the event at the same moment.
 		await api('/api/admin/events', 'POST', { action: 'update', event: eventId, title: $('e-title').value, location: $('e-loc').value, page_path: $('e-page').value, timezone: tz,
-			starts_at: ukLocalToIso($('e-start').value, tz), ends_at: ukLocalToIso($('e-end').value, tz), extra_question: $('e-q').value, in_person_label: $('e-lip').value, remote_label: $('e-lrem').value, tour_legend: $('e-ltour').value });
+			starts_at: ukLocalToIso($('e-start').value), ends_at: ukLocalToIso($('e-end').value), extra_question: $('e-q').value, in_person_label: $('e-lip').value, remote_label: $('e-lrem').value, tour_legend: $('e-ltour').value });
 		toast('Event saved. Nobody has been emailed.'); load();
 	} catch (err) { toast(err.message); }
 });

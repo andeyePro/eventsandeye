@@ -792,6 +792,22 @@ try {
 		const clInstr = (await req('GET', `/api/admin/instructions?event=e2e-clone`, undefined, ADMIN)).data.versions;
 		const clPolls = (await req('GET', `/api/admin/polls?event=e2e-clone`, undefined, ADMIN)).data.polls;
 		check('…with the latest joining instructions as version 1, and the polls\' options but no answers or suggestions', clInstr.length === 1 && clInstr[0].version === 1 && clPolls.length >= 1 && clPolls.every((p) => p.tally.voters === 0 && p.options.every((o) => o.status === 'active' && !o.suggested_by)), JSON.stringify(clPolls.map((p) => p.options.length)));
+		check('an offset is not a time zone', (await req('POST', EV, { ...base, id: 'e2e-offset', timezone: '+01:00' }, ADMIN)).status === 400);
+		check('registration must close before the event ends', (await req('POST', EV, { ...base, id: 'e2e-late', deadline: at(7) }, ADMIN)).status === 400);
+		check('a session days away from the event is refused', (await req('POST', EV, { action: 'add_session', event: 'e2e-new-event', label: 'Lost', starts_at: at(24 * 10), ends_at: at(24 * 10 + 1) }, ADMIN)).status === 400);
+		r = await req('POST', EV, { action: 'update', event: EVENT, ends_at: new Date(Date.now() - 31 * 86400_000).toISOString(), starts_at: new Date(Date.now() - 32 * 86400_000).toISOString(), deadline: new Date(Date.now() - 33 * 86400_000).toISOString() }, ADMIN);
+		check('an event with registrations cannot have its end moved into the past (retention would delete everyone)', r.status === 409 && (await req('GET', `/api/admin/summary?event=${EVENT}`, undefined, ADMIN)).data.event.ends_at === seeded.event.ends_at, JSON.stringify(r.data));
+		check('an opt-in session someone signed up for cannot be deleted', (await req('POST', EV, { action: 'delete_session', session: DINNER }, ADMIN)).status === 409);
+		check('a core session in invitations already sent cannot be deleted', (await req('POST', EV, { action: 'delete_session', session: AM.id }, ADMIN)).status === 409);
+		check('a clone needs its own page', (await req('POST', EV, { action: 'clone', event: EVENT, id: 'e2e-clone-2', starts_at: newStart, page_path: orig.event.page_path }, ADMIN)).status === 400
+			&& (await req('POST', EV, { action: 'clone', event: EVENT, id: 'e2e-clone-2', starts_at: newStart }, ADMIN)).status === 400);
+		// From November (GMT) to June (BST): every session keeps its London wall-clock time.
+		const june = new Date(Date.parse(orig.event.starts_at) + 210 * 86400_000);
+		const juneStart = new Date(Date.UTC(june.getUTCFullYear(), june.getUTCMonth(), june.getUTCDate(), +local(orig.event.starts_at).slice(9, 11) - 1, +local(orig.event.starts_at).slice(11, 13))).toISOString();
+		r = await req('POST', EV, { action: 'clone', event: EVENT, id: 'e2e-clone-summer', starts_at: juneStart, page_path: '/events/e2e-clone-summer/' }, ADMIN);
+		const summer = (await req('GET', `/api/admin/summary?event=e2e-clone-summer`, undefined, ADMIN)).data;
+		check('a clone across a change to summer time keeps every session at the same local time', r.data.ok && summer.sessions.every((x, i) => local(x.starts_at).slice(9) === local(orig.sessions[i].starts_at).slice(9) && local(x.ends_at).slice(9) === local(orig.sessions[i].ends_at).slice(9)),
+			JSON.stringify(summer.sessions?.map((x) => local(x.starts_at))));
 		check('setting up events emailed nobody', (await outbox()).length === before);
 	}
 
