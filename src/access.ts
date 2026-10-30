@@ -10,15 +10,22 @@ import { base64urlDecode } from './util';
 interface Jwk { kid: string; kty: string; n: string; e: string; alg?: string }
 let cache: { url: string; keys: Jwk[]; at: number } | null = null;
 
+/** The team domain as a bare host name: people often paste it with https:// or a trailing slash. */
+export function teamDomain(env: Env): string {
+	return (env.ACCESS_TEAM_DOMAIN ?? '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+}
+
+const certsUrl = (env: Env) => `https://${teamDomain(env)}/cdn-cgi/access/certs`;
+
 async function keys(env: Env, force = false): Promise<Jwk[]> {
 	if (isDev(env) && env.ACCESS_JWKS_JSON) return (JSON.parse(env.ACCESS_JWKS_JSON) as { keys: Jwk[] }).keys;
-	if (!env.ACCESS_TEAM_DOMAIN) return [];
-	const url = `https://${env.ACCESS_TEAM_DOMAIN}/cdn-cgi/access/certs`;
+	if (!teamDomain(env)) return [];
+	const url = certsUrl(env);
 	if (!force && cache && cache.url === url && Date.now() - cache.at < 3600_000) return cache.keys;
 	// After a key rotation, refetch at most once a minute.
 	if (force && cache && cache.url === url && Date.now() - cache.at < 60_000) return cache.keys;
-	const res = await fetch(url);
-	if (!res.ok) return cache?.keys ?? [];
+	const res = await fetch(url).catch(() => null);
+	if (!res?.ok) return cache?.keys ?? [];
 	const body = (await res.json()) as { keys: Jwk[] };
 	cache = { url, keys: body.keys, at: Date.now() };
 	return body.keys;
@@ -59,7 +66,8 @@ export async function checkAccess(env: Env, request: Request): Promise<AccessRes
 
 async function checkJwt(env: Env, request: Request): Promise<AccessResult> {
 	const token = request.headers.get('cf-access-jwt-assertion');
-	if (!token || !env.ACCESS_AUD) return { email: null, reason: 'not signed in through Cloudflare Access' };
+	if (!token) return { email: null, reason: 'not signed in through Cloudflare Access (no Access token reached the site: check that the Access application covers this address)' };
+	if (!env.ACCESS_AUD) return { email: null, reason: 'ACCESS_AUD is not set' };
 	const parts = token.split('.');
 	if (parts.length !== 3) return { email: null, reason: 'not signed in through Cloudflare Access' };
 	let header: { kid?: string; alg?: string }, payload: { aud?: string | string[]; exp?: number; nbf?: number; iat?: number; iss?: string; email?: string; amr?: unknown; type?: string };
@@ -71,16 +79,19 @@ async function checkJwt(env: Env, request: Request): Promise<AccessResult> {
 	}
 	if (header.alg !== 'RS256') return { email: null, reason: 'not signed in through Cloudflare Access' };
 	const jwk = (await keys(env)).find((k) => k.kid === header.kid) ?? (await keys(env, true)).find((k) => k.kid === header.kid);
-	if (!jwk) return { email: null, reason: 'not signed in through Cloudflare Access' };
+	if (!jwk) {
+		if (!teamDomain(env)) return { email: null, reason: 'ACCESS_TEAM_DOMAIN is not set' };
+		return { email: null, reason: (await keys(env)).length ? 'the Access token was signed by a key this team does not publish (check ACCESS_TEAM_DOMAIN)' : `could not fetch the Access keys from ${certsUrl(env)} (check ACCESS_TEAM_DOMAIN)` };
+	}
 	const key = await crypto.subtle.importKey('jwk', { kty: jwk.kty, n: jwk.n, e: jwk.e, alg: 'RS256', ext: true }, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify']);
 	const ok = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', key, base64urlDecode(parts[2]), new TextEncoder().encode(`${parts[0]}.${parts[1]}`));
 	if (!ok) return { email: null, reason: 'not signed in through Cloudflare Access' };
 	const now = Math.floor(Date.now() / 1000);
 	const auds = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
-	if (!auds.includes(env.ACCESS_AUD)) return { email: null, reason: 'not signed in through Cloudflare Access' };
-	if (!payload.exp || payload.exp < now - 30) return { email: null, reason: 'not signed in through Cloudflare Access' };
-	if (payload.nbf && payload.nbf > now + 30) return { email: null, reason: 'not signed in through Cloudflare Access' };
-	if (!isDev(env) && env.ACCESS_TEAM_DOMAIN && payload.iss !== `https://${env.ACCESS_TEAM_DOMAIN}`) return { email: null, reason: 'not signed in through Cloudflare Access' };
+	if (!auds.includes(env.ACCESS_AUD)) return { email: null, reason: 'the Access token is for another Access application (check ACCESS_AUD against the application\'s AUD tag)' };
+	if (!payload.exp || payload.exp < now - 30) return { email: null, reason: 'the Access sign-in has expired, please sign in again' };
+	if (payload.nbf && payload.nbf > now + 30) return { email: null, reason: 'the Access token is not valid yet' };
+	if (!isDev(env) && teamDomain(env) && payload.iss !== `https://${teamDomain(env)}`) return { email: null, reason: 'the Access token was issued by another team (check ACCESS_TEAM_DOMAIN)' };
 	// Application tokens only: not a service token or an organisation-level identity token.
 	if (payload.type !== undefined && payload.type !== 'app') return { email: null, reason: 'not an application sign-in' };
 	// A sign-in older than ACCESS_MAX_AGE_HOURS (default 12) must be repeated, whatever the Access session length.
@@ -101,8 +112,10 @@ async function checkJwt(env: Env, request: Request): Promise<AccessResult> {
 		}
 	}
 	const email = (payload.email ?? '').toLowerCase();
-	// Defence in depth behind the Access policy: when ADMIN_EMAILS is set, only those addresses are admitted.
+	// Defence in depth behind the Access policy: only the addresses in ADMIN_EMAILS are admitted. Without it, anyone an
+	// over-broad policy lets through would get in, so it is required except in local development.
 	const admins = (env.ADMIN_EMAILS ?? '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
+	if (!admins.length && !isDev(env)) return { email: null, reason: 'ADMIN_EMAILS is not set: list the organisers who may use the admin page' };
 	if (admins.length && !admins.includes(email)) return { email: null, reason: `${email || 'this account'} is not an admin` };
 	// A token with no email (a service token, say) is not a person signing in.
 	if (!email) return { email: null, reason: 'this sign-in carries no email address' };

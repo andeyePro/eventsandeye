@@ -242,7 +242,7 @@ export async function handleInbound(env: Env, raw: string, reject: (reason: stri
 	if (head.dmarc === 'fail' || head.dmarc === 'permerror') return no(`The sender's domain did not authenticate this message (DMARC ${head.dmarc}).`);
 	const text = bodyText(raw);
 	// The subject first; the quoted original as a fallback, for mail apps that rewrite subjects.
-	const optionId = (await readSuggestionRef(env, head.subject)) ?? (await readSuggestionRef(env, text));
+	const optionId = (await readSuggestionRef(env, head.subject.slice(0, 2000))) ?? (await readSuggestionRef(env, text));
 	if (!optionId) return no('No valid poll suggestion reference found.');
 	const reply = replyText(text);
 	const command = parseCommand(reply);

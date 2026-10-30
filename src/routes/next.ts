@@ -7,8 +7,8 @@ import type { Env } from '../env';
  * example.org/event here once and never change it.
  */
 export const onRequestGet = async ({ env, request }: EventContext<Env, string, unknown>): Promise<Response> => {
-	// Site-relative paths only: "//host/..." would be an off-site redirect.
-	const local = (p: unknown): p is string => typeof p === 'string' && /^\/(?!\/)/.test(p);
+	// Site-relative paths only: "//host/..." would be an off-site redirect, and browsers read "/\host" the same way.
+	const local = (p: unknown): p is string => typeof p === 'string' && /^\/(?![\/\\])/.test(p) && !/[\s\\]/.test(p);
 	const configured = (env as Env & { EVENTS_INDEX_PATH?: string }).EVENTS_INDEX_PATH;
 	let path = local(configured) ? configured : '/events/';
 	try {

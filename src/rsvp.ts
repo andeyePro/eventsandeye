@@ -21,6 +21,7 @@ export const MAX_HOLD_MS = 48 * HOUR;
  * changes may trigger in an hour (each change can email hosts and the organiser too). */
 const REMINDER_COOLDOWN_MS = 10 * 60_000;
 const MAX_RESENDS = 3;
+const MAX_REMINDERS_A_DAY = 3;
 const MAX_CHANGE_EMAILS_PER_HOUR = 10;
 
 export class UserError extends Error {
@@ -78,12 +79,13 @@ export async function capacity(env: Env, ev: EventRow, sessions: SessionRow[], n
 	const held = `(status = 'confirmed' OR (status = 'pending' AND hold_expires_at > ?))`;
 	const inPerson = await env.DB.prepare(
 		`SELECT
-			SUM(CASE WHEN attendance='in_person' AND place='place' AND ${held} THEN 1 ELSE 0 END) AS held,
+			SUM(CASE WHEN attendance='in_person' AND place='place' AND ${held.replace('?', '?1')} THEN 1 ELSE 0 END) AS held,
 			SUM(CASE WHEN attendance='in_person' AND place='waitlist' AND status='confirmed' THEN 1 ELSE 0 END) AS waiting,
 			SUM(CASE WHEN attendance='in_person' AND place='place' AND status='confirmed' THEN 1 ELSE 0 END) AS confirmed,
 			SUM(CASE WHEN attendance='remote' AND status='confirmed' THEN 1 ELSE 0 END) AS remote,
-			SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending
-		 FROM registrations WHERE event_id = ?`,
+			SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending,
+			SUM(CASE WHEN attendance='in_person' AND place='place' AND status='pending' AND hold_expires_at > ?1 THEN 1 ELSE 0 END) AS pendingHeld
+		 FROM registrations WHERE event_id = ?2`,
 	).bind(now, ev.id).first<Record<string, number | null>>();
 	const rows = await env.DB.prepare(
 		`SELECT tour_id,
@@ -112,6 +114,7 @@ export async function capacity(env: Env, ev: EventRow, sessions: SessionRow[], n
 		inPerson: {
 			max: ev.in_person_max, held: n(inPerson?.held), confirmed: n(inPerson?.confirmed), waiting: n(inPerson?.waiting),
 			available: n(inPerson?.held) < ev.in_person_max && n(inPerson?.waiting) === 0,
+			pendingHeld: n(inPerson?.pendingHeld),
 		},
 		remote: n(inPerson?.remote),
 		pending: n(inPerson?.pending),
@@ -132,6 +135,13 @@ export async function capacity(env: Env, ev: EventRow, sessions: SessionRow[], n
 const listedIn = (col: string, param: string) => `instr(',' || COALESCE(${col}, '') || ',', ',' || ${param} || ',') > 0`;
 const ids = (list: string | null | undefined) => (list ?? '').split(',').filter(Boolean);
 const joinIds = (list: string[]) => list.join(',') || null;
+
+/**
+ * How many in-person places unconfirmed registrations may hold at once. Anyone can register any address, so without a
+ * limit made-up registrations could hold every place for up to 48 hours. Beyond it, a new registration holds nothing and
+ * gets a place when it is confirmed, if one is free then.
+ */
+export const holdLimit = (ev: EventRow) => Math.max(5, Math.ceil(ev.in_person_max / 4));
 
 /** Hold for unconfirmed registrations: the shorter of 48 hours or a third of the time left to the deadline. */
 export function holdMs(ev: EventRow, now = Date.now()): number {
@@ -220,10 +230,10 @@ export async function register(env: Env, eventId: string, input: RegistrationInp
 
 	const existing = await env.DB.prepare('SELECT * FROM registrations WHERE event_id = ? AND email = ?').bind(ev.id, email).first<RegistrationRow>();
 	if (existing && existing.status === 'confirmed') {
-		// One reminder per cooldown: repeated submissions must not let anyone flood a registered address with email.
-		const recent = await env.DB.prepare(`SELECT 1 FROM deliveries WHERE registration_id = ? AND kind = 'already_registered' AND sent_at > ? LIMIT 1`)
-			.bind(existing.id, new Date(Date.now() - REMINDER_COOLDOWN_MS).toISOString()).first();
-		if (recent) return { ok: true as const };
+		// One reminder per cooldown, and a few a day: repeated submissions must not let anyone flood a registered address.
+		const recent = await env.DB.prepare(`SELECT SUM(sent_at > ?) AS soon, COUNT(*) AS day FROM deliveries WHERE registration_id = ? AND kind = 'already_registered' AND sent_at > ?`)
+			.bind(new Date(Date.now() - REMINDER_COOLDOWN_MS).toISOString(), existing.id, new Date(Date.now() - 24 * HOUR).toISOString()).first<{ soon: number | null; day: number }>();
+		if ((recent?.soon ?? 0) > 0 || (recent?.day ?? 0) >= MAX_REMINDERS_A_DAY) return { ok: true as const };
 		if (waitingForPlace(existing, sessions)) {
 			const pid = await sendEmail(env, waitlistReminderEmail(brand(env), ev, existing, sessions, await manageUrl(env, existing.id)));
 			await recordDelivery(env, existing.id, 'already_registered', pid);
@@ -242,7 +252,8 @@ export async function register(env: Env, eventId: string, input: RegistrationInp
 	const now = Date.now();
 	const nowS = new Date(now).toISOString();
 	const cap = await capacity(env, ev, sessions, nowS);
-	const place = c.attendance === 'in_person' && !c.extras ? (cap.inPerson.available ? 'place' : 'waitlist') : null;
+	const unheld = c.attendance === 'in_person' && !c.extras && cap.inPerson.available && cap.inPerson.pendingHeld >= holdLimit(ev);
+	const place = c.attendance === 'in_person' && !c.extras ? (cap.inPerson.available && !unheld ? 'place' : 'waitlist') : null;
 	const tourCap = tour ? cap.tours.find((t) => t.id === tour.id)! : null;
 	const tour_place = tourCap ? (tourCap.available ? 'place' : 'waitlist') : null;
 	const optins_waiting = joinIds(ids(c.optins).filter((o) => !cap.optins.find((x) => x.id === o)!.available));
@@ -271,7 +282,7 @@ export async function register(env: Env, eventId: string, input: RegistrationInp
 	const reg = (await getRegistration(env, id))!;
 	let pid: string;
 	try {
-		pid = await sendEmail(env, confirmEmail(brand(env), ev, reg, sessions, await confirmUrl(env, id)));
+		pid = await sendEmail(env, confirmEmail(brand(env), ev, reg, sessions, await confirmUrl(env, id), { unheld }));
 	} catch (e) {
 		// Nobody can confirm a registration whose email never went out: do not keep their details or hold a place.
 		await env.DB.prepare(`DELETE FROM registrations WHERE id = ? AND status = 'pending'`).bind(id).run();
@@ -399,8 +410,14 @@ export async function confirm(env: Env, id: string) {
 		if (reg.attendance === 'in_person' && reg.place) place = cap.inPerson.available ? 'place' : 'waitlist';
 		if (reg.tour_id) tour_place = cap.tours.find((t) => t.id === reg!.tour_id)?.available ? 'place' : 'waitlist';
 		optins_waiting = joinIds(ids(reg.optins).filter((o) => !cap.optins.find((x) => x.id === o)?.available));
+	} else if (reg.attendance === 'in_person' && reg.place === 'waitlist') {
+		// Registered when the event was full or the hold limit was reached: a place freed since, with nobody confirmed
+		// waiting for it, goes to whoever confirms first.
+		if ((await capacity(env, ev, sessions, now)).inPerson.available) place = 'place';
 	}
-	const joinsWaitlist = place === 'waitlist';
+	// A place given now, not held since registering: two people confirming into the last one at once are checked below.
+	const granted = place === 'place' && (reg.place !== 'place' || !!reg.hold_expires_at && reg.hold_expires_at <= now);
+	let joinsWaitlist = place === 'waitlist';
 	const joinsTourWaitlist = tour_place === 'waitlist';
 	const upd = await env.DB.prepare(
 		`UPDATE registrations SET status='confirmed', confirmed_at=?, updated_at=?, hold_expires_at=NULL, place=?, tour_place=?, optins_waiting=?,
@@ -414,6 +431,11 @@ export async function confirm(env: Env, id: string) {
 		return { ok: true as const, already: true, registration: confirmStatus(again, sessions) };
 	}
 	reg = (await getRegistration(env, id))!;
+	if (granted && (await capacity(env, ev, sessions, now)).inPerson.held > ev.in_person_max) {
+		await env.DB.prepare(`UPDATE registrations SET place='waitlist', waitlist_since=? WHERE id=?`).bind(now, id).run();
+		joinsWaitlist = true;
+		reg = (await getRegistration(env, id))!;
+	}
 
 	if (!waitingForPlace(reg, sessions)) await sendInstructions(env, ev, reg, sessions);
 	else {
@@ -1128,6 +1150,8 @@ export async function runScheduled(env: Env, now = Date.now()) {
 	const report = { messagesSent: 0, calendarUpdates: 0, holdsWarned: 0, holdsExpired: 0, retentionDeleted: 0 };
 
 	const pending = (await env.DB.prepare(`SELECT * FROM registrations WHERE status='pending'`).all<RegistrationRow>()).results;
+	// One warning per event per run, however many holds reached half way: made-up registrations must not flood the organiser.
+	const warn = new Map<string, RegistrationRow[]>();
 	for (const r of pending) {
 		if (!r.hold_expires_at) continue;
 		const exp = Date.parse(r.hold_expires_at), start = Date.parse(r.created_at);
@@ -1137,15 +1161,20 @@ export async function runScheduled(env: Env, now = Date.now()) {
 		} else if (!r.hold_warned_at && now >= start + (exp - start) / 2) {
 			// Marked first: a failed send must not block the deletions below or repeat every five minutes.
 			await env.DB.prepare('UPDATE registrations SET hold_warned_at=? WHERE id=?').bind(nowS, r.id).run();
-			try {
-				const ev = await getEvent(env, r.event_id);
-				await sendEmail(env, notification(brand(env), `Unconfirmed registration half way to expiry: ${ev.title}`, [
-					`${r.name} registered at ${ukDateTime(r.created_at, ev.timezone)} but has not confirmed their email address.`,
-					`Their ${r.attendance === 'in_person' ? (r.place === 'place' ? 'held in-person place' : r.place === 'waitlist' ? 'waiting-list request' : 'sign-up for the optional sessions') : 'remote registration'} will be deleted at ${ukDateTime(r.hold_expires_at, ev.timezone)} unless they confirm.`,
-				]));
-				report.holdsWarned++;
-			} catch (e) { console.error('hold warning failed', r.id, e); }
+			warn.set(r.event_id, [...(warn.get(r.event_id) ?? []), r]);
 		}
+	}
+	for (const [eventId, regs] of warn) {
+		try {
+			const ev = await getEvent(env, eventId);
+			const what = (r: RegistrationRow) => r.attendance === 'in_person' ? (r.place === 'place' ? 'held in-person place' : r.place === 'waitlist' ? 'waiting-list request' : 'sign-up for the optional sessions') : 'remote registration';
+			const shown = regs.slice(0, 20);
+			await sendEmail(env, notification(brand(env), regs.length === 1 ? `Unconfirmed registration half way to expiry: ${ev.title}` : `${regs.length} unconfirmed registrations half way to expiry: ${ev.title}`, [
+				...shown.map((r) => `${r.name} registered at ${ukDateTime(r.created_at, ev.timezone)} but has not confirmed their email address. Their ${what(r)} will be deleted at ${ukDateTime(r.hold_expires_at!, ev.timezone)} unless they confirm.`),
+				...(regs.length > shown.length ? [`And ${regs.length - shown.length} more. Many unconfirmed registrations at once can mean someone is registering made-up addresses: see the admin page.`] : []),
+			]));
+			report.holdsWarned += regs.length;
+		} catch (e) { console.error('hold warning failed', eventId, e); }
 	}
 
 	// Host lists held back by an event's host_list_minutes go out once their interval has passed.

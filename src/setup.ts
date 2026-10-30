@@ -37,7 +37,7 @@ const zone = (v: unknown) => {
 };
 const pagePath = (v: unknown) => {
 	const p = cleanLine(v, 200);
-	if (!p || !p.startsWith('/') || p.startsWith('//') || /\s/.test(p)) throw new UserError('The event page must be a path on your site, starting with /.');
+	if (!p || !p.startsWith('/') || p.startsWith('//') || /[\s\\]/.test(p)) throw new UserError('The event page must be a path on your site, starting with /.');
 	return p;
 };
 

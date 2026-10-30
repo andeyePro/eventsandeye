@@ -181,7 +181,12 @@ try {
 	}
 	{ const refused = await req('GET', '/admin/rsvps/', undefined, { 'cf-access-jwt-assertion': jwt({ iat: Math.floor(Date.now() / 1000) - 13 * 3600 }) });
 	  check('a refused admin page explains why and links to sign in again', refused.status === 401 && /sign-in too old/.test(refused.data) && /\/cdn-cgi\/access\/logout/.test(refused.data), String(refused.data).slice(0, 200)); }
+	{ const wrongApp = await req('GET', '/admin/rsvps/', undefined, { 'cf-access-jwt-assertion': jwt({ aud: 'someone-else' }) });
+	  check('a token for another Access application names ACCESS_AUD as the thing to check', /ACCESS_AUD/.test(wrongApp.data), String(wrongApp.data).slice(0, 300));
+	  const none = await req('GET', '/admin/rsvps/');
+	  check('no token at all says the Access application may not cover this address', /no Access token reached the site/.test(none.data), String(none.data).slice(0, 300)); }
 	const page = await req('GET', '/admin/rsvps/', undefined, ADMIN);
+	check('the admin page cannot be framed by another site, and sends no referrer', /frame-ancestors 'none'/.test(page.headers.get('content-security-policy') || '') && page.headers.get('x-frame-options') === 'DENY' && page.headers.get('referrer-policy') === 'no-referrer');
 	check('admin page is HTML with the sessions editor', typeof page.data === 'string' && /id="sessions-form"/.test(page.data) && /Events&amp;I/.test(page.data));
 	check('admin POST without JWT → 401', (await req('POST', '/api/admin/settings', { event: EVENT, in_person_max: 999 })).status === 401);
 	check('admin POST from another origin → 403', (await req('POST', '/api/admin/settings', { event: EVENT }, { ...ADMIN, origin: 'https://evil.example' })).status === 403);
@@ -225,6 +230,9 @@ try {
 	check('honeypot → fake success', r.status === 200 && r.data.ok);
 	check('honeypot and rejects send no email', (await outbox()).length === before);
 	check('non-JSON body → 415', (await fetch(`${BASE}/api/rsvp/register`, { method: 'POST', body: 'name=x' })).status === 415);
+
+	{ const big = await fetch(`${BASE}/api/rsvp/register`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ event: EVENT, name: 'x'.repeat(60_000) }) });
+	  check('a request body over 50 KB is refused → 413', big.status === 413); }
 
 	console.log('\nConfirm → place, joining instructions and calendar invitation');
 	const alice = 'alice@example.org', bob = 'bob@example.org', carol = 'carol@example.org';
@@ -379,6 +387,21 @@ try {
 	await register({ name: 'Bob', email: bob });
 	m = await last(bob);
 	check('waitlisted duplicate gets a reminder of their status, no instructions or calendar', (await mailsTo(bob)).length === 3 && /already registered/.test(m.text_body) && /waiting list/.test(m.text_body) && !/Schedule \(UK time\)/.test(m.text_body) && m.att.length === 0);
+
+	{
+		const aliceId = JSON.parse(sql(`SELECT id FROM registrations WHERE email = '${alice}'`, true))[0].results[0].id;
+		const ago = (h) => new Date(Date.now() - h * 3600_000).toISOString();
+		// The reminder above is moved out of the ten-minute cooldown; with two more today, that makes three.
+		sql(`UPDATE deliveries SET sent_at = '${ago(1)}' WHERE registration_id = '${aliceId}' AND kind = 'already_registered'`);
+		sql(`INSERT INTO deliveries (registration_id, kind, sent_at, provider_id) VALUES ('${aliceId}', 'already_registered', '${ago(2)}', 'x'), ('${aliceId}', 'already_registered', '${ago(30)}', 'x')`);
+		let n = (await mailsTo(alice)).length;
+		await register({ name: 'Alice', email: alice });
+		check('after the cooldown, a confirmed address registering again gets another reminder', (await mailsTo(alice)).length === n + 1);
+		sql(`UPDATE deliveries SET sent_at = '${ago(3)}' WHERE registration_id = '${aliceId}' AND kind = 'already_registered' AND sent_at > '${ago(0.5)}'`);
+		n = (await mailsTo(alice)).length;
+		await register({ name: 'Alice', email: alice });
+		check('…but no more than three a day, however the form is used', (await mailsTo(alice)).length === n);
+	}
 
 	console.log('\nRegistering again before confirming');
 	const frank = 'frank@example.org';
@@ -549,11 +572,13 @@ try {
 	console.log('\nUnconfirmed holds');
 	const eve = 'eve@example.org';
 	await register({ name: 'Eve', email: eve, attendance: 'remote' });
+	await register({ name: 'Evan', email: 'evan@example.org', attendance: 'remote' });
 	const created = Date.now();
 	await cron(created + 23 * 3600_000);
 	check('before half the hold: no warning', !(await mailsTo(NOTIFY)).some((x) => /Eve/.test(x.text_body)));
 	await cron(created + 25 * 3600_000);
 	check('after half the hold: organiser warned once', (await mailsTo(NOTIFY)).filter((x) => /half way/.test(x.subject) && /Eve/.test(x.text_body)).length === 1);
+	check('…in one email for all the holds half way through, not one each', (await mailsTo(NOTIFY)).some((x) => /\d+ unconfirmed registrations half way/.test(x.subject) && /Eve registered/.test(x.text_body) && /Evan registered/.test(x.text_body)));
 	await cron(created + 26 * 3600_000);
 	check('warning not repeated', (await mailsTo(NOTIFY)).filter((x) => /half way/.test(x.subject) && /Eve/.test(x.text_body)).length === 1);
 	await cron(created + 49 * 3600_000);
@@ -770,6 +795,7 @@ try {
 		check('an event id must be a slug', (await req('POST', EV, { ...base, id: 'Bad Id!' }, ADMIN)).status === 400);
 		check('an unknown time zone is refused', (await req('POST', EV, { ...base, timezone: 'Mars/Olympus' }, ADMIN)).status === 400);
 		check('an event must end after it starts', (await req('POST', EV, { ...base, ends_at: at(-1) }, ADMIN)).status === 400);
+		check('an event page with a backslash (read by browsers as another site) is refused', (await req('POST', EV, { ...base, page_path: '/\\evil.example/' }, ADMIN)).status === 400);
 		r = await req('POST', EV, base, ADMIN);
 		check('an organiser creates an event', r.data.ok && r.data.id === 'e2e-new-event', JSON.stringify(r.data));
 		check('the same id twice → 409', (await req('POST', EV, base, ADMIN)).status === 409);
@@ -924,6 +950,31 @@ try {
 		check('…and resumed once the outage is over, everyone gets one copy', r.data.ok && doomed.status === 'sent' && gotD.every((n) => n === 1), JSON.stringify([doomed.status, gotD]));
 
 		for (const p of people) await req('DELETE', '/api/rsvp/manage', { t: await manageOf(p) });
+	}
+
+	console.log('\nPlaces held for unconfirmed registrations');
+	{
+		const EV = '/api/admin/events', H = 'e2e-holds';
+		const t0 = Date.now() + 40 * 86400_000;
+		const at = (h) => new Date(t0 + h * 3600_000).toISOString();
+		await req('POST', EV, { action: 'create', id: H, title: 'Small Room', timezone: 'Europe/London', starts_at: at(0), ends_at: at(4), deadline: at(-24), in_person_max: 8, page_path: '/events/e2e-holds/', location: 'Room' }, ADMIN);
+		await req('POST', EV, { action: 'add_session', event: H, label: 'Talk', mode: 'in_person', starts_at: at(1), ends_at: at(2) }, ADMIN);
+		const who = Array.from({ length: 9 }, (_, i) => `hold${i}@example.org`);
+		const confirmOf = async (e) => tokenFrom((await mailsTo(e))[0].text_body, 'confirm');
+		for (const e of who.slice(0, 5)) await register({ event: H, name: 'Held', email: e });
+		const status = async () => (await req('GET', `/api/admin/summary?event=${H}`, undefined, ADMIN)).data;
+		check('five unconfirmed registrations (the limit for 8 places) each hold a place', (await mailsTo(who[0]))[0].text_body.includes('An in-person place is held for you'));
+		await register({ event: H, name: 'Sixth', email: who[5] });
+		const sixth = (await mailsTo(who[5]))[0];
+		check('the sixth holds nothing yet: told places are filling up and one is theirs if free when they confirm', /places are filling up/.test(sixth.text_body) && /take a place if one is still free/.test(sixth.text_body) && !/held for you/.test(sixth.text_body), sixth.text_body.slice(0, 900));
+		r = await req('POST', '/api/rsvp/confirm', { t: await confirmOf(who[5]) });
+		check('…and on confirming gets a place, as three were free', r.data.registration?.place === 'place', JSON.stringify(r.data));
+		for (const e of who.slice(6)) await register({ event: H, name: 'Later', email: e });
+		for (const e of who.slice(6, 8)) await req('POST', '/api/rsvp/confirm', { t: await confirmOf(e) });
+		r = await req('POST', '/api/rsvp/confirm', { t: await confirmOf(who[8]) });
+		const sum = await status();
+		check('the first to confirm take the free places; once the five holds and three confirmed fill the room, the next joins the waiting list', r.data.registration?.place === 'waitlist' && sum.capacity.inPerson.confirmed === 3 && sum.capacity.inPerson.held === 8, JSON.stringify([r.data, sum.capacity.inPerson]));
+		for (const e of who.slice(0, 5)) await req('POST', '/api/rsvp/decline', { t: await confirmOf(e) });
 	}
 
 	console.log('\nAdmin removal');

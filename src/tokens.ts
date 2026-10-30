@@ -56,7 +56,11 @@ export async function suggestionRef(env: Env, optionId: string): Promise<string>
 
 /** Finds a valid suggestion reference in the text and returns its option id, or null. */
 export async function readSuggestionRef(env: Env, text: string): Promise<string | null> {
+	// A genuine reply carries one reference, or a few in a quoted thread: a message stuffed with candidates must not
+	// cost seconds of hashing.
+	let tried = 0;
 	for (const m of text.matchAll(/ref ([A-Za-z0-9_-]{16})\.([A-Za-z0-9_-]{16})(?![A-Za-z0-9_-])/g)) {
+		if (++tried > 5) break;
 		const expected = (await suggestionRef(env, m[1])).split('.')[1];
 		// Compared as HMACs of both, so the time taken says nothing about how much of the reference matched.
 		const [a, b] = await Promise.all([m[2], expected].map(async (s) => base64url(new Uint8Array(await crypto.subtle.sign('HMAC', await key(env), new TextEncoder().encode(s))))));

@@ -5,7 +5,7 @@ import { VERSION } from '../../env';
  * The admin page. Served by a Pages Function so it only ever leaves the server after the Access JWT check in
  * pageMiddleware. Plain HTML and JavaScript, no build step.
  */
-export const onRequestGet = async () => new Response(HTML, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-robots-tag': 'noindex' } });
+export const onRequestGet = async () => new Response(HTML, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-robots-tag': 'noindex', 'content-security-policy': "frame-ancestors 'none'", 'x-frame-options': 'DENY', 'referrer-policy': 'no-referrer' } });
 
 const HTML = /* html */ `<!doctype html>
 <html lang="en">

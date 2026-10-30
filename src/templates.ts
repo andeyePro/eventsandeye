@@ -208,16 +208,17 @@ function calendarText(cal: CalendarBlock | undefined, tz: string): string {
  * The double opt-in email. It goes to an address nobody has verified yet, so it carries no manage link, does not
  * repeat the name typed into the form, and lists only the choices the recipient is about to confirm.
  */
-export function confirmEmail(b: Brand, ev: EventRow, reg: RegistrationRow, sessions: SessionRow[], confirmUrl: string): OutgoingEmail {
+export function confirmEmail(b: Brand, ev: EventRow, reg: RegistrationRow, sessions: SessionRow[], confirmUrl: string, opts: { unheld?: boolean } = {}): OutgoingEmail {
 	const subject = `Complete your registration: ${ev.title}`;
 	const choices = [
-		...statusLines(reg, sessions).map((l) => l.replace('You have an in-person place.', 'An in-person place is held for you.').replace('You are booked on', 'A place is held for you on').replace('You are on the waiting list for an in-person place. We will email you if a place becomes available.', 'You are joining the waiting list for an in-person place.').replace(/^You are on the waiting list for (.*)\. We will email you if a place becomes available\.$/, 'You are joining the waiting list for $1.')),
+		...statusLines(reg, sessions).map((l) => l.replace('You have an in-person place.', 'An in-person place is held for you.')
+			.replace('You are on the waiting list for an in-person place. We will email you if a place becomes available.', opts.unheld ? 'An in-person place: places are filling up, so one can be held only once you confirm. If one is free then, it is yours; if not, you join the waiting list.' : '$&').replace('You are booked on', 'A place is held for you on').replace('You are on the waiting list for an in-person place. We will email you if a place becomes available.', 'You are joining the waiting list for an in-person place.').replace(/^You are on the waiting list for (.*)\. We will email you if a place becomes available\.$/, 'You are joining the waiting list for $1.')),
 		reg.share_contact ? 'You chose to share your email address with the hosts of the sessions you attend.' : 'Session hosts will see only your name and whether you have a place.',
 	];
 	const waiting = waitingForPlace(reg, sessions);
 	const held = modeOf(reg) === 'in_person' && !waiting ? 'your place will be released' : 'it will be deleted';
 	// On the waiting list there's no place to lose: the point of confirming is to stay on the list.
-	const why = !waiting ? '' : reg.place === 'waitlist' ? ' and join the waiting list: we will email you if a place comes up, for example if we can book a bigger room' : ' and join the waiting list: we will email you if a place comes up';
+	const why = !waiting ? '' : opts.unheld ? ' and take a place if one is still free' : reg.place === 'waitlist' ? ' and join the waiting list: we will email you if a place comes up, for example if we can book a bigger room' : ' and join the waiting list: we will email you if a place comes up';
 	const notMeUrl = `${confirmUrl}${confirmUrl.includes('?') ? '&' : '?'}not-me=1`;
 	const holdUntil = ukDateTime(reg.hold_expires_at ?? ev.deadline, ev.timezone);
 	const html = layout(b, subject, `
