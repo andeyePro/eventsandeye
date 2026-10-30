@@ -4,7 +4,7 @@
  * Plain HTML versions of the booking form, confirm panel and manage panel, for sites that do not use Astro.
  * The markup is taken from the Astro components, so the two cannot drift apart; the scripts are the same modules.
  *   node scripts/build-html.mjs            writes html/*.html, html/events-and-i.css and html/*.js
- *   node scripts/build-html.mjs --check    fails if the committed html/*.html is out of date
+ *   node scripts/build-html.mjs --check    fails if the committed html/*.html or the stylesheet is out of date
  */
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { build } from 'esbuild';
@@ -55,8 +55,13 @@ for (const [name, mod] of components) {
 		if (was !== f.html) { stale++; console.error(`html/${mod}.html is out of date: run node scripts/build-html.mjs`); }
 	} else writeFileSync(path, f.html);
 }
-if (check) process.exit(stale ? 1 : 0);
+if (check) {
+	let was = '';
+	try { was = readFileSync(`${root}html/events-and-i.css`, 'utf8'); } catch {}
+	if (was !== css) { stale++; console.error('html/events-and-i.css is out of date: run node scripts/build-html.mjs'); }
+	process.exit(stale ? 1 : 0);
+}
 mkdirSync(`${root}html`, { recursive: true });
 writeFileSync(`${root}html/events-and-i.css`, css);
 await build({ entryPoints: components.map(([, m]) => `${root}astro/${m}.ts`), bundle: true, format: 'esm', minify: true, outdir: `${root}html`, logLevel: 'warning' });
-console.log('Wrote html/*.html (commit these), html/events-and-i.css and html/*.js (build output: copy them to your site).');
+console.log('Wrote html/*.html and html/events-and-i.css (commit these) and html/*.js (build output: copy them to your site).');
