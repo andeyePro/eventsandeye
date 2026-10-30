@@ -81,15 +81,18 @@ export function entriesFor(env: Env, ev: EventRow, sessions: SessionRow[], reg: 
 		return `${hm(s.starts_at, tz)} ${s.label}${note}`;
 	};
 	const travel = ev.travel_minutes ?? 60; // 0 is a real answer (no travel), not "unset"
-	// One entry per local day with something on it, so a weekend event does not block the night in between. The first
-	// day keeps the key 'day', so a one-day event's entry is exactly what it always was.
+	// One entry per local day with something on it, so a weekend event does not block the night in between. One day
+	// keeps the key 'day': the one it was first sent for, if that day still has something on, else the first. So a
+	// one-day event's entry is exactly what it always was, and adding an earlier day does not move an existing entry.
 	const dayOf = (iso: string) => localStamp(iso, tz).slice(0, 8);
 	const attending = [...core, ...(tour ? [tour] : [])];
 	const days = [...new Set(attending.map((s) => dayOf(s.starts_at)))].sort();
 	const many = days.length > 1;
-	const dayEntries: CalEntry[] = days.map((d, i) => {
+	const sent = parseState(reg.calendar_state).day;
+	const keyDay = sent && !sent.cancelled && days.includes(dayOf(sent.start)) ? dayOf(sent.start) : days[0];
+	const dayEntries: CalEntry[] = days.map((d) => {
 		const on = attending.filter((s) => dayOf(s.starts_at) === d);
-		const key = i === 0 ? 'day' : `day-${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
+		const key = d === keyDay ? 'day' : `day-${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
 		const date = new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: tz }).format(new Date(on[0].starts_at)).replace(',', '');
 		return {
 			key,
@@ -99,8 +102,8 @@ export function entriesFor(env: Env, ev: EventRow, sessions: SessionRow[], reg: 
 			start: on.map((s) => s.starts_at).sort()[0],
 			end: on.map((s) => s.ends_at).sort().at(-1)!,
 			description: [many ? `Your day, ${date}:` : 'Your day:', ...scheduled.filter((s) => dayOf(s.starts_at) === d).map(line), '', manage].join('\n'),
-			// The week-ahead reminder only before the first day.
-			alarms: [...(i === 0 ? ['-P7D'] : []), '-P1D', `-PT${travel + 15}M`, '-PT15M'],
+			// The week-ahead reminder only on the 'day' entry (normally the first), so adding a day changes no other entry.
+			alarms: [...(key === 'day' ? ['-P7D'] : []), '-P1D', `-PT${travel + 15}M`, '-PT15M'],
 		};
 	});
 	return [...dayEntries, ...optinEntries];

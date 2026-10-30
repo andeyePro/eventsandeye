@@ -75,8 +75,10 @@ export function ukDate(iso: string, timeZone = 'Europe/London'): string {
  */
 export function ukDates(startIso: string, endIso: string, timeZone = 'Europe/London'): string {
 	const part = (iso: string) => Object.fromEntries(new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone }).formatToParts(new Date(iso)).map((p) => [p.type, p.value]));
-	// The end is exclusive in spirit: an event ending at midnight belongs to the day before.
-	const a = part(startIso), b = part(new Date(Date.parse(endIso) - 1).toISOString());
+	// An event that runs past midnight (a late dinner, say) belongs to the day it started: an end before 6am counts as
+	// the evening before.
+	const endHour = Number(new Intl.DateTimeFormat('en-GB', { hour: '2-digit', hourCycle: 'h23', timeZone }).format(new Date(endIso)));
+	const a = part(startIso), b = part(new Date(Date.parse(endIso) - (endHour < 6 ? (endHour + 1) * 3600_000 : 1)).toISOString());
 	if (a.year === b.year && a.month === b.month && a.day === b.day) return ukDate(startIso, timeZone);
 	if (a.year !== b.year) return `${a.weekday} ${a.day} ${a.month} ${a.year} to ${b.weekday} ${b.day} ${b.month} ${b.year}`;
 	if (a.month !== b.month) return `${a.weekday} ${a.day} ${a.month} to ${b.weekday} ${b.day} ${b.month} ${b.year}`;

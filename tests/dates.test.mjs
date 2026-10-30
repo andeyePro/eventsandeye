@@ -18,3 +18,8 @@ test('an event ending at midnight belongs to the day before, in its own time zon
 	assert.equal(ukDates('2026-06-12T17:00:00Z', '2026-06-12T23:00:00Z'), 'Friday 12 June 2026');
 	assert.equal(ukDates('2026-11-13T15:00:00Z', '2026-11-14T03:00:00Z', 'America/New_York'), 'Friday 13 November 2026');
 });
+
+test('an event that runs past midnight is still one day', () => {
+	assert.equal(ukDates('2026-11-13T10:30:00Z', '2026-11-14T00:30:00Z'), 'Friday 13 November 2026');
+	assert.equal(ukDates('2026-11-13T10:30:00Z', '2026-11-14T09:00:00Z'), 'Friday 13 to Saturday 14 November 2026');
+});

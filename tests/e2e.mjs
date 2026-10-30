@@ -468,7 +468,9 @@ try {
 	r = await req('POST', '/api/admin/promote-all', { event: EVENT }, ADMIN);
 	check('promote all does nothing while the maximum is reached', r.data.ok && r.data.promoted === 0 && r.data.still_waiting === 1, JSON.stringify(r.data));
 	await req('POST', '/api/admin/settings', { event: EVENT, in_person_max: 2 }, ADMIN);
+	const hostsBefore = (await outbox()).filter((x) => /Attendee list changed/.test(x.subject)).length;
 	r = await req('POST', '/api/admin/promote-all', { event: EVENT }, ADMIN);
+	check('promote all sends each host at most one list', (await outbox()).filter((x) => /Attendee list changed/.test(x.subject)).length - hostsBefore <= 3);
 	check('raising the maximum then promote all gives the waiting list places, in order', r.data.ok && r.data.promoted === 1 && r.data.still_waiting === 0, JSON.stringify(r.data));
 	await req('POST', '/api/admin/settings', { event: EVENT, in_person_max: 1 }, ADMIN);
 	check('promote all needs Access', (await req('POST', '/api/admin/promote-all', { event: EVENT })).status === 401);
@@ -825,6 +827,17 @@ try {
 		const dt = (a, p) => (new RegExp(`${p};TZID=Europe/London:(\\d{8})T(\\d{6})`).exec(unfold(a.content)) || []).slice(1).join('T');
 		check('…and one calendar entry per day, each within its own day', days.length === 2 && days.every((a) => dt(a, 'DTSTART').slice(0, 8) === dt(a, 'DTEND').slice(0, 8)) && dt(days[0], 'DTSTART').slice(0, 8) !== dt(days[1], 'DTSTART').slice(0, 8)
 			&& days.some((a) => /SUMMARY:Weekend Camp: Saturday/.test(unfold(a.content))) && days.some((a) => /Sunday talks/.test(unfold(a.content).replace(/\\n/g, ' '))), days.map((a) => dt(a, 'DTSTART') + '-' + dt(a, 'DTEND')).join(', '));
+		// An earlier day added: the Saturday entry keeps its place, Friday arrives as a new one.
+		await req('POST', EV, { action: 'add_session', event: 'e2e-weekend', label: 'Friday welcome', starts_at: on(-1, 18), ends_at: on(-1, 20) }, ADMIN);
+		await req('POST', '/api/admin/sessions', { event: 'e2e-weekend', sessions: [] }, ADMIN);
+		let upd = await last('yan@example.org');
+		const reqs = upd.att.filter((a) => /METHOD:REQUEST/.test(a.content));
+		check('adding an earlier day sends just the new day; the existing entries stay put', reqs.length === 1 && /Friday welcome/.test(unfold(reqs[0].content).replace(/\\n/g, ' ')) && /SEQUENCE:0/.test(reqs[0].content) && !upd.att.some((a) => /METHOD:CANCEL/.test(a.content)), upd.att.map((a) => (/SUMMARY:[^\r\n]*/.exec(unfold(a.content)) || [''])[0]).join(' | '));
+		// Sunday's session moved to Saturday afternoon: the Sunday entry is cancelled, Saturday's updated.
+		const wk = (await req('GET', `/api/admin/summary?event=e2e-weekend`, undefined, ADMIN)).data.sessions;
+		await req('POST', '/api/admin/sessions', { event: 'e2e-weekend', sessions: [{ id: wk.find((x) => x.label === 'Sunday talks').id, starts_at: on(0, 16), ends_at: on(0, 17) }] }, ADMIN);
+		upd = await last('yan@example.org');
+		check('folding a day into another cancels its entry and updates the other', upd.att.some((a) => /METHOD:CANCEL/.test(a.content) && /Sunday/.test(unfold(a.content))) && upd.att.some((a) => /METHOD:REQUEST/.test(a.content) && /SEQUENCE:1/.test(a.content) && /Saturday/.test(unfold(a.content))), upd.att.map((a) => (/METHOD:\w+/.exec(a.content) || [''])[0] + ' ' + (/SUMMARY:[^\r\n]*/.exec(unfold(a.content)) || [''])[0]).join(' | '));
 		await req('DELETE', '/api/rsvp/manage', { t: await manageOf('yan@example.org') });
 	}
 
@@ -871,6 +884,7 @@ try {
 	check('registrations kept until 30 days after the event', (await req('GET', `/api/admin/summary?event=${EVENT}`, undefined, ADMIN)).data.registrations.length > 0);
 	await cron(Date.parse(seeded.event.ends_at) + 31 * 24 * 3600_000);
 	check('all registrations deleted 30 days after the event', (await req('GET', `/api/admin/summary?event=${EVENT}`, undefined, ADMIN)).data.registrations.length === 0);
+	check('messages deleted 30 days after the event', (await req('GET', `/api/admin/messages?event=${EVENT}`, undefined, ADMIN)).data.messages.length === 0);
 	check('polls deleted 30 days after the event', (await req('GET', `/api/admin/polls?event=${EVENT}`, undefined, ADMIN)).data.polls.length === 0);
 } catch (e) {
 	failures++;

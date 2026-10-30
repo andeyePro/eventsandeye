@@ -572,7 +572,7 @@ export async function calendarFile(env: Env, id: string, key: string) {
 
 // ---------- admin ----------
 
-export async function promote(env: Env, id: string, what: 'event' | 'tour' | 'optin', sessionId = '') {
+export async function promote(env: Env, id: string, what: 'event' | 'tour' | 'optin', sessionId = '', opts: { skipHosts?: boolean } = {}) {
 	const reg = await getRegistration(env, id);
 	if (!reg || reg.status !== 'confirmed') throw new UserError('Only confirmed registrations can be promoted.', 404);
 	const ev = await getEvent(env, reg.event_id);
@@ -596,7 +596,7 @@ export async function promote(env: Env, id: string, what: 'event' | 'tour' | 'op
 	// Someone still waiting for an in-person place gets instructions only once they have one.
 	const intro = { html: '<p><strong>Good news: a place has become available for you.</strong></p>', text: 'Good news: a place has become available for you.' };
 	if (!waitingForPlace(updated, sessions)) await sendInstructions(env, ev, updated, sessions, { intro });
-	await syncHosts(env, brand(env), ev, sessions);
+	if (!opts.skipHosts) await syncHosts(env, brand(env), ev, sessions);
 	return { ok: true as const };
 }
 
@@ -610,7 +610,9 @@ export async function promoteAll(env: Env, eventId: string) {
 		`SELECT id FROM registrations WHERE event_id = ? AND status = 'confirmed' AND attendance = 'in_person' AND place = 'waitlist'
 		 ORDER BY waitlist_since, confirmed_at LIMIT ?`,
 	).bind(ev.id, room).all<{ id: string }>();
-	for (const r of waiting.results) await promote(env, r.id, 'event');
+	// Hosts get one list for the lot, not one per person promoted.
+	for (const r of waiting.results) await promote(env, r.id, 'event', '', { skipHosts: true });
+	if (waiting.results.length) await syncHosts(env, brand(env), ev, await getSessions(env, ev.id));
 	return { ok: true as const, promoted: waiting.results.length, still_waiting: cap.inPerson.waiting - waiting.results.length };
 }
 
@@ -979,5 +981,9 @@ export async function runScheduled(env: Env, now = Date.now()) {
 	// in the sent log for anyone who needs them afterwards.
 	await env.DB.prepare(`DELETE FROM polls WHERE event_id IN (SELECT id FROM events WHERE ends_at <= ?)`).bind(cutoff).run();
 	await env.DB.prepare('DELETE FROM dev_outbox WHERE created_at <= ?').bind(cutoff).run();
+	// Messages can name attendees, and both they and joining instructions name the organiser who wrote them: messages
+	// go, and instructions (kept so the event can be cloned) lose their author.
+	await env.DB.prepare(`DELETE FROM messages WHERE event_id IN (SELECT id FROM events WHERE ends_at <= ?)`).bind(cutoff).run();
+	await env.DB.prepare(`UPDATE instructions SET created_by = NULL WHERE created_by IS NOT NULL AND event_id IN (SELECT id FROM events WHERE ends_at <= ?)`).bind(cutoff).run();
 	return report;
 }
