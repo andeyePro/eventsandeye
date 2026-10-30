@@ -3,7 +3,8 @@
 /**
  * End-to-end test of Events&I against a local D1 database with `wrangler pages dev ./dist`.
  * Emails go to the dev outbox (DEV_MODE), Turnstile uses Cloudflare's always-pass test secret, and the admin
- * tests mint their own Access JWTs with a throwaway RSA key.
+ * tests mint their own Access JWTs with a throwaway RSA key. Replies to poll suggestions go through /api/dev/inbound, as
+ * Cloudflare Email Routing would hand them to the cron Worker.
  *
  * Configure with environment variables (defaults suit the amybo.org site):
  *   E2E_DB      D1 database name in wrangler.toml          (amybo-rsvp-eu)
@@ -53,6 +54,7 @@ writeFileSync('.dev.vars', [
 	`NOTIFY_EMAIL=${NOTIFY}`,
 	// Check the token's own methods here (the live site relies on the Access application's MFA instead).
 	'ACCESS_MFA=claim',
+	'POLL_REPLY_EMAIL=polls@example.org',
 	`ACCESS_JWKS_JSON=${JSON.stringify({ keys: [jwk] })}`,
 	'',
 ].join('\n'));
@@ -555,6 +557,126 @@ try {
 	check('a new registration ticking the closed dinner → 409', (await register({ email: `${randomUUID()}@example.org`, optins: [DINNER] })).status === 409);
 	check('ticking the closed dinner on the manage page → 409', (await req('POST', '/api/rsvp/manage', { t: bobManage, name: 'Bob', attendance: 'in_person', optins: [DINNER] })).status === 409);
 	await req('POST', '/api/admin/sessions', { event: EVENT, quiet: true, sessions: [{ id: DINNER, booking_deadline: null }] }, ADMIN);
+	console.log('\nPolls');
+	{
+		const POLLS = '/api/admin/polls';
+		check('polls API without JWT → 401', (await req('GET', `${POLLS}?event=${EVENT}`)).status === 401);
+		check('a poll needs a question', (await req('POST', POLLS, { action: 'create', event: EVENT, question: '', options: 'Skiing' }, ADMIN)).status === 400);
+		let before = (await outbox()).length;
+		r = await req('POST', POLLS, { action: 'create', event: EVENT, question: 'What shall we do on Saturday?', options: 'Skiing\nCamping\nHiking\n skiing \nFootball\nRugby' }, ADMIN);
+		const POLL = r.data.id;
+		let ap = (await req('GET', `${POLLS}?event=${EVENT}`, undefined, ADMIN)).data.polls.find((p) => p.id === POLL);
+		check('organiser creates a poll; a repeated option is dropped; nobody is emailed', r.data.ok && ap.options.map((o) => o.label).join() === 'Skiing,Camping,Hiking,Football,Rugby' && (await outbox()).length === before, JSON.stringify(r.data));
+		const opt = (label, p = ap) => p.options.find((o) => o.label === label)?.id;
+		const [SKI, CAMP, HIKE, FOOT, RUGBY] = ['Skiing', 'Camping', 'Hiking', 'Football', 'Rugby'].map((l) => opt(l));
+		const pat = await registerAndConfirm({ name: 'Pat', email: 'pat@example.org', attendance: 'remote' });
+		const quinn = await registerAndConfirm({ name: 'Quinn', email: 'quinn@example.org', attendance: 'remote' });
+		const view = async (who) => (await req('GET', `/api/rsvp/manage?t=${encodeURIComponent(who.manage)}`)).data.polls.find((p) => p.id === POLL);
+		let pv = await view(pat);
+		check('the manage view lists the poll, unanswered, with no results yet', pv && pv.open && pv.options.length === 5 && pv.ballot === null && pv.results === null, JSON.stringify(pv));
+		const vote = (who, ranking, bar) => req('POST', '/api/rsvp/poll', { t: who.manage, poll: POLL, ranking, bar });
+		r = await vote(pat, [SKI, CAMP, HIKE, FOOT, RUGBY], 3);
+		check('Pat ranks skiing, camping, hiking, then the line, then football and rugby', r.data.ok && r.data.polls.find((p) => p.id === POLL).ballot.bar === 3 && r.data.polls.find((p) => p.id === POLL).ballot.ranking[0] === SKI && r.data.polls.find((p) => p.id === POLL).results.find((x) => x.label === 'Skiing').willing === 1, JSON.stringify(r.data));
+		check('an unknown option → 409', (await vote(pat, [SKI, 'nope'], 1)).status === 409);
+		check('an option twice → 409', (await vote(pat, [SKI, SKI], 1)).status === 409);
+		check('the line beyond the end → 400', (await vote(pat, [SKI], 2)).status === 400);
+		check('a ranking without a valid manage link → 404', (await req('POST', '/api/rsvp/poll', { t: 'x.y.z', poll: POLL, ranking: [SKI], bar: 1 })).status === 404);
+		r = await vote(quinn, [HIKE, CAMP, SKI, FOOT, RUGBY], 2);
+		ap = (await req('GET', `${POLLS}?event=${EVENT}`, undefined, ADMIN)).data.polls.find((p) => p.id === POLL);
+		const row = (label) => ap.tally.results.find((x) => x.label === label);
+		check('tally: who would join, who would stay at home, first choices, preference', ap.tally.voters === 2 && row('Camping').willing === 2 && row('Hiking').willing === 2 && row('Skiing').willing === 1 && row('Skiing').out === 1 && row('Football').out === 2 && row('Skiing').first === 1 && row('Camping').score === 3 && row('Hiking').score === 3, JSON.stringify(ap.tally));
+		check('tally sorted by who would join, and the organiser sees names', ['Camping', 'Hiking'].includes(ap.tally.results[0].label) && ap.tally.results.at(-1).willing === 0 && row('Camping').names.join() === 'Pat,Quinn', JSON.stringify(ap.tally.results.map((x) => x.label)));
+
+		console.log('\nPoll suggestions');
+		before = (await mailsTo(NOTIFY)).length;
+		const suggest = (who, label) => req('POST', '/api/rsvp/poll', { t: who.manage, poll: POLL, suggest: label });
+		r = await suggest(pat, 'Paddle boarding');
+		const PADDLE = r.data.option?.id;
+		let note = (await mailsTo(NOTIFY)).slice(before);
+		check('Pat suggests paddle boarding: pending, and the organiser is emailed once', r.data.ok && r.data.option.pending && !r.data.existing && note.length === 1, JSON.stringify(r.data));
+		const sm = note[0];
+		const refOf = (m) => /\(ref ([A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{16})\)/.exec(m.subject)?.[1];
+		check('the suggestion email names Pat and the option, explains yes / no / use, replies go to the poll address, and it carries a reference', /Poll suggestion: Paddle boarding/.test(sm.subject) && !!refOf(sm) && /Pat suggested an option for "What shall we do on Saturday\?"/.test(sm.text_body) && /yes: add it/.test(sm.text_body) && /use <your wording>/.test(sm.text_body) && sm.reply_to === 'polls@example.org' && /\/admin\/rsvps\/\?event=/.test(sm.text_body), sm.subject + ' | ' + sm.reply_to + ' | ' + sm.text_body.slice(0, 600));
+		check('Pat sees the suggestion as theirs, waiting; Quinn does not see it', (await view(pat)).options.some((o) => o.id === PADDLE && o.pending && o.mine) && !(await view(quinn)).options.some((o) => o.id === PADDLE));
+		before = (await mailsTo(NOTIFY)).length;
+		r = await suggest(pat, '  skiing ');
+		check('suggesting an existing option returns it, and emails nobody', r.data.ok && r.data.existing && r.data.option.id === SKI && (await mailsTo(NOTIFY)).length === before, JSON.stringify(r.data));
+		r = await vote(pat, [PADDLE, SKI, CAMP, HIKE, FOOT, RUGBY], 4);
+		check('Pat ranks their own suggestion first', r.data.ok && r.data.polls.find((p) => p.id === POLL).ballot.ranking[0] === PADDLE, JSON.stringify(r.data));
+		check('Quinn cannot rank Pat\'s pending suggestion → 409', (await vote(quinn, [PADDLE, HIKE], 1)).status === 409);
+		check('the organiser sees the pending suggestion and who made it', (await req('GET', `${POLLS}?event=${EVENT}`, undefined, ADMIN)).data.polls.find((p) => p.id === POLL).options.some((o) => o.id === PADDLE && o.status === 'pending' && o.suggested_by_name === 'Pat'));
+
+		console.log('\nReplying to a suggestion by email');
+		const inbound = async (raw) => (await (await fetch(`${BASE}/api/dev/inbound`, { method: 'POST', body: raw })).json());
+		const mail = ({ from = NOTIFY, subject, body, headers = '' }) => `From: Organiser <${from}>\r\nTo: polls@example.org\r\nSubject: ${subject}\r\nMIME-Version: 1.0\r\n${headers}\r\n${body}`;
+		const plain = (o) => mail({ ...o, headers: 'Content-Type: text/plain; charset=utf-8\r\n' });
+		const ref = refOf(sm);
+		before = (await outbox()).length;
+		r = await inbound(plain({ from: 'stranger@example.org', subject: `Re: ${sm.subject}`, body: 'yes\r\n' }));
+		check('a reply from someone who is not an organiser is refused, and changes nothing', r.result.action === 'rejected' && !!r.rejected && (await view(pat)).options.find((o) => o.id === PADDLE).pending && (await outbox()).length === before, JSON.stringify(r));
+		r = await inbound(plain({ subject: `Re: [AMYBO] Poll suggestion (ref ${ref.slice(0, 17)}AAAAAAAAAAAAAAAA)`, body: 'yes\r\n' }));
+		check('a reply with a forged reference is refused', r.result.action === 'rejected' && (await outbox()).length === before, JSON.stringify(r));
+		r = await inbound(mail({ subject: `Automatic reply: ${sm.subject}`, headers: 'Content-Type: text/plain\r\nAuto-Submitted: auto-replied\r\n', body: 'No one is in the office until Monday.\r\n' }));
+		check('an out-of-office reply that starts with "No" decides nothing, and is neither answered nor bounced', r.result.action === 'ignored' && !r.rejected && (await view(pat)).options.find((o) => o.id === PADDLE).pending && (await outbox()).length === before, JSON.stringify(r));
+		r = await inbound(mail({ from: 'stranger@example.org', subject: `Re: ${sm.subject}`, body: 'yes\r\n' }).replace(`From: Organiser <stranger@example.org>`, `From: "<${NOTIFY}>" <stranger@example.org>`));
+		check('an organiser\'s address hidden in the display name does not pass for the sender', r.result.action === 'rejected' && (await view(pat)).options.find((o) => o.id === PADDLE).pending, JSON.stringify(r));
+		r = await inbound(plain({ subject: `Re: ${sm.subject}`, body: 'No problem, add it\r\n' }));
+		check('"No problem, add it" is not read as no', r.result.action === 'not-understood' && (await view(pat)).options.find((o) => o.id === PADDLE).pending, JSON.stringify(r));
+		r = await inbound(plain({ subject: `Re: ${sm.subject}`, body: 'maybe, let me think\r\n\r\nOn Fri, someone wrote:\r\n> yes: add it\r\n' }));
+		let back = await last(NOTIFY);
+		check('a reply that is not yes, no or use: nothing changes and the organiser is told', r.result.action === 'not-understood' && /reply not understood/.test(back.subject) && /maybe, let me think/.test(back.text_body) && (await view(pat)).options.find((o) => o.id === PADDLE).pending, JSON.stringify(r));
+		// A typical HTML mail app reply: multipart/alternative, quoted-printable, the answer above the quoted original.
+		const qp = 'use Paddleboarding on the Thames=0D=0A=0D=0AOn Fri, 13 Nov 2026, AMYBO wrote:=0D=0A> Pat suggested an opti=\r\non';
+		r = await inbound(mail({ subject: `=?UTF-8?Q?Re:_[AMYBO]_Poll_suggestion:_Paddle_boarding?= (ref ${ref})`, headers: 'Content-Type: multipart/alternative; boundary="b1"\r\n',
+			body: `--b1\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n${qp}\r\n--b1\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n<div>use Paddleboarding on the Thames</div><blockquote>yes</blockquote>\r\n--b1--\r\n` }));
+		back = await last(NOTIFY);
+		pv = await view(pat);
+		check('"use <wording>" adds the suggestion for everyone in the organiser\'s words', r.result.action === 'decided' && !r.result.already && pv.options.some((o) => o.id === PADDLE && !o.pending && o.label === 'Paddleboarding on the Thames'), JSON.stringify(r));
+		check('the organiser gets a confirmation; Pat is not emailed and sees it on their page', /Done: "Paddle boarding" added as "Paddleboarding on the Thames"/.test(back.text_body) && (await mailsTo('pat@example.org')).every((m) => !/Paddle/.test(m.text_body)) && pv.notes.some((n) => /"Paddle boarding" was added for everyone as "Paddleboarding on the Thames"/.test(n)), back.text_body + JSON.stringify(pv.notes));
+		const qv = await view(quinn);
+		check('Quinn now sees it, as new and not yet in their order', qv.options.some((o) => o.id === PADDLE && !o.pending) && !qv.ballot.ranking.includes(PADDLE), JSON.stringify(qv.ballot));
+		r = await inbound(plain({ subject: `Re: ${sm.subject}`, body: 'no\r\n' }));
+		check('a second answer changes nothing and says it was already decided', r.result.action === 'decided' && r.result.already && (await view(pat)).options.some((o) => o.id === PADDLE && !o.pending) && /already been decided/.test((await last(NOTIFY)).text_body), JSON.stringify(r));
+
+		r = await suggest(quinn, 'Footy');
+		const FOOTY = r.data.option.id;
+		await vote(quinn, [FOOTY, HIKE, CAMP, SKI, FOOT, RUGBY], 3);
+		r = await req('POST', POLLS, { action: 'decide', option: FOOTY, decision: 'use', label: 'football' }, ADMIN);
+		let qb = (await view(quinn));
+		check('on the admin page, "use" with an existing option\'s name merges the suggestion into it, keeping Quinn\'s ranking', r.data.ok && /merged into "Football"/.test(r.data.outcome) && qb.ballot.ranking[0] === FOOT && qb.ballot.bar === 3 && qb.ballot.ranking.filter((x) => x === FOOT).length === 1 && qb.notes.some((n) => /"Footy" is already an option, as "Football"/.test(n)), JSON.stringify([r.data, qb.ballot, qb.notes]));
+		r = await suggest(quinn, 'Darts');
+		const darts = (await mailsTo(NOTIFY)).filter((m) => /Poll suggestion: Darts/.test(m.subject)).at(-1);
+		await vote(quinn, [r.data.option.id, FOOT, HIKE, CAMP, SKI, RUGBY], 4);
+		r = await inbound(mail({ subject: `RE: ${darts.subject}`, headers: 'Content-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n', body: Buffer.from('No thanks.\r\n\r\n-----Original Message-----\r\nyes\r\n').toString('base64') + '\r\n' }));
+		qb = await view(quinn);
+		check('"no" turns a suggestion down; it leaves Quinn\'s order, the line moving up with it', r.result.action === 'decided' && /not added/.test(r.result.outcome) && qb.ballot.ranking[0] === FOOT && qb.ballot.bar === 3 && qb.notes.some((n) => /"Darts" was not added/.test(n)), JSON.stringify([r, qb.ballot]));
+		before = (await mailsTo(NOTIFY)).length;
+		const burst = await Promise.all(['One', 'Two', 'Three', 'Four', 'Five', 'Six'].map((l) => suggest(pat, `Pat idea ${l}`)));
+		check('six suggestions at once: three wait for the organisers, three are refused, three emails', burst.filter((x) => x.status === 200).length === 3 && burst.filter((x) => x.status === 429).length === 3 && (await mailsTo(NOTIFY)).length === before + 3, burst.map((x) => x.status).join());
+		check('a fourth suggestion waiting at once → 429', (await suggest(pat, 'Pat idea Seven')).status === 429);
+
+		console.log('\nOrganising a poll');
+		pv = await view(pat);
+		const patBar = pv.ballot.bar;
+		r = await req('POST', POLLS, { action: 'remove_option', option: CAMP }, ADMIN);
+		pv = await view(pat);
+		check('removing an option takes it off everyone\'s order; Pat\'s line moves up with it', r.data.ok && !pv.options.some((o) => o.id === CAMP) && !pv.ballot.ranking.includes(CAMP) && pv.ballot.bar === patBar - 1, JSON.stringify(pv.ballot));
+		r = await req('POST', POLLS, { action: 'add_option', poll: POLL, label: 'hiking' }, ADMIN);
+		check('adding an option that exists → 409', r.status === 409);
+		r = await req('POST', POLLS, { action: 'rename_option', option: HIKE, label: 'Hill walking' }, ADMIN);
+		check('renaming an option keeps everyone\'s ranking', r.data.ok && (await view(quinn)).options.find((o) => o.id === HIKE).label === 'Hill walking' && (await view(quinn)).ballot.ranking.includes(HIKE));
+		r = await req('POST', POLLS, { action: 'update', poll: POLL, closes_at: new Date(Date.now() - 1000).toISOString() }, ADMIN);
+		check('closing the poll: no more rankings or suggestions → 409', r.data.ok && (await view(pat)).open === false && (await vote(pat, [SKI], 1)).status === 409 && (await suggest(pat, 'Late idea')).status === 409);
+		const log = (await req('GET', `/api/admin/sent-log?event=${EVENT}`, undefined, ADMIN)).data;
+		check('the sent log has the poll totals, without names', /## Polls/.test(log) && /### What shall we do on Saturday\?/.test(log) && /- Football: 1 would join \(1 first choice\), 1 would stay at home/.test(log) && !/Quinn/.test(log), String(log).split('## Polls')[1]);
+		const page = await req('GET', '/admin/rsvps/', undefined, ADMIN);
+		check('the admin page has a polls section', /id="polls"/.test(page.data) && /id="poll-form"/.test(page.data));
+		r = await req('DELETE', '/api/rsvp/manage', { t: pat.manage });
+		ap = (await req('GET', `${POLLS}?event=${EVENT}`, undefined, ADMIN)).data.polls.find((p) => p.id === POLL);
+		check('cancelling deletes the ballot; Pat\'s suggestions stay, without their name', r.data.ok && ap.tally.voters === 1 && ap.options.find((o) => o.id === PADDLE)?.suggested_by === null && ap.options.find((o) => o.id === PADDLE)?.suggested_by_name === null, JSON.stringify(ap.tally));
+		await req('DELETE', '/api/rsvp/manage', { t: quinn.manage });
+	}
+
 	console.log('\nAdmin removal');
 	const gina = 'gina@example.org', hal = 'hal@example.org';
 	await registerAndConfirm({ name: 'Gina', email: gina, attendance: 'remote' });
@@ -598,6 +720,7 @@ try {
 	check('registrations kept until 30 days after the event', (await req('GET', `/api/admin/summary?event=${EVENT}`, undefined, ADMIN)).data.registrations.length > 0);
 	await cron(Date.parse(seeded.event.ends_at) + 31 * 24 * 3600_000);
 	check('all registrations deleted 30 days after the event', (await req('GET', `/api/admin/summary?event=${EVENT}`, undefined, ADMIN)).data.registrations.length === 0);
+	check('polls deleted 30 days after the event', (await req('GET', `/api/admin/polls?event=${EVENT}`, undefined, ADMIN)).data.polls.length === 0);
 } catch (e) {
 	failures++;
 	console.error(e);

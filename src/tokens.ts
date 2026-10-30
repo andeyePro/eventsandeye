@@ -43,3 +43,24 @@ export async function readToken(env: Env, purpose: Purpose, token: unknown, now 
 	if (!ok) return null;
 	return parseInt(exp, 36) * 1000 > now ? id : null;
 }
+
+/**
+ * Reference for a poll suggestion in the email to the organiser, `<option id>.<first 16 characters of
+ * HMAC-SHA256(TOKEN_SECRET, suggestion:id)>`. It goes in the subject, so a reply carries it back. Only the organiser's
+ * mailbox ever sees it, and a reply must also come from an organiser's address (see inbound.ts), so 96 bits is ample.
+ */
+export async function suggestionRef(env: Env, optionId: string): Promise<string> {
+	const sig = await crypto.subtle.sign('HMAC', await key(env), new TextEncoder().encode(`suggestion:${optionId}`));
+	return `${optionId}.${base64url(new Uint8Array(sig)).slice(0, 16)}`;
+}
+
+/** Finds a valid suggestion reference in the text and returns its option id, or null. */
+export async function readSuggestionRef(env: Env, text: string): Promise<string | null> {
+	for (const m of text.matchAll(/ref ([A-Za-z0-9_-]{16})\.([A-Za-z0-9_-]{16})(?![A-Za-z0-9_-])/g)) {
+		const expected = (await suggestionRef(env, m[1])).split('.')[1];
+		// Compared as HMACs of both, so the time taken says nothing about how much of the reference matched.
+		const [a, b] = await Promise.all([m[2], expected].map(async (s) => base64url(new Uint8Array(await crypto.subtle.sign('HMAC', await key(env), new TextEncoder().encode(s))))));
+		if (a === b) return m[1];
+	}
+	return null;
+}

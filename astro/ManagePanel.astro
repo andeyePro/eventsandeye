@@ -58,6 +58,7 @@ const { inPersonLabel = 'In person', remoteLabel = 'Remotely (online sessions on
 		</div>
 		<div id="manage-result" role="status" aria-live="polite"></div>
 	</form>
+	<div id="m-polls" hidden></div>
 </div>
 <script>
 	const t = new URLSearchParams(location.search).get('t');
@@ -71,7 +72,8 @@ const { inPersonLabel = 'In person', remoteLabel = 'Remotely (online sessions on
 	const busy = (on: boolean) => buttons.forEach((b) => (b.disabled = on));
 	const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 
-	type View = { ok: boolean; error?: string; event: { title: string; page_path: string; open: boolean; extra_question?: string | null }; tours: { id: string; label: string; available: boolean; open: boolean }[]; optins?: { id: string; label: string; starts_at: string; location: string | null; available?: boolean }[]; registration: Record<string, string | null | boolean | string[]>; calendar: { key: string; summary: string; start: string; url: string }[] };
+	type View = { ok: boolean; error?: string; event: { title: string; page_path: string; open: boolean; extra_question?: string | null }; tours: { id: string; label: string; available: boolean; open: boolean }[]; optins?: { id: string; label: string; starts_at: string; location: string | null; available?: boolean }[]; registration: Record<string, string | null | boolean | string[]>; calendar: { key: string; summary: string; start: string; url: string }[]; polls?: Poll[] };
+	type Poll = { id: string; question: string; open: boolean; allow_suggestions: boolean; closes_at: string; options: { id: string; label: string; pending: boolean; mine: boolean }[]; ballot: { ranking: string[]; bar: number } | null; notes: string[]; results: { label: string; willing: number; out: number }[] | null };
 
 	function describe(r: View['registration']) {
 		const parts: string[] = [];
@@ -159,6 +161,144 @@ const { inPersonLabel = 'In person', remoteLabel = 'Remotely (online sessions on
 			cal.replaceChildren(p, ul);
 		}
 		syncTour();
+		renderPolls(v.polls ?? []);
+	}
+
+	// ---- polls: rank the options, most wanted first, with a line below the ones you would join ----
+	const BAR = '__bar__';
+	const pollsBox = document.getElementById('m-polls')!;
+	/** Unsaved orders by poll id, so a save or suggestion elsewhere on the page does not undo someone's arranging. */
+	const order = new Map<string, string[]>();
+	let polls: Poll[] = [];
+	function startOrder(p: Poll): string[] {
+		const ids = p.options.map((o) => o.id);
+		if (!p.ballot) return [...ids, BAR];
+		// Options added since this person last saved go below their line, marked new, until they move them.
+		const fresh = ids.filter((id) => !p.ballot!.ranking.includes(id));
+		return [...p.ballot.ranking.slice(0, p.ballot.bar), BAR, ...p.ballot.ranking.slice(p.ballot.bar), ...fresh];
+	}
+	function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}, ...kids: (Node | string)[]) {
+		const e = Object.assign(document.createElement(tag), props);
+		e.append(...kids);
+		return e;
+	}
+	function renderPolls(list: Poll[], focus?: { poll: string; id: string; dir: string }) {
+		polls = list;
+		pollsBox.hidden = !list.length;
+		pollsBox.replaceChildren(...list.map((p) => renderPoll(p)));
+		if (focus) (pollsBox.querySelector(`[data-poll="${focus.poll}"] [data-move="${focus.dir}"][data-id="${focus.id}"]`) as HTMLButtonElement | null)?.focus();
+	}
+	function renderPoll(p: Poll) {
+		const ids = order.get(p.id) ?? startOrder(p);
+		order.set(p.id, ids);
+		const label = (id: string) => p.options.find((o) => o.id === id)?.label ?? '';
+		const status = el('p', { className: 'help', role: 'status' });
+		status.setAttribute('aria-live', 'polite');
+		const move = (id: string, dir: number) => {
+			const i = ids.indexOf(id), j = i + dir;
+			if (j < 0 || j >= ids.length) return;
+			[ids[i], ids[j]] = [ids[j], ids[i]];
+			renderPolls(polls, { poll: p.id, id, dir: j === 0 || j === ids.length - 1 ? (dir < 0 ? 'down' : 'up') : dir < 0 ? 'up' : 'down' });
+			const after = pollsBox.querySelector(`[data-poll="${p.id}"] .poll-status`);
+			const above = ids.indexOf(BAR), rank = ids.filter((x) => x !== BAR).indexOf(id) + 1;
+			if (after) after.textContent = id === BAR ? `The line is now under ${above} of ${ids.length - 1} options.` : `${label(id)} is now number ${rank}, ${j < above ? 'above' : 'below'} the line.`;
+		};
+		const fresh = p.ballot ? p.options.filter((o) => !p.ballot!.ranking.includes(o.id)).map((o) => o.id) : [];
+		const items = ids.map((id, i) => {
+			const isBar = id === BAR;
+			const o = p.options.find((x) => x.id === id);
+			const text = isBar ? 'Below this line: count me out' : o?.label ?? '';
+			const tags = isBar ? [] : [o?.pending ? 'your suggestion, waiting for the organisers' : o?.mine ? 'your suggestion' : '', fresh.includes(id) ? 'new' : ''].filter(Boolean);
+			const li = el('li', { className: isBar ? 'bar' : 'opt', draggable: p.open }, el('span', { className: 'opt-label' }, text, ...tags.map((t) => el('span', { className: 'tag' }, t))));
+			li.dataset.id = id;
+			if (p.open) {
+				const btn = (dir: 'up' | 'down', delta: number, arrow: string) => {
+					const b = el('button', { type: 'button', textContent: arrow, disabled: (delta < 0 && i === 0) || (delta > 0 && i === ids.length - 1) });
+					b.setAttribute('aria-label', `Move ${isBar ? 'the line' : text} ${dir}`);
+					b.dataset.move = dir; b.dataset.id = id;
+					b.addEventListener('click', () => move(id, delta));
+					return b;
+				};
+				li.append(el('span', { className: 'moves' }, btn('up', -1, '↑'), btn('down', 1, '↓')));
+				li.addEventListener('dragstart', (e) => { e.dataTransfer?.setData('text/plain', id); li.classList.add('dragging'); });
+				li.addEventListener('dragend', () => li.classList.remove('dragging'));
+				li.addEventListener('dragover', (e) => e.preventDefault());
+				li.addEventListener('drop', (e) => {
+					e.preventDefault();
+					const from = e.dataTransfer?.getData('text/plain');
+					if (!from || from === id || !ids.includes(from)) return;
+					ids.splice(ids.indexOf(from), 1);
+					ids.splice(ids.indexOf(id) + (e.offsetY > li.offsetHeight / 2 ? 1 : 0), 0, from);
+					renderPolls(polls);
+				});
+			}
+			return li;
+		});
+		const section = el('section', { className: 'poll' });
+		section.dataset.poll = p.id;
+		const h = el('h2', { id: `poll-${p.id}`, textContent: p.question });
+		section.setAttribute('aria-labelledby', h.id);
+		const intro = p.open
+			? 'Put the options in order, most wanted first, then move the line: you would join anything above it, and would rather stay at home for anything below it. Use the arrows, or drag.'
+			: 'This poll has closed.';
+		const ol = el('ol', { className: 'rank' }, ...items);
+		ol.setAttribute('aria-label', `Your order for: ${p.question}`);
+		status.className = 'help poll-status';
+		section.append(h, el('p', { className: 'help', textContent: intro }), ol);
+		if (p.open) {
+			const save = el('button', { type: 'button', className: 'primary', textContent: 'Save my order' });
+			save.addEventListener('click', () => submitPoll(p, ids, status, save));
+			const actions = el('div', { className: 'actions' }, save);
+			section.append(actions);
+			if (p.allow_suggestions) {
+				const input = el('input', { type: 'text', maxLength: 80, id: `poll-suggest-${p.id}` });
+				const add = el('button', { type: 'button', className: 'secondary', textContent: 'Add my suggestion' });
+				add.addEventListener('click', () => suggest(p, ids, input, status, add));
+				section.append(el('div', { className: 'field' },
+					el('label', { htmlFor: input.id, textContent: 'Something else? Add it and put it in your order (the organisers decide whether to add it for everyone)' }),
+					el('div', { className: 'suggest' }, input, add)));
+			}
+		}
+		section.append(status);
+		if (p.notes.length) section.append(el('ul', { className: 'help' }, ...p.notes.map((n) => el('li', { textContent: n }))));
+		if (p.results?.length) {
+			const rows = p.results.map((r) => el('tr', {}, el('th', { scope: 'row', textContent: r.label }), el('td', { textContent: String(r.willing) }), el('td', { textContent: String(r.out) })));
+			const head = el('tr', {}, el('th', { scope: 'col', textContent: 'Option' }), el('th', { scope: 'col', textContent: 'Would join' }), el('th', { scope: 'col', textContent: 'Would stay at home' }));
+			section.append(el('details', {}, el('summary', { textContent: 'How everyone has answered so far' }), el('table', {}, el('thead', {}, head), el('tbody', {}, ...rows))));
+		}
+		return section;
+	}
+	async function pollCall(body: object) {
+		const res = await fetch('/api/rsvp/poll', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ t, ...body }) });
+		const d = (await res.json()) as { ok: boolean; error?: string; polls: Poll[]; option?: { id: string; label: string }; existing?: boolean };
+		if (!d.ok) throw new Error(d.error);
+		return d;
+	}
+	async function submitPoll(p: Poll, ids: string[], status: HTMLElement, button: HTMLButtonElement, said = 'Your order has been saved.') {
+		button.disabled = true;
+		try {
+			const d = await pollCall({ poll: p.id, ranking: ids.filter((x) => x !== BAR), bar: ids.indexOf(BAR) });
+			order.delete(p.id);
+			renderPolls(d.polls);
+			const s = pollsBox.querySelector(`[data-poll="${p.id}"] .poll-status`);
+			if (s) s.textContent = said;
+		} catch (err) { status.textContent = (err as Error).message; button.disabled = false; }
+	}
+	async function suggest(p: Poll, ids: string[], input: HTMLInputElement, status: HTMLElement, button: HTMLButtonElement) {
+		const label = input.value.trim();
+		if (!label) { status.textContent = 'Please write your suggestion first.'; input.focus(); return; }
+		button.disabled = true;
+		try {
+			const d = await pollCall({ poll: p.id, suggest: label });
+			const o = d.option!;
+			// Into this person's order at the top, above their line, and saved with the rest of their order as it stands.
+			if (ids.includes(o.id)) ids.splice(ids.indexOf(o.id), 1);
+			ids.unshift(o.id);
+			polls = d.polls;
+			const fresh = d.polls.find((x) => x.id === p.id)!;
+			await submitPoll(fresh, ids.filter((id) => id === BAR || fresh.options.some((x) => x.id === id)), status, button,
+				d.existing ? `"${o.label}" is already an option: it is now at the top of your order, which has been saved.` : `Added "${o.label}" at the top of your order, which has been saved. The organisers have been asked whether to add it for everyone.`);
+		} catch (err) { status.textContent = (err as Error).message; button.disabled = false; }
 	}
 	async function call(method: string, body?: object) {
 		const res = await fetch(method === 'GET' ? `/api/rsvp/manage?t=${encodeURIComponent(t ?? '')}` : '/api/rsvp/manage', {
@@ -189,6 +329,7 @@ const { inPersonLabel = 'In person', remoteLabel = 'Remotely (online sessions on
 			p.tabIndex = -1;
 			p.textContent = 'Your registration has been cancelled and your details deleted. We have emailed you a confirmation.';
 			form.replaceChildren(p);
+			pollsBox.hidden = true;
 			// The button that had focus is gone; move focus to the outcome so it isn't lost to the page body.
 			p.focus();
 		} catch (err) { out.textContent = (err as Error).message; busy(false); }
@@ -205,9 +346,27 @@ const { inPersonLabel = 'In person', remoteLabel = 'Remotely (online sessions on
 	#m-tours, #m-optins { display: grid; gap: 0.35rem; }
 	input[type='text'], textarea { padding: 0.5rem; border: 1px solid var(--sl-color-gray-3, #8b8f98); border-radius: 0.3rem; background: var(--sl-color-bg, #fff); color: var(--sl-color-text, inherit); font: inherit; }
 	fieldset:disabled { opacity: 0.6; }
+	/* :global because the polls are built by the script. */
+	#m-polls { display: grid; gap: 1.5rem; max-width: 40rem; margin-block: 1.5rem; }
+	#m-polls :global(.poll) { display: grid; gap: 0.75rem; }
+	#m-polls :global(h2) { margin: 0; }
+	#m-polls :global(.rank) { list-style: decimal; padding-left: 1.75rem; margin: 0; display: grid; gap: 0.35rem; }
+	#m-polls :global(.rank li) { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.4rem 0.6rem; border: 1px solid var(--sl-color-gray-4, #c7cad1); border-radius: 0.3rem; background: var(--sl-color-bg, #fff); }
+	#m-polls :global(.rank li[draggable='true']) { cursor: grab; }
+	#m-polls :global(.rank li.dragging) { opacity: 0.5; }
+	#m-polls :global(.rank li.bar) { list-style: none; margin-left: -1.75rem; border: 0; border-top: 3px dashed #b3261e; border-radius: 0; font-weight: 700; color: #b3261e; background: transparent; }
+	#m-polls :global(.tag) { font-size: var(--sl-text-xs, 0.75rem); font-weight: 400; margin-left: 0.5rem; padding: 0.05rem 0.4rem; border-radius: 0.25rem; background: var(--sl-color-gray-6, #eef0f3); color: var(--sl-color-text, inherit); }
+	#m-polls :global(.moves) { display: flex; gap: 0.25rem; flex-shrink: 0; }
+	#m-polls :global(.moves button) { min-width: 2.25rem; min-height: 2.25rem; border: 1px solid var(--sl-color-gray-3, #8b8f98); border-radius: 0.3rem; background: transparent; color: inherit; cursor: pointer; }
+	#m-polls :global(.moves button:disabled) { opacity: 0.35; cursor: default; }
+	#m-polls :global(.suggest) { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+	#m-polls :global(.suggest input) { flex: 1 1 14rem; }
+	#m-polls :global(.secondary) { background: transparent; color: var(--sl-color-text, inherit); border: 2px solid #0069a0; border-radius: 999px; padding: 0.5rem 1.2rem; font-weight: 700; cursor: pointer; }
+	#m-polls :global(table) { border-collapse: collapse; margin-top: 0.5rem; }
+	#m-polls :global(th), #m-polls :global(td) { padding: 0.25rem 0.75rem 0.25rem 0; text-align: left; }
 	.help { font-size: var(--sl-text-sm, 0.875rem); color: var(--sl-color-gray-2, #4b5563); margin: 0; }
 	.actions { display: flex; gap: 1rem; flex-wrap: wrap; }
 	.actions button:disabled { opacity: 0.6; cursor: wait; }
-	.primary { background: #0069a0; color: #fff; border: 0; border-radius: 999px; padding: 0.6rem 1.4rem; font-weight: 700; cursor: pointer; }
+	#manage :global(.primary) { background: #0069a0; color: #fff; border: 0; border-radius: 999px; padding: 0.6rem 1.4rem; font-weight: 700; cursor: pointer; }
 	.danger { background: transparent; color: var(--sl-color-text, inherit); border: 2px solid #b3261e; border-radius: 999px; padding: 0.5rem 1.2rem; font-weight: 700; cursor: pointer; }
 </style>

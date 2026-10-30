@@ -10,6 +10,7 @@ import {
 } from './templates';
 import { modeOf } from './mode';
 import { mdToHtml, mdToText } from './markdown';
+import { adminPolls, voterPolls } from './polls';
 import { makeToken } from './tokens';
 import { cleanLine, cleanText, EMAIL_RE, escapeHtml, nowIso, randomToken, ukDateTime } from './util';
 
@@ -424,6 +425,7 @@ export async function manageView(env: Env, id: string) {
 		optins: sessions.filter((s) => s.optin).map((s) => ({ id: s.id, label: s.label, starts_at: s.starts_at, location: s.location, available: !!cap.optins.find((o) => o.id === s.id)?.available })),
 		registration: publicStatus(reg, sessions),
 		calendar: entriesFor(env, ev, sessions, reg).map((e) => ({ key: e.key, summary: e.summary, start: e.start, url: ics(e.key) })),
+		polls: await voterPolls(env, reg.id, ev),
 	};
 }
 
@@ -887,6 +889,13 @@ export async function sentLogMarkdown(env: Env, eventId: string): Promise<string
 			`- Recipients: ${m.recipients_count ?? '–'}`, `- Audience: \`${m.audience}\``,
 			`- Counts as joining instructions version: ${m.marks_instructions_version ?? '–'}`, '', m.body_md, '');
 	}
+	// Totals only, no names: enough to draft "the most popular choice was…" without the log naming anyone.
+	const polls = (await adminPolls(env, eventId)).polls;
+	if (polls.length) out.push('## Polls', '');
+	for (const p of polls) {
+		out.push(`### ${p.question}`, '', `- ${p.open ? 'Open' : 'Closed'}; ${p.tally.voters} answer(s)${p.tally.nothing ? `, ${p.tally.nothing} would join none of the options` : ''}`,
+			...p.tally.results.map((r) => `- ${r.label}: ${r.willing} would join (${r.first} first choice), ${r.out} would stay at home`), '');
+	}
 	return out.join('\n');
 }
 
@@ -928,6 +937,9 @@ export async function runScheduled(env: Env, now = Date.now()) {
 	report.retentionDeleted = r.meta.changes ?? 0;
 	await env.DB.prepare(`DELETE FROM host_snapshots WHERE session_id IN (SELECT s.id FROM sessions s JOIN events e ON e.id = s.event_id WHERE e.ends_at <= ?)`).bind(cutoff).run();
 	await env.DB.prepare(`UPDATE sessions SET host_name = NULL, host_email = NULL WHERE event_id IN (SELECT id FROM events WHERE ends_at <= ?)`).bind(cutoff).run();
+	// Polls go too: suggestions are registrants' own words, and decisions name an organiser's address. Their totals are
+	// in the sent log for anyone who needs them afterwards.
+	await env.DB.prepare(`DELETE FROM polls WHERE event_id IN (SELECT id FROM events WHERE ends_at <= ?)`).bind(cutoff).run();
 	await env.DB.prepare('DELETE FROM dev_outbox WHERE created_at <= ?').bind(cutoff).run();
 	return report;
 }

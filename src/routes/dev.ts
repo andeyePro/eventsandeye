@@ -2,6 +2,7 @@
 import { isLocalRequest } from '../access';
 import { isDev } from '../env';
 import { handle } from '../http';
+import { binaryString, handleInbound } from '../inbound';
 import { runScheduled } from '../rsvp';
 import { json } from '../util';
 
@@ -33,4 +34,13 @@ export const cron = handle(async ({ env, request }) => {
 	if (!isDev(env) || !isLocalRequest(request)) return new Response('Not found', { status: 404 });
 	const at = new URL(request.url).searchParams.get('at');
 	return { ok: true, report: await runScheduled(env, at ? Date.parse(at) : Date.now()) };
+});
+
+/** Local development only (DEV_MODE and a localhost request): hand a raw email (the request body) to the inbound handler,
+ * as Cloudflare Email Routing would hand it to the cron Worker. */
+export const inbound = handle(async ({ env, request }) => {
+	if (!isDev(env) || !isLocalRequest(request)) return new Response('Not found', { status: 404 });
+	let rejected: string | null = null;
+	const result = await handleInbound(env, binaryString(new Uint8Array(await request.arrayBuffer())), (reason) => (rejected = reason));
+	return { ok: true, result, rejected };
 });

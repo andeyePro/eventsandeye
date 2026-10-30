@@ -85,6 +85,23 @@ const HTML = /* html */ `<!doctype html>
 		<div style="overflow-x:auto"><table id="regs"><caption class="small" style="text-align:left">Waiting lists are in order of confirmation. Unconfirmed = email not yet confirmed.</caption><thead><tr><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Attendance</th><th scope="col">Tour</th><th scope="col">Affiliation</th><th scope="col">Needs</th><th scope="col">Extra</th><th scope="col">Shares email with hosts</th><th scope="col">Instr. v</th><th scope="col">Actions</th></tr></thead><tbody></tbody></table></div>
 	</section>
 
+	<section aria-labelledby="h-polls" id="polls">
+		<h2 id="h-polls">Polls</h2>
+		<p class="small">Registrants rank the options on their manage page, most wanted first, and draw a line under the ones they would join. Their suggestions wait here (and in your inbox) until you add them for everyone, in their words or yours, or turn them down. Nothing in this section emails anyone: to tell people about a poll, send a message below.</p>
+		<div id="polls-box"></div>
+		<details><summary>New poll</summary>
+			<form id="poll-form">
+				<label for="p-q">Question</label><input id="p-q" type="text" required maxlength="200" placeholder="What shall we do on Saturday?" />
+				<label for="p-opts">Options, one per line</label><textarea id="p-opts" style="min-height:6rem"></textarea>
+				<div class="row">
+					<div><label for="p-close">Closes (UK time; blank = when the event ends)</label><input id="p-close" type="datetime-local" /></div>
+					<div><label><input type="checkbox" id="p-sugg" checked style="width:auto" /> Registrants can suggest options</label></div>
+				</div>
+				<button type="submit">Create poll</button>
+			</form>
+		</details>
+	</section>
+
 	<section aria-labelledby="h-instr">
 		<h2 id="h-instr">Joining instructions</h2>
 		<p class="small">The latest version is emailed automatically, with calendar invitations, to each person when they confirm (or are promoted from the in-person waiting list), and to anyone who registers again. Saving a new version does <strong>not</strong> email anyone already registered: to update them, write a short message below to "people on an older version" and tick "Include the latest joining instructions".</p>
@@ -237,6 +254,8 @@ async function load() {
 	if (latest && !$('i-subject').value) { $('i-subject').value = latest.subject; $('i-body').value = latest.body_md; }
 	$('m-instr').parentElement.lastChild.textContent = ' Include the latest joining instructions (version ' + latestVersion + ')';
 
+	await loadPolls();
+
 	const ms = await api('/api/admin/messages?event=' + encodeURIComponent(eventId));
 	$('msgs').querySelector('tbody').innerHTML = ms.messages.map((m) => '<tr><td>' + esc(uk(m.sent_at || m.scheduled_at || m.created_at)) + '</td><td>' + esc(m.subject) + '</td><td>' + esc(m.status) + (m.error ? ': ' + esc(m.error) : '') + '</td><td>' + esc(m.recipients_count ?? '') + '</td><td><code>' + esc(m.audience) + '</code></td><td>' + (m.status === 'scheduled' ? '<button class="danger" data-cancel="' + esc(m.id) + '">Cancel</button>' : '') + '</td></tr>').join('') || '<tr><td colspan="6">Nothing sent yet.</td></tr>';
 }
@@ -287,6 +306,61 @@ document.body.addEventListener('click', async (e) => {
 			const d = await api('/api/admin/export?format=bcc&event=' + encodeURIComponent(eventId) + '&audience=' + encodeURIComponent(JSON.stringify(audience())));
 			await navigator.clipboard.writeText(d.bcc); toast('Copied ' + d.count + ' address(es). Paste into Gmail\'s BCC field, never To or CC.');
 		}
+	} catch (err) { toast(err.message); }
+});
+async function loadPolls() {
+	const d = await api('/api/admin/polls?event=' + encodeURIComponent(eventId));
+	$('polls-box').innerHTML = d.polls.map((p) => {
+		const pid = esc(p.id);
+		const pending = p.options.filter((o) => o.status === 'pending');
+		const decided = p.options.filter((o) => o.suggested_label && o.status !== 'pending');
+		const rows = p.tally.results.map((r) => '<tr><td>' + esc(r.label) + '</td><td>' + r.willing + '</td><td>' + r.out + '</td><td>' + r.first + '</td><td>' + r.score + '</td><td class="small">' + esc((r.names || []).join(', ')) + '</td><td><button class="secondary" data-poll-rename="' + esc(r.id) + '" data-label="' + esc(r.label) + '">Rename</button> <button class="danger" data-poll-remove="' + esc(r.id) + '" data-label="' + esc(r.label) + '">Remove</button></td></tr>').join('');
+		return '<fieldset data-poll="' + pid + '"><legend>' + esc(p.question) + '</legend>'
+			+ '<p class="small">' + (p.open ? 'Open' : 'Closed') + ', ' + (p.closes_at ? 'closes ' + esc(uk(p.closes_at)) : 'closes when the event ends') + '. ' + p.tally.voters + ' answer(s)' + (p.tally.nothing ? ', of whom ' + p.tally.nothing + ' would join none of the options' : '') + '. Suggestions ' + (p.allow_suggestions ? 'on' : 'off') + '.</p>'
+			+ (pending.length ? '<h3>Suggestions waiting for you</h3><ul>' + pending.map((o) => '<li><strong>' + esc(o.label) + '</strong> from ' + esc(o.suggested_by_name || 'someone who has since cancelled') + ' <button data-poll-decide="add" data-option="' + esc(o.id) + '">Add for everyone</button> <button class="secondary" data-poll-decide="use" data-option="' + esc(o.id) + '" data-label="' + esc(o.label) + '">Add in my words…</button> <button class="danger" data-poll-decide="reject" data-option="' + esc(o.id) + '">Don\'t add</button></li>').join('') + '</ul>' : '')
+			+ '<div style="overflow-x:auto"><table><caption class="small" style="text-align:left">Sorted by how many would join, then by preference (each person\'s top choice above their line scores most).</caption><thead><tr><th scope="col">Option</th><th scope="col">Would join</th><th scope="col">Would stay at home</th><th scope="col">First choice</th><th scope="col">Score</th><th scope="col">Who would join</th><th scope="col">Actions</th></tr></thead><tbody>' + (rows || '<tr><td colspan="7">No options yet.</td></tr>') + '</tbody></table></div>'
+			+ '<div class="row"><div><label for="po-' + pid + '">Add an option</label><input id="po-' + pid + '" type="text" maxlength="80" /></div></div><button data-poll-add="' + pid + '">Add option</button> '
+			+ '<button class="secondary" data-poll-toggle="' + pid + '" data-allow="' + (p.allow_suggestions ? '1' : '0') + '">' + (p.allow_suggestions ? 'Stop taking suggestions' : 'Take suggestions') + '</button> '
+			+ '<button class="secondary" data-poll-close="' + pid + '" data-open="' + (p.open ? '1' : '0') + '">' + (p.open ? 'Close now' : 'Reopen until the event ends') + '</button> '
+			+ '<button class="danger" data-poll-delete="' + pid + '">Delete poll</button>'
+			+ (decided.length ? '<details><summary class="small">Decided suggestions</summary><ul class="small">' + decided.map((o) => '<li>' + esc(o.suggested_label || o.label) + ' (' + esc(o.suggested_by_name || 'since cancelled') + '): ' + (o.status === 'active' ? 'added as ' + esc(o.label) : o.merged_into ? 'merged into an existing option' : 'not added') + ', ' + esc(o.decided_by || '') + ', ' + esc(uk(o.decided_at)) + '</li>').join('') + '</ul></details>' : '')
+			+ '</fieldset>';
+	}).join('') || '<p class="small">No polls yet.</p>';
+}
+$('poll-form').addEventListener('submit', async (e) => {
+	e.preventDefault();
+	try {
+		await api('/api/admin/polls', 'POST', { action: 'create', event: eventId, question: $('p-q').value, options: $('p-opts').value, closes_at: ukLocalToIso($('p-close').value), allow_suggestions: $('p-sugg').checked });
+		toast('Poll created. Nobody has been emailed.'); e.target.reset(); $('p-sugg').checked = true; loadPolls();
+	} catch (err) { toast(err.message); }
+});
+$('polls-box').addEventListener('click', async (e) => {
+	const b = e.target.closest('button');
+	if (!b) return;
+	const act = (body) => api('/api/admin/polls', 'POST', body);
+	try {
+		if (b.dataset.pollDecide) {
+			let label;
+			if (b.dataset.pollDecide === 'use') { label = prompt('Add it in your words (an existing option\'s name merges it into that option):', b.dataset.label); if (!label) return; }
+			const d = await act({ action: 'decide', option: b.dataset.option, decision: b.dataset.pollDecide, label });
+			toast((d.already ? 'Already decided: ' : 'Done: ') + d.outcome + '.');
+		} else if (b.dataset.pollRename) {
+			const label = prompt('New wording:', b.dataset.label); if (!label) return;
+			await act({ action: 'rename_option', option: b.dataset.pollRename, label }); toast('Renamed.');
+		} else if (b.dataset.pollRemove) {
+			if (!confirm('Remove ' + b.dataset.label + '? It is taken off everyone\'s ranking.')) return;
+			await act({ action: 'remove_option', option: b.dataset.pollRemove }); toast('Removed.');
+		} else if (b.dataset.pollAdd) {
+			await act({ action: 'add_option', poll: b.dataset.pollAdd, label: $('po-' + b.dataset.pollAdd).value }); toast('Option added. People who have already answered see it as new, below their line.');
+		} else if (b.dataset.pollToggle) {
+			await act({ action: 'update', poll: b.dataset.pollToggle, allow_suggestions: b.dataset.allow !== '1' }); toast('Saved.');
+		} else if (b.dataset.pollClose) {
+			await act({ action: 'update', poll: b.dataset.pollClose, closes_at: b.dataset.open === '1' ? new Date().toISOString() : null }); toast('Saved.');
+		} else if (b.dataset.pollDelete) {
+			if (!confirm('Delete this poll and everyone\'s answers?')) return;
+			await act({ action: 'delete', poll: b.dataset.pollDelete }); toast('Poll deleted.');
+		} else return;
+		loadPolls();
 	} catch (err) { toast(err.message); }
 });
 $('instr-form').addEventListener('submit', async (e) => {

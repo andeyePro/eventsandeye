@@ -10,6 +10,8 @@ crons = ["*/5 * * * *"]
 [vars]
 SITE_URL = "https://example.org"
 NOTIFY_EMAIL = "events@example.org"
+# ADMIN_EMAILS = "events@example.org"              # as for the site: organisers who may answer poll suggestions by email
+# POLL_REPLY_EMAIL = "polls@reply.example.org"       # optional: routed here by Cloudflare Email Routing (README step 12)
 EMAIL_FROM = "Example Organisers <events@example.org>"
 ORG_NAME = "Example Organisers"
 ORG_FOOTER = "Example Organisers Ltd, registered in Scotland, company number SC000000."

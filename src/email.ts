@@ -16,6 +16,10 @@ export interface OutgoingEmail {
 	text: string;
 	html: string;
 	attachments?: Attachment[];
+	/** Where replies go, if not NOTIFY_EMAIL (poll suggestions: the address routed to the cron Worker). */
+	replyTo?: string;
+	/** Extra headers, e.g. Auto-Submitted on automatic answers, so out-of-office replies leave them alone. */
+	headers?: Record<string, string>;
 }
 
 const RESEND_URL = 'https://api.resend.com';
@@ -70,8 +74,8 @@ export async function sendBatch(env: Env, emails: OutgoingEmail[]): Promise<stri
 		if (!isDev(env)) throw new Error('RESEND_API_KEY is not set; refusing to drop email on the live site');
 		const ids: string[] = [];
 		for (const e of emails) {
-			const r = await env.DB.prepare('INSERT INTO dev_outbox (to_addr, subject, text_body, html_body, attachments, created_at) VALUES (?,?,?,?,?,?)')
-				.bind(e.to, e.subject, e.text, e.html, JSON.stringify(e.attachments ?? []), nowIso())
+			const r = await env.DB.prepare('INSERT INTO dev_outbox (to_addr, subject, text_body, html_body, attachments, created_at, reply_to) VALUES (?,?,?,?,?,?,?)')
+				.bind(e.to, e.subject, e.text, e.html, JSON.stringify(e.attachments ?? []), nowIso(), e.replyTo || notifyEmail(env))
 				.run();
 			const att = (e.attachments ?? []).map((a) => a.filename).join(', ');
 			console.log(`\n[dev email] To: ${e.to}\nSubject: ${e.subject}${att ? `\nAttachments: ${att}` : ''}\n\n${e.text}\n[/dev email]\n`);
@@ -83,7 +87,8 @@ export async function sendBatch(env: Env, emails: OutgoingEmail[]): Promise<stri
 	const one = (e: OutgoingEmail) => ({
 		from: emailFrom(env),
 		to: [e.to],
-		reply_to: notifyEmail(env),
+		reply_to: e.replyTo || notifyEmail(env),
+		...(e.headers ? { headers: e.headers } : {}),
 		subject: e.subject,
 		text: e.text,
 		html: e.html,

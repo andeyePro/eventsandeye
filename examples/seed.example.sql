@@ -59,3 +59,11 @@ Closed shoes are needed in the labs.
 :::
 
 To change or cancel your registration, use your personal link below.', 'First version', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'setup');
+
+-- Optional: a poll, answered on each registrant's manage page (polls are also created on the admin page). People rank
+-- the options and draw a line under the ones they would join; they can suggest more, which you add or turn down.
+-- INSERT OR IGNORE INTO polls (id, event_id, question, allow_suggestions, created_at) VALUES
+--   ('2026-11-13-london-saturday', '2026-11-13-london', 'What shall we do on Saturday 14 November?', 1, strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+-- INSERT OR IGNORE INTO poll_options (id, poll_id, label, status, sort, created_at) VALUES
+--   ('2026-11-13-london-saturday-walk', '2026-11-13-london-saturday', 'A walk by the Thames', 'active', 1, strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+--   ('2026-11-13-london-saturday-museum', '2026-11-13-london-saturday', 'The Science Museum', 'active', 2, strftime('%Y-%m-%dT%H:%M:%fZ','now'));

@@ -1,6 +1,7 @@
 // Events&I – Copyright (C) 2026 andeye Ltd. AGPL-3.0, see ../../../LICENSE.
 import { handle, readJson } from '../../http';
 import { mdToHtml } from '../../markdown';
+import { adminPollAction, adminPolls } from '../../polls';
 import {
 	addInstructions, adminDelete, adminSummary, audienceRecipients, cancelMessage, createMessage, listInstructions, listMessages, parseAudience,
 	promote, promoteAll, registrationsCsv, sentLogMarkdown, updateSessions, updateSettings,
@@ -75,4 +76,11 @@ export const sentLog = handle(async ({ env, request }) => {
 export const preview = handle(async ({ request }) => {
 	const body = await readJson(request);
 	return { ok: true, html: mdToHtml(typeof body.body_md === 'string' ? body.body_md : '') };
+});
+
+export const pollsGet = handle(async ({ env, request }) => adminPolls(env, ev(request)));
+/** Create, edit or delete polls and options, and decide suggestions. Nobody is emailed. */
+export const pollsPost = handle(async ({ env, request, data }) => {
+	const body = await readJson(request);
+	return adminPollAction(env, { ...body, by: data.adminEmail || 'admin' });
 });

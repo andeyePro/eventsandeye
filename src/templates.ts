@@ -367,3 +367,39 @@ ${removed.length ? `<p>Removed:</p><ul>${removed.map((l) => `<li><s>${escapeHtml
 export function notification(b: Brand, subject: string, lines: string[]): OutgoingEmail {
 	return { to: b.notify, subject: `[${b.org}] ${subject}`, text: lines.join('\n'), html: layout(b, subject, lines.map((l) => `<p>${escapeHtml(l)}</p>`).join('')) };
 }
+
+export interface SuggestionEmailInput {
+	who: string;
+	label: string;
+	question: string;
+	eventTitle: string;
+	ref: string;
+	adminUrl: string;
+	/** POLL_REPLY_EMAIL: when set, the organiser can decide by replying. */
+	replyTo?: string;
+}
+
+/** To the organiser: a registrant suggested a poll option. The reference in the subject lets a reply decide it. */
+export function suggestionEmail(b: Brand, s: SuggestionEmailInput): OutgoingEmail {
+	const subject = `[${b.org}] Poll suggestion: ${s.label} (ref ${s.ref})`;
+	const intro = `${s.who} suggested an option for "${s.question}" (${s.eventTitle}):`;
+	const how = s.replyTo
+		? [
+			'Reply to this email with one of these on the first line:',
+			'yes: add it for everyone, as written',
+			'no: do not add it',
+			'use <your wording>: add it in your own words, for example "use Paddleboarding on the Thames". If your wording is an existing option, their vote counts for that one.',
+		]
+		: [];
+	const after = 'Nobody is emailed about your decision: the suggester sees it when they next open their registration.';
+	const text = [intro, '', `    ${s.label}`, '', ...how, ...(how.length ? [''] : []), `${how.length ? 'Or decide' : 'Decide'} on the admin page: ${s.adminUrl}`, '', after, '', `(ref ${s.ref})`].join('\n');
+	const html = layout(b, 'Poll suggestion', `<p>${escapeHtml(intro)}</p><p style="font-size:20px;font-weight:bold">${escapeHtml(s.label)}</p>`
+		+ (how.length ? `<p>${escapeHtml(how[0])}</p><ul>${how.slice(1).map((l) => { const [k, ...v] = l.split(': '); return `<li><strong>${escapeHtml(k)}</strong>: ${escapeHtml(v.join(': '))}</li>`; }).join('')}</ul>` : '')
+		+ button(s.adminUrl, how.length ? 'Or decide on the admin page' : 'Decide on the admin page') + `<p style="font-size:14px">${escapeHtml(after)}</p><p style="font-size:12px;color:#555">(ref ${escapeHtml(s.ref)})</p>`);
+	return { to: b.notify, subject, text, html, ...(s.replyTo ? { replyTo: s.replyTo } : {}) };
+}
+
+/** To the organiser who replied to a suggestion email: what their reply did (or why it did nothing). */
+export function suggestionReplyEmail(b: Brand, to: string, subject: string, lines: string[]): OutgoingEmail {
+	return { to, subject: `[${b.org}] ${subject}`, text: lines.join('\n'), html: layout(b, subject, lines.map((l) => `<p>${escapeHtml(l)}</p>`).join('')), headers: { 'Auto-Submitted': 'auto-replied' } };
+}

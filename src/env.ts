@@ -39,6 +39,10 @@ export interface Env {
 	ACCESS_MAX_AGE_HOURS?: string;
 	/** "true" only in local development: enables the dev outbox endpoints and test keys. Never set in production. */
 	DEV_MODE?: string;
+	/** Address routed by Cloudflare Email Routing to the cron Worker, e.g. polls@example.org. Emails about poll
+	 * suggestions use it as their reply-to, so an organiser can answer "yes", "no" or "use <wording>" by email. Optional:
+	 * without it, suggestions are decided on the admin page. */
+	POLL_REPLY_EMAIL?: string;
 	/** Local development only: JSON Web Key Set used instead of the Access certs URL, for tests. */
 	ACCESS_JWKS_JSON?: string;
 }

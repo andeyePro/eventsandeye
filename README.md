@@ -26,8 +26,9 @@ Website: [events.andeye.com](https://events.andeye.com). Made by [andeye Ltd](ht
 - **Calendar invitations.** Joining instructions come with iCalendar invitations (iTIP `REQUEST`, stable UIDs, sequence numbers, a Europe/London time zone; events in other time zones are written in UTC for now). Remote attendees get one entry per online session with reminders a day, an hour and 10 minutes before. In-person attendees get one entry for their day, from their booked session or the first talk, with reminders a week and a day before, a "time to leave" reminder (travel time plus 15 minutes) and 15 minutes before; opt-in sessions get entries of their own. Each email also has Google, Outlook.com, Office 365 and Yahoo links and an `.ics` download. When an organiser changes a session, only people whose own entries change get an update; cancellations send `CANCEL`.
 - **Session hosts.** Each session can have a host who is emailed the attendee list whenever it changes, with additions in bold and removals struck through. Hosts see each attendee's name and whether they have a place. Registrants can opt in to sharing their email address and affiliation with hosts.
 - **Organiser emails.** Versioned joining instructions with sections for in-person, remote and opt-in-only attendees; messages to everyone or a filtered group (in person, remote, a session, people on an older instructions version) sent now or scheduled; a per-recipient delivery record; and a markdown "sent log" so an assistant can draft the next update without repeating what people already have. CSV export and a BCC list for sending from your own mailbox.
-- **Only a few automatic emails:** confirm your email; a reminder with the joining instructions for anyone who registers twice; joining instructions on confirmation or promotion; calendar updates only when someone's entries change; cancellation confirmation; notifications to the organiser; host lists. Editing a page never emails anyone, and session changes can be saved without emailing anyone.
-- **Security and privacy.** Admin pages and API behind Cloudflare Access with two-factor sign-in, with the Access token verified again in code. Turnstile and a honeypot on the form. Confirmation needs a button press (a `POST`), so email link scanners cannot confirm. Registrations, delivery records and host lists are deleted 30 days after the event.
+- **Only a few automatic emails:** confirm your email; a reminder with the joining instructions for anyone who registers twice; joining instructions on confirmation or promotion; calendar updates only when someone's entries change; cancellation confirmation; notifications to the organiser (including each poll suggestion, and a confirmation when an organiser answers one by email); host lists. Editing a page never emails anyone, and session changes can be saved without emailing anyone.
+- **Security and privacy.** Admin pages and API behind Cloudflare Access with two-factor sign-in, with the Access token verified again in code. Turnstile and a honeypot on the form. Confirmation needs a button press (a `POST`), so email link scanners cannot confirm. Registrations, delivery records, host lists, polls and poll answers are deleted 30 days after the event.
+- **Polls.** Ask registrants something like "What shall we do on Saturday?": on their manage page each person puts the options in order, most wanted first, and moves a line under the ones they would join, so "skiing, then camping, then hiking, but football or rugby and I'll stay at home" is one answer. The admin page shows how many would join each option, how many would stay at home, first choices and who is in. Registrants can add an option of their own and rank it straight away; the organiser is emailed and replies "yes", "no" or "use <their wording>" to add it for everyone (or decides on the admin page). Answers are deleted with the registration.
 - **A permanent "next event" link.** `/events/next` redirects to whichever event is next, so a short link can point there once and never change.
 
 ## What you need
@@ -55,7 +56,7 @@ These steps assume your site's repository is checked out locally and Events&I go
    cp -R eventsandeye/examples/functions/. functions/
    ```
 
-   This gives you `api/rsvp/*` (the public form API), `api/admin/*` and `admin/rsvps/` (the admin page, both behind the Access check in `_middleware.ts`), `api/dev/*` (only answers when `DEV_MODE=true`) and `events/next`.
+   This gives you `api/rsvp/*` (the public form and poll API), `api/admin/*` and `admin/rsvps/` (the admin page, both behind the Access check in `_middleware.ts`), `api/dev/*` (only answers when `DEV_MODE=true`) and `events/next`.
 
 3. **Add the pages people see.** Your site needs:
 
@@ -124,6 +125,14 @@ These steps assume your site's repository is checked out locally and Events&I go
 
 11. **Deploy and try it.** Push your site so Pages builds it, then on the live or preview address: register with your own email, confirm, change and cancel, and open `/admin/rsvps/` to check it asks you to sign in. Check that a calendar invitation shows as an invitation in Gmail and Outlook before opening registration widely.
 
+12. **Optional: answer poll suggestions by email.** Without this, suggestions are decided on the admin page (the email about each one links there). To decide by replying, the cron Worker receives the replies through Cloudflare Email Routing:
+
+    - In the Cloudflare dashboard, your domain → Email → Email Routing. Email Routing takes over the MX records of the domain or subdomain it is enabled on, so if your email is handled elsewhere (Google Workspace, Microsoft 365 and so on) enable it on a subdomain such as `reply.example.org`, never on the domain your mailboxes use.
+    - Routing rules → Custom addresses: create an address such as `polls@reply.example.org` with the action **Send to a Worker**, choosing your cron Worker.
+    - Set `POLL_REPLY_EMAIL` to that address in both `wrangler.toml` files, and redeploy the site and the cron Worker. Emails about suggestions then ask for replies there.
+
+    A reply acts only if its From address is `NOTIFY_EMAIL` or one in `ADMIN_EMAILS` (set it for the cron Worker too) and it carries the suggestion's reference, which is signed with `TOKEN_SECRET` and only ever sent to you; anything else is refused. A From address is easy to forge, so the reference is the real safeguard: do not forward suggestion emails to anyone who should not decide them. Out-of-office replies are ignored. The answer is the first line of the reply: `yes`, `no`, or `use <your wording>`. Wording that matches an existing option merges the suggestion into it.
+
 Preview deployments get the same Functions and database binding as production, so either turn previews off (Settings → Builds → Branch control) or deploy previews as static pages only, as [amybo.org's deploy workflow](https://github.com/amy-bo/website/blob/main/.github/workflows/deploy.yml) does.
 
 ## Run an event
@@ -137,6 +146,7 @@ Everything day to day happens on the admin page, `/admin/rsvps/`:
 - **Registrations:** each person's choices, with **Promote** buttons for anyone waiting (a place, a tour or an opt-in session), **Promote all who fit** for the in-person list, and **Remove**. Removing someone who confirmed tells them, as if they had cancelled.
 - **Joining instructions:** add a new version when the details change. It goes automatically to everyone who confirms or is promoted from then on. To send it to people already registered, send a message with "Include the latest joining instructions" ticked.
 - **Messages:** to everyone or a filtered group, now or scheduled, with a preview and a recipient count first.
+- **Polls:** create a poll with its options, see how many would join each option and who, add, rename or remove options (a removed option leaves everyone's ranking), stop taking suggestions, and close the poll. Suggestions waiting for a decision are listed with **Add for everyone**, **Add in my words…** and **Don't add**. Nobody is emailed about any of this: tell registrants about a poll with a message, and suggesters see what became of their suggestion on their manage page.
 - **Export:** a CSV of registrations, a BCC list, and the sent log.
 
 ## Develop and test locally
@@ -152,7 +162,7 @@ npx wrangler pages dev ./dist --port 8788
 
 Open http://localhost:8788. With `DEV_MODE=true`, emails (with their calendar attachments) are printed to the console and kept in a local outbox at `/api/dev/outbox` instead of being sent, and the admin page opens without Cloudflare Access.
 
-**End-to-end test.** [`tests/e2e.mjs`](tests/e2e.mjs) runs the whole flow against a local D1 database with `wrangler pages dev`, against AMYBO's example seed: registration, confirmation, waiting lists, promotion, calendar invitations and updates, host lists, scheduled messages, holds, deadlines, cancellation, retention and the Access checks. It writes its own `.dev.vars`, backing yours up and restoring it afterwards. From your site:
+**End-to-end test.** [`tests/e2e.mjs`](tests/e2e.mjs) runs the whole flow against a local D1 database with `wrangler pages dev`, against AMYBO's example seed: registration, confirmation, waiting lists, promotion, calendar invitations and updates, host lists, polls and suggestions (email replies go through `/api/dev/inbound`), scheduled messages, holds, deadlines, cancellation, retention and the Access checks. It writes its own `.dev.vars`, backing yours up and restoring it afterwards. From your site:
 
 ```sh
 PUBLIC_TURNSTILE_ALLOW_TEST_KEY=true npm run build
@@ -180,6 +190,7 @@ In `wrangler.toml` `[vars]` (the cron Worker needs the same, apart from the Acce
 | `ACCESS_MFA`, `ACCESS_MFA_METHODS` | How two-factor sign-in is checked (see step 9). |
 | `ACCESS_MAX_AGE_HOURS` | Admin sign-ins older than this must be repeated (default 12). |
 | `EVENTS_INDEX_PATH` | Where `/events/next` goes when no event is coming up (default `/events/`). |
+| `POLL_REPLY_EMAIL` | Optional. The address Email Routing sends to the cron Worker, used as the reply-to of emails about poll suggestions (step 12). |
 | `EVENTSANDEYE_URL` | The "Registrations via Events&I" link in emails (default: this repository). The form uses its `sourceUrl` prop. |
 
 Secrets: `TOKEN_SECRET`, `RESEND_API_KEY`, `TURNSTILE_SECRET_KEY` (step 8). Build variable: `PUBLIC_TURNSTILE_SITE_KEY` (step 6).
@@ -193,6 +204,12 @@ npx wrangler d1 migrations apply events --remote
 ```
 
 Migrations only ever add; they never change one that has shipped. Redeploy the cron Worker too, so it runs the same code as the site.
+
+New features can bring new function wrappers (polls added `functions/api/rsvp/poll.ts`, `functions/api/admin/polls.ts` and `functions/api/dev/inbound.ts`). Copy any you do not have yet, leaving your existing ones alone:
+
+```sh
+cp -Rn eventsandeye/examples/functions/. functions/
+```
 
 ## Roadmap
 

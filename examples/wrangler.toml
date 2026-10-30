@@ -15,6 +15,7 @@ ACCESS_TEAM_DOMAIN = "example.cloudflareaccess.com"  # Zero Trust team domain
 ACCESS_AUD = "REPLACE_WITH_ACCESS_APPLICATION_AUD_TAG"
 ADMIN_EMAILS = "events@example.org"                  # comma-separated; only these can use the admin page
 # ACCESS_MFA = "application"                         # see the README: Cloudflare Access and two-factor sign-in
+# POLL_REPLY_EMAIL = "polls@reply.example.org"       # optional: decide poll suggestions by replying (README step 12)
 
 [[d1_databases]]
 binding = "DB"
