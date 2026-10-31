@@ -278,10 +278,13 @@ function audience() {
 function sessionEdits() {
 	return sessions.map((s) => {
 		const v = (f) => $('sx-' + f + '-' + s.id);
+		// Times only when typed: read back from the box, a time in the hour the clocks repeat could come back an hour
+		// out, and an untouched session must not move (or send calendar updates) because another was edited.
+		const time = (f) => ('sx-' + f + '-' + s.id) in sessionTyped ? ukLocalToIso(v(f).value) : undefined;
 		return {
-			id: s.id, starts_at: ukLocalToIso(v('start').value), ends_at: ukLocalToIso(v('end').value), location: v('loc').value, online_url: v('url').value,
+			id: s.id, starts_at: time('start'), ends_at: time('end'), location: v('loc').value, online_url: v('url').value,
 			host_name: v('hname').value, host_email: v('hemail').value, capacity: v('cap').value === '' ? null : Number(v('cap').value),
-			booking_deadline: v('dl') ? ukLocalToIso(v('dl').value) : undefined,
+			booking_deadline: v('dl') && ('sx-dl-' + s.id) in sessionTyped ? ukLocalToIso(v('dl').value) : undefined,
 		};
 	});
 }
@@ -513,6 +516,8 @@ $('ev-form').addEventListener('submit', async (e) => {
 		// The times shown are in the event's current zone, so they are read in it: a new zone keeps the event at the same moment.
 		const d = await api('/api/admin/events', 'POST', { action: 'update', event: eventId, title: $('e-title').value, location: $('e-loc').value, page_path: $('e-page').value, timezone: tz,
 			starts_at: ukLocalToIso($('e-start').value), ends_at: ukLocalToIso($('e-end').value), extra_question: $('e-q').value, in_person_label: $('e-lip').value, remote_label: $('e-lrem').value, tour_legend: $('e-ltour').value });
+		// The sessions moved with the event, so a time typed for them before would put one back on the old day.
+		if (d.days) for (const id of Object.keys(sessionTyped)) if (/^sx-(start|end|dl)-/.test(id)) delete sessionTyped[id];
 		toast('Event saved. Nobody has been emailed.' + (d.days ? ' The registration deadline' + (d.sessions_moved ? ' and ' + d.sessions_moved + ' session(s)' : '') + ' moved with it.' : '')); load();
 	} catch (err) { toast(err.message); }
 });

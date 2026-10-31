@@ -151,7 +151,9 @@ form.addEventListener('submit', async (e) => {
 		const res = await fetch('/api/rsvp/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 		const data = (await res.json()) as { ok: boolean; error?: string; field?: string };
 		// The deadline passed while the form was open: say so where the deadline was shown, as on loading.
-		if (res.status === 409 && /closed/i.test(data.error ?? '')) closed();
+		// Only the event's own deadline: a tour or session whose booking closed is refused with similar words, and the
+		// rest of the form still works without it.
+		if (res.status === 409 && /^Registration for this event has closed/.test(data.error ?? '')) closed();
 		if (!data.ok) throw Object.assign(new Error(data.error || 'Registration failed.'), { field: data.field });
 		// A page of its own, so the "check your email" step can't be missed below the form.
 		try { sessionStorage.setItem('rsvp-email', String(fd.get('email'))); } catch {}

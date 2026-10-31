@@ -883,6 +883,22 @@ try {
 			// To the second: moved times are rebuilt from their wall-clock time, which has no milliseconds.
 			const same = (a, b) => Math.abs(Date.parse(a) - Date.parse(b)) < 1000;
 			check('moving it back brings everything back', same(back.sessions.find((x) => x.label === 'Dinner').starts_at, din.starts_at) && same(back.event.deadline, was.event.deadline), JSON.stringify([back.event.deadline, was.event.deadline]));
+			// The deadline moves with the event, but is set in Settings: a move that would put it in the past or after the new
+			// end is refused with a message saying so, and nothing changes.
+			r = await req('POST', EV, { action: 'update', event: 'e2e-new-event', starts_at: at(-24 * 59), ends_at: at(-24 * 59 + 6) }, ADMIN);
+			check('a move that would put the registration deadline in the past is refused, naming Settings', r.status === 400 && /in the past/.test(r.data.error) && /Settings/.test(r.data.error)
+				&& same((await req('GET', `/api/admin/summary?event=e2e-new-event`, undefined, ADMIN)).data.event.starts_at, was.event.starts_at), JSON.stringify(r.data));
+			await req('POST', '/api/admin/settings', { event: 'e2e-new-event', deadline: at(5) }, ADMIN);
+			r = await req('POST', EV, { action: 'update', event: 'e2e-new-event', starts_at: at(24), ends_at: at(24.5) }, ADMIN);
+			check('a move whose deadline would fall after the new end is refused, naming Settings', r.status === 400 && /after the new end/.test(r.data.error), JSON.stringify(r.data));
+			await req('POST', '/api/admin/settings', { event: 'e2e-new-event', deadline: was.event.deadline }, ADMIN);
+			// Seeded times have no milliseconds; the editor sends them back with. An old session outside the event must still
+			// accept other edits (only a changed time is checked against the event's dates).
+			const far = new Date(Date.parse(at(24 * 30))).toISOString().replace('.000Z', 'Z'), farEnd = new Date(Date.parse(at(24 * 30 + 2))).toISOString().replace('.000Z', 'Z');
+			sql(`UPDATE sessions SET starts_at='${far}', ends_at='${farEnd}' WHERE id='${din.id}'`);
+			r = await req('POST', '/api/admin/sessions', { event: 'e2e-new-event', sessions: [{ id: din.id, starts_at: new Date(far).toISOString(), ends_at: new Date(farEnd).toISOString(), host_name: 'Hazel' }] }, ADMIN);
+			check('an old session outside the event still takes other edits when its times come back unchanged', r.status === 200 && r.data.ok, JSON.stringify(r.data));
+			sql(`UPDATE sessions SET starts_at='${din.starts_at}', ends_at='${din.ends_at}' WHERE id='${din.id}'`);
 		}
 		r = await req('POST', EV, { action: 'update', event: EVENT, ends_at: new Date(Date.now() - 31 * 86400_000).toISOString(), starts_at: new Date(Date.now() - 32 * 86400_000).toISOString(), deadline: new Date(Date.now() - 33 * 86400_000).toISOString() }, ADMIN);
 		check('an event with registrations cannot have its end moved into the past (retention would delete everyone)', r.status === 409 && (await req('GET', `/api/admin/summary?event=${EVENT}`, undefined, ADMIN)).data.event.ends_at === seeded.event.ends_at, JSON.stringify(r.data));

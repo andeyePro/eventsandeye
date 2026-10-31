@@ -971,7 +971,7 @@ export async function updateSettings(env: Env, eventId: string, input: Record<st
 	if (!Number.isInteger(max) || max < 0 || max > 10000) throw new UserError('In-person maximum must be a whole number.');
 	const deadline = input.deadline === undefined ? ev.deadline : optDate(input.deadline, 'deadline') ?? ev.deadline;
 	// As when the event is created or edited: a deadline after the end would leave registration open after the event.
-	if (deadline !== ev.deadline && Date.parse(deadline) > Date.parse(ev.ends_at)) throw new UserError('Registration must close before the event ends.');
+	if (Date.parse(deadline) !== Date.parse(ev.deadline) && Date.parse(deadline) > Date.parse(ev.ends_at)) throw new UserError('Registration must close before the event ends.');
 	const travel = input.travel_minutes === undefined ? ev.travel_minutes : Number(input.travel_minutes);
 	if (!Number.isInteger(travel) || travel < 0 || travel > 1440) throw new UserError('Travel time must be a whole number of minutes.');
 	const hostMinutes = input.host_list_minutes === undefined ? ev.host_list_minutes ?? 0 : Number(input.host_list_minutes);
@@ -1003,7 +1003,8 @@ export async function updateSessions(env: Env, eventId: string, input: Record<st
 		// The rule for adding a session, a day's slack either side; only for a time changed now, so an old session
 		// outside it can still have its other details edited.
 		const old = sessions.find((x) => x.id === s.id)!;
-		if ((s.starts_at !== old.starts_at || s.ends_at !== old.ends_at)
+		// Instants, not strings: seeded times are stored without milliseconds.
+		if ((Date.parse(s.starts_at) !== Date.parse(old.starts_at) || Date.parse(s.ends_at) !== Date.parse(old.ends_at))
 			&& (Date.parse(s.ends_at) < Date.parse(ev.starts_at) - 86400_000 || Date.parse(s.starts_at) > Date.parse(ev.ends_at) + 86400_000)) {
 			throw new UserError(`${s.label}: the session must be during the event, give or take a day.`);
 		}

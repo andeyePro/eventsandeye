@@ -148,7 +148,15 @@ export async function eventAction(env: Env, input: Record<string, unknown>, by: 
 			// there. Whole days only, as a clone does, so correcting the start time alone leaves the sessions where they are.
 			// The registration deadline moves too, unless a new one was given.
 			const { days, move } = input.starts_at === undefined ? { days: 0, move: (x: string | null) => x } : dayMover(ev.timezone, ev.starts_at, when(input.starts_at, 'start'));
-			const d = details(days && input.deadline === undefined ? { ...input, deadline: move(ev.deadline) } : input, ev);
+			const moved = days && input.deadline === undefined ? move(ev.deadline)! : null;
+			// The deadline is set in Settings, not in this form, so say so rather than refuse it in general words.
+			if (moved && Date.parse(ev.deadline) > Date.now() && Date.parse(moved) <= Date.now()) {
+				throw new UserError(`Moving the event would put its registration deadline (${moved.slice(0, 10)}) in the past and close registration. Set an earlier deadline in Settings later, or move the event by fewer days.`);
+			}
+			if (moved && input.ends_at !== undefined && Date.parse(moved) > Date.parse(when(input.ends_at, 'end'))) {
+				throw new UserError(`The registration deadline moves with the event, to ${moved.slice(0, 10)}, which is after the new end. Change the deadline in Settings first.`);
+			}
+			const d = details(moved ? { ...input, deadline: moved } : input, ev);
 			// Registrations, polls and host lists go 30 days after the end, and polls close at it: an end typed into the
 			// past by mistake would delete everyone at the next cron run.
 			const people = (await env.DB.prepare('SELECT COUNT(*) AS n FROM registrations WHERE event_id = ?').bind(ev.id).first<{ n: number }>())?.n ?? 0;

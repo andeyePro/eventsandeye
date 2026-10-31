@@ -368,6 +368,24 @@ try {
 	}
 	sql(`UPDATE events SET extra_question='Anything else?' WHERE id='${EVENT}'; UPDATE sessions SET choice_group='tour' WHERE kind='tour'; UPDATE sessions SET optin=1 WHERE id='${DINNER}'`);
 
+	// ---------- a tour closes while the form is open ----------
+	console.log('A tour closes');
+	{
+		const { ctx, page } = await open();
+		await ready(page);
+		await fillForm(page, { email: 'tourlate@example.org' });
+		await page.check(`input[name=tour_id][value="${TOUR}"]`);
+		const was = sql(`SELECT booking_deadline FROM sessions WHERE id='${TOUR}'`, true)[0].booking_deadline;
+		sql(`UPDATE sessions SET booking_deadline='2020-01-01T00:00:00Z' WHERE id='${TOUR}'`);
+		await page.click('button[type=submit]');
+		await page.waitForFunction(() => document.getElementById('rsvp-result').textContent !== '');
+		// The server's words for a closed tour also say "closed"; only the event's own deadline closes the whole form.
+		check('a tour closing mid-form is refused, but the form stays open to choose again', /^Booking for the .* has closed\.$/.test(await page.textContent('#rsvp-result'))
+			&& !/has closed/.test(await page.textContent('#rsvp-availability')) && !(await page.$eval('#rsvp-name', (e) => e.disabled)) && !(await page.$eval('button[type=submit]', (b) => b.disabled)), await page.textContent('#rsvp-availability'));
+		sql(`UPDATE sessions SET booking_deadline=${was ? `'${was}'` : 'NULL'} WHERE id='${TOUR}'`);
+		await ctx.close();
+	}
+
 	// ---------- registration closed ----------
 	console.log('Registration closed');
 	{

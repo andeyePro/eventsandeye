@@ -3,9 +3,19 @@
 import { BAR, rankList, restoreFocus } from './ranking';
 let t = new URLSearchParams(location.search).get('t');
 // Keep the link out of the address bar and history once read: it is the key to this registration. It is kept for this
-// tab only, so a reload or a phone restoring the tab still works.
+// tab only, and for an hour, so a reload or a phone restoring the tab still works, but the next person at a shared
+// computer does not find the registration open in a tab left behind.
+const KEPT = 'eai-manage', KEEP_MS = 3600_000;
+const forget = () => { try { sessionStorage.removeItem(KEPT); } catch {} };
 if (t) history.replaceState(null, '', location.pathname);
-try { if (t) sessionStorage.setItem('eai-manage', t); else t = sessionStorage.getItem('eai-manage'); } catch {}
+try {
+	if (t) sessionStorage.setItem(KEPT, JSON.stringify({ t, at: Date.now() }));
+	else {
+		const kept = JSON.parse(sessionStorage.getItem(KEPT) ?? 'null') as { t?: string; at?: number } | null;
+		if (kept?.t && typeof kept.at === 'number' && Date.now() - kept.at < KEEP_MS) t = kept.t;
+		else forget();
+	}
+} catch { forget(); }
 const form = document.getElementById('manage-form') as HTMLFormElement;
 const loading = document.getElementById('manage-loading')!;
 loading.hidden = false;
@@ -223,7 +233,8 @@ async function call(method: string, body?: object) {
 	return d;
 }
 form.addEventListener('change', syncTour);
-call('GET').then((v) => { loading.hidden = true; form.hidden = false; fill(v); }).catch((e) => { loading.textContent = e.message || 'This link is not valid.'; });
+// A link that no longer works (cancelled, deleted after the event, or not valid) is not kept for the next reload.
+call('GET').then((v) => { loading.hidden = true; form.hidden = false; fill(v); }).catch((e) => { forget(); loading.textContent = e.message || 'This link is not valid.'; });
 
 form.addEventListener('submit', async (e) => {
 	e.preventDefault();
@@ -238,6 +249,7 @@ form.addEventListener('submit', async (e) => {
 	busy(true);
 	try { fill(await call('POST', fd)); out.textContent = 'Your changes have been saved.'; } catch (err) {
 		out.textContent = (err as Error).message;
+		// Enabled again here, not only in finally: a disabled field cannot take focus.
 		busy(false);
 		// The disabled buttons threw focus away: bring it to the field the server refused, described by the message, or
 		// else to the message itself.
@@ -252,7 +264,7 @@ document.getElementById('m-cancel')!.addEventListener('click', async () => {
 	busy(true);
 	try {
 		await call('DELETE', {});
-		try { sessionStorage.removeItem('eai-manage'); } catch {}
+		forget();
 		const p = document.createElement('p');
 		p.tabIndex = -1;
 		p.textContent = 'Your registration has been cancelled and your details deleted. We have emailed you a confirmation.';

@@ -295,6 +295,11 @@ try {
 	await wpage.waitForFunction(() => document.getElementById('manage-loading').textContent !== 'Loading your registration…' || !document.getElementById('manage-form').hidden);
 	// Fixed 2026-10-30, kept as a regression check: manage-reload – the token is dropped from the address bar and kept nowhere, so a reload says "This link is not valid."
 	check('reloading the manage page still shows the registration', (await wpage.locator('#m-name').inputValue()) === 'Amy Attendee', await wpage.locator('#manage-loading').innerText());
+	// …but only for an hour: a tab left open on a shared computer must not show the registration to the next person.
+	await wpage.evaluate(() => { const k = JSON.parse(sessionStorage.getItem('eai-manage')); sessionStorage.setItem('eai-manage', JSON.stringify({ ...k, at: Date.now() - 2 * 3600_000 })); });
+	await wpage.reload();
+	await wpage.waitForFunction(() => document.getElementById('manage-loading').textContent !== 'Loading your registration…');
+	check('after an hour the kept link is forgotten, and the page shows nothing of the registration', (await wpage.locator('#manage-form').isHidden()) && (await wpage.evaluate(() => sessionStorage.getItem('eai-manage'))) === null, await wpage.locator('#manage-loading').innerText());
 
 	// Without JavaScript.
 	page = await newPage(noJs);
