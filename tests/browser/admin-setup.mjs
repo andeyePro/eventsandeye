@@ -467,6 +467,12 @@ try {
 		await open(utc, '2027-10-30-nyc');
 		const v = await utc.evaluate(() => ukLocalToIso('2027-10-30T23:30'));
 		check('(from a browser on UTC, 23:30 New York is 03:30 UTC)', v === '2027-10-31T03:30:00.000Z', v);
+		// A time in the hour the clocks skip is read forward, whichever side of UTC the zone is: the old two-pass
+		// conversion went back an hour east of Greenwich and forward west of it (and the reverse for the repeated hour).
+		const skipped = await utc.evaluate(() => [ukLocalToIso('2027-03-28T01:30', 'Europe/London'), ukLocalToIso('2027-03-28T02:30', 'Europe/Berlin'), ukLocalToIso('2027-03-14T02:30', 'America/New_York')]);
+		check('a skipped-hour time is read forward: 01:30 London → 02:30 BST, 02:30 Berlin → 03:30, 02:30 New York → 03:30', skipped.join() === '2027-03-28T01:30:00.000Z,2027-03-28T01:30:00.000Z,2027-03-14T07:30:00.000Z', skipped.join());
+		const repeated = await utc.evaluate(() => [ukLocalToIso('2027-10-31T01:30', 'Europe/London'), ukLocalToIso('2027-11-07T01:30', 'America/New_York')]);
+		check('a time in the repeated autumn hour is its first occurrence: 01:30 BST in London, 01:30 EDT in New York', repeated.join() === '2027-10-31T00:30:00.000Z,2027-11-07T05:30:00.000Z', repeated.join());
 		await utc.close();
 	}
 

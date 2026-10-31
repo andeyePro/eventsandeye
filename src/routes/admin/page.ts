@@ -252,10 +252,11 @@ function ukLocalToIso(v, tz = TZ) {
 	// an hour out whenever the browser's clocks change on a different day from the event's.
 	const fmt = new Intl.DateTimeFormat('en-GB', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
 	const offset = (ms) => { const p = Object.fromEntries(fmt.formatToParts(new Date(ms)).map((x) => [x.type, x.value])); return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - Math.floor(ms / 1000) * 1000; };
-	// The offset that applies at the instant itself, so a second pass from the first guess: near a change of offset the
-	// first guess can be on the other side of it. A wall time that does not exist (in the hour clocks skip) moves forward.
-	const first = wall - offset(wall), second = wall - offset(first);
-	return new Date(offset(second) === offset(first) ? second : first).toISOString();
+	// Tried with the offsets a day either side, as fromWall in src/setup.ts does: a time the clocks pass twice is the
+	// first of the two; one in the hour they skip is read forward with the offset from before the change.
+	const before = offset(wall - 86400000), after = offset(wall + 86400000);
+	const fits = [...new Set([before, after])].map((o) => wall - o).filter((t) => offset(t) === wall - t);
+	return new Date(fits.length ? Math.min(...fits) : wall - before).toISOString();
 }
 function isoToUkLocal(iso) {
 	if (!iso) return '';

@@ -16,7 +16,6 @@
 - [ ] **Polls, next steps:** two polls side by side on a phone are covered by `tests/browser/polls.mjs` (2026-10-30), but not yet on a real phone; drag and drop is mouse-only (touch and keyboard use the arrow buttons); suggestions are only on the manage page, as the booking form's address is not confirmed yet.
 - [ ] **Poll email replies:** try real replies from Gmail, Outlook and Apple Mail through Email Routing, and check that Cloudflare's `Authentication-Results` header reaches the Worker (it has been reported missing on Worker delivery; replies without it are accepted on the From address and signed reference alone).
 - [ ] **Moving an event and its polls:** moving an event moves its sessions and deadline but not a poll's closing time; moving a closed poll's close could reopen it, so decide whether polls move too.
-- [ ] **Skipped hour on the admin page:** a time typed in the hour the clocks skip in spring is stored an hour earlier, not later as the comment in `ukLocalToIso` (and `wallToIso`) says. Pick one and make code and comment agree.
 - [ ] **Packaging:** publish to npm with typed exports for the route handlers.
 
 ### Sharing contact details with session hosts (options to decide)

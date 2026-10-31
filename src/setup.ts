@@ -41,15 +41,25 @@ const pagePath = (v: unknown) => {
 	return p;
 };
 
-/** The instant a wall-clock YYYYMMDDTHHMMSS stands for in a zone (two passes, so the offset is the one at that instant). */
-function wallToIso(stamp: string, tz: string): string {
+/** The instant a wall-clock YYYYMMDDTHHMMSS stands for in a zone. */
+export function wallToIso(stamp: string, tz: string): string {
 	const wall = Date.UTC(+stamp.slice(0, 4), +stamp.slice(4, 6) - 1, +stamp.slice(6, 8), +stamp.slice(9, 11), +stamp.slice(11, 13), +stamp.slice(13, 15));
 	const offset = (ms: number) => {
 		const s = localStamp(new Date(ms).toISOString(), tz);
 		return Date.UTC(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8), +s.slice(9, 11), +s.slice(11, 13), +s.slice(13, 15)) - Math.floor(ms / 1000) * 1000;
 	};
-	const first = wall - offset(wall), second = wall - offset(first);
-	return new Date(offset(second) === offset(first) ? second : first).toISOString();
+	return new Date(fromWall(wall, offset)).toISOString();
+}
+
+/**
+ * The instant for a wall time, given the zone's offset at any instant. Tried with the offsets a day either side (clocks
+ * change at most once in between): a time the clocks pass twice is the first of the two, as iCalendar reads it; one in
+ * the hour they skip is read forward with the offset from before the change (01:30 becomes 02:30 summer time).
+ */
+export function fromWall(wall: number, offset: (ms: number) => number): number {
+	const before = offset(wall - 86_400_000), after = offset(wall + 86_400_000);
+	const fits = [...new Set([before, after])].map((o) => wall - o).filter((t) => offset(t) === wall - t);
+	return fits.length ? Math.min(...fits) : wall - before;
 }
 
 /**
