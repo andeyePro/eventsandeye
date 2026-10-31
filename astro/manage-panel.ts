@@ -1,18 +1,21 @@
 // Events&I – Copyright (C) 2026 andeye Ltd. AGPL-3.0, see ../LICENSE.
 // The ManagePanel script, shared by astro/ManagePanel.astro and the plain HTML version in html/. It finds its elements by id.
 import { BAR, rankList, restoreFocus } from './ranking';
-const t = new URLSearchParams(location.search).get('t');
-// Keep the link out of the address bar and history once read: it is the key to this registration.
+let t = new URLSearchParams(location.search).get('t');
+// Keep the link out of the address bar and history once read: it is the key to this registration. It is kept for this
+// tab only, so a reload or a phone restoring the tab still works.
 if (t) history.replaceState(null, '', location.pathname);
+try { if (t) sessionStorage.setItem('eai-manage', t); else t = sessionStorage.getItem('eai-manage'); } catch {}
 const form = document.getElementById('manage-form') as HTMLFormElement;
 const loading = document.getElementById('manage-loading')!;
+loading.hidden = false;
 const out = document.getElementById('manage-result')!;
 const tourFs = document.getElementById('m-tour-fs') as HTMLFieldSetElement;
 const buttons = [document.getElementById('m-save'), document.getElementById('m-cancel')] as HTMLButtonElement[];
 const busy = (on: boolean) => buttons.forEach((b) => (b.disabled = on));
 const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 
-type View = { ok: boolean; error?: string; event: { title: string; page_path: string; open: boolean; timezone?: string; extra_question?: string | null; in_person_label?: string | null; remote_label?: string | null; tour_legend?: string | null }; tours: { id: string; label: string; available: boolean; open: boolean }[]; optins?: { id: string; label: string; starts_at: string; location: string | null; available?: boolean }[]; registration: Record<string, string | null | boolean | string[]>; calendar: { key: string; summary: string; start: string; url: string }[]; polls?: Poll[] };
+type View = { ok: boolean; error?: string; field?: string; event: { title: string; page_path: string; open: boolean; timezone?: string; extra_question?: string | null; in_person_label?: string | null; remote_label?: string | null; tour_legend?: string | null }; tours: { id: string; label: string; available: boolean; open: boolean }[]; optins?: { id: string; label: string; starts_at: string; location: string | null; available?: boolean }[]; registration: Record<string, string | null | boolean | string[]>; calendar: { key: string; summary: string; start: string; url: string }[]; polls?: Poll[] };
 type Poll = { id: string; question: string; open: boolean; allow_suggestions: boolean; closes_at: string; options: { id: string; label: string; pending: boolean; mine: boolean }[]; ballot: { ranking: string[]; bar: number } | null; notes: string[]; results: { label: string; willing: number; out: number }[] | null };
 
 function describe(r: View['registration']) {
@@ -216,7 +219,7 @@ async function call(method: string, body?: object) {
 		method, headers: body ? { 'content-type': 'application/json' } : {}, body: body ? JSON.stringify({ t, ...body }) : undefined,
 	});
 	const d = (await res.json()) as View;
-	if (!d.ok) throw new Error(d.error);
+	if (!d.ok) throw Object.assign(new Error(d.error), { field: d.field });
 	return d;
 }
 form.addEventListener('change', syncTour);
@@ -224,18 +227,32 @@ call('GET').then((v) => { loading.hidden = true; form.hidden = false; fill(v); }
 
 form.addEventListener('submit', async (e) => {
 	e.preventDefault();
+	for (const el of form.querySelectorAll('[aria-invalid]')) { el.removeAttribute('aria-invalid'); el.removeAttribute('aria-describedby'); }
+	// A name of spaces only passes "required" but not the server.
+	const name = form.elements.namedItem('name') as HTMLInputElement;
+	name.value = name.value.trim();
 	if (!form.reportValidity()) return;
 	const fd: Record<string, unknown> = Object.fromEntries(new FormData(form).entries());
 	fd.share_contact = (document.getElementById('m-share') as HTMLInputElement).checked;
 	fd.optins = new FormData(form).getAll('optins').map(String);
 	busy(true);
-	try { fill(await call('POST', fd)); out.textContent = 'Your changes have been saved.'; } catch (err) { out.textContent = (err as Error).message; } finally { busy(false); }
+	try { fill(await call('POST', fd)); out.textContent = 'Your changes have been saved.'; } catch (err) {
+		out.textContent = (err as Error).message;
+		busy(false);
+		// The disabled buttons threw focus away: bring it to the field the server refused, described by the message, or
+		// else to the message itself.
+		const field = (err as { field?: string }).field;
+		const bad = field ? [...form.querySelectorAll<HTMLInputElement>(`[name="${CSS.escape(field)}"]`)] : [];
+		for (const el of bad) { el.setAttribute('aria-invalid', 'true'); el.setAttribute('aria-describedby', 'manage-result'); }
+		(bad[0] ?? out).focus();
+	} finally { busy(false); }
 });
 document.getElementById('m-cancel')!.addEventListener('click', async () => {
 	if (!confirm('Cancel your registration? Your details will be deleted.')) return;
 	busy(true);
 	try {
 		await call('DELETE', {});
+		try { sessionStorage.removeItem('eai-manage'); } catch {}
 		const p = document.createElement('p');
 		p.tabIndex = -1;
 		p.textContent = 'Your registration has been cancelled and your details deleted. We have emailed you a confirmation.';
@@ -243,6 +260,6 @@ document.getElementById('m-cancel')!.addEventListener('click', async () => {
 		pollsBox.hidden = true;
 		// The button that had focus is gone; move focus to the outcome so it isn't lost to the page body.
 		p.focus();
-	} catch (err) { out.textContent = (err as Error).message; busy(false); }
+	} catch (err) { out.textContent = (err as Error).message; busy(false); out.focus(); }
 });
 export {};

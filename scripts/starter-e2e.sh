@@ -2,6 +2,7 @@
 # Events&I – Copyright (C) 2026 andeye Ltd. AGPL-3.0, see ../LICENSE.
 # Runs the end-to-end test from a throwaway copy of examples/starter, so it needs no host site:
 #   sh scripts/starter-e2e.sh            (from the repository root; needs Node 22 and network access to npm)
+# STARTER_SKIP_E2E=1 only builds the copy (scripts/browser-tests.sh uses that).
 # Set STARTER_DIR to keep the copy somewhere outside the repository (it is reused, so later runs skip npm install
 # until the starter's package.json changes).
 set -eu
@@ -29,6 +30,7 @@ cd "$dir"
 # A test build on Cloudflare Pages must fail: it would ship a Turnstile key the live server refuses.
 if CF_PAGES=1 PUBLIC_TURNSTILE_ALLOW_TEST_KEY=true npx astro build >/dev/null 2>&1; then echo "a test build on Cloudflare Pages should have failed" >&2; exit 1; fi
 PUBLIC_TURNSTILE_ALLOW_TEST_KEY=true npx astro build
+[ "${STARTER_SKIP_E2E:-}" = 1 ] && exit 0
 E2E_DB=events E2E_SEED=eventsandeye/examples/seed.example.sql E2E_NOTIFY=events@example.org \
 	E2E_PAGES=/,/event/,/events/,/privacy/,/events/check-email/,/events/confirm/,/events/manage/ \
 	node eventsandeye/tests/e2e.mjs

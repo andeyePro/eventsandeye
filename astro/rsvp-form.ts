@@ -10,6 +10,7 @@ const tourFs = document.getElementById('rsvp-tour-fieldset') as HTMLFieldSetElem
 const optFs = document.getElementById('rsvp-optins-fieldset') as HTMLFieldSetElement;
 const btn = form.querySelector('button[type=submit]') as HTMLButtonElement;
 btn.disabled = false;
+avail.textContent = 'Checking availability…';
 const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 
 interface Status {
@@ -73,6 +74,10 @@ function syncTour() {
 	if (!inPerson) (form.querySelector('input[name=tour_id][value=none]') as HTMLInputElement).checked = true;
 }
 form.addEventListener('change', syncTour);
+function closed() {
+	avail.textContent = 'Registration for this event has closed.';
+	form.querySelectorAll('input,textarea,button').forEach((el) => ((el as HTMLInputElement).disabled = true));
+}
 syncTour();
 
 fetch(`/api/rsvp/status?event=${encodeURIComponent(event)}`)
@@ -80,11 +85,7 @@ fetch(`/api/rsvp/status?event=${encodeURIComponent(event)}`)
 	.then((s) => {
 		if (!s.ok) throw new Error(s.error);
 		useLabels(s.event);
-		if (!s.event.open) {
-			avail.textContent = 'Registration for this event has closed.';
-			form.querySelectorAll('input,textarea,button').forEach((el) => ((el as HTMLInputElement).disabled = true));
-			return;
-		}
+		if (!s.event.open) return closed();
 		if (s.event.extra_question) {
 			(document.getElementById('rsvp-extra-label') as HTMLElement).textContent = `${s.event.extra_question} (optional)`;
 			(document.getElementById('rsvp-extra-field') as HTMLElement).hidden = false;
@@ -132,6 +133,11 @@ fetch(`/api/rsvp/status?event=${encodeURIComponent(event)}`)
 form.addEventListener('submit', async (e) => {
 	e.preventDefault();
 	result.textContent = '';
+	result.classList.remove('error');
+	for (const el of form.querySelectorAll('[aria-invalid]')) { el.removeAttribute('aria-invalid'); el.removeAttribute('aria-describedby'); }
+	// A name of spaces only passes "required" but not the server.
+	const name = form.elements.namedItem('name') as HTMLInputElement;
+	name.value = name.value.trim();
 	if (!form.reportValidity()) return;
 	const fd = new FormData(form);
 	const body: Record<string, unknown> = Object.fromEntries(fd.entries());
@@ -143,16 +149,25 @@ form.addEventListener('submit', async (e) => {
 	btn.disabled = true;
 	try {
 		const res = await fetch('/api/rsvp/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-		const data = (await res.json()) as { ok: boolean; error?: string };
-		if (!data.ok) throw new Error(data.error || 'Registration failed.');
+		const data = (await res.json()) as { ok: boolean; error?: string; field?: string };
+		// The deadline passed while the form was open: say so where the deadline was shown, as on loading.
+		if (res.status === 409 && /closed/i.test(data.error ?? '')) closed();
+		if (!data.ok) throw Object.assign(new Error(data.error || 'Registration failed.'), { field: data.field });
 		// A page of its own, so the "check your email" step can't be missed below the form.
 		try { sessionStorage.setItem('rsvp-email', String(fd.get('email'))); } catch {}
 		location.href = form.dataset.next || '/events/check-email/';
 	} catch (err) {
 		result.textContent = (err as Error).message;
+		result.classList.add('error');
 		(window as unknown as { turnstile?: { reset: () => void } }).turnstile?.reset();
 		// Only on failure: after success the Turnstile token is spent, so a second click must not resend it.
-		btn.disabled = false;
+		if (!avail.textContent?.includes('has closed')) btn.disabled = false;
+		// Disabling the button threw focus away. Bring it to the field the server refused, described by the message, or
+		// else to the message itself, so it is read out and not missed.
+		const field = (err as { field?: string }).field;
+		const bad = field ? [...form.querySelectorAll<HTMLInputElement>(`[name="${CSS.escape(field)}"]`)] : [];
+		for (const el of bad) { el.setAttribute('aria-invalid', 'true'); el.setAttribute('aria-describedby', 'rsvp-result'); }
+		(bad[0] ?? result).focus();
 	}
 });
 export {};

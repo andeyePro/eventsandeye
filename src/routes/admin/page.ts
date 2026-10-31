@@ -8,7 +8,7 @@ import { VERSION } from '../../env';
 export const onRequestGet = async () => new Response(HTML, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-robots-tag': 'noindex', 'content-security-policy': "frame-ancestors 'none'", 'x-frame-options': 'DENY', 'referrer-policy': 'no-referrer' } });
 
 const HTML = /* html */ `<!doctype html>
-<html lang="en">
+<html lang="en-GB">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -36,14 +36,15 @@ const HTML = /* html */ `<!doctype html>
 	input[type=text], input[type=email], input[type=url], input[type=number], input[type=datetime-local], textarea, select { font: inherit; padding: 0.4rem; border: 1px solid #889; border-radius: 4px; width: 100%; box-sizing: border-box; }
 	textarea { min-height: 12rem; font-family: ui-monospace, Menlo, monospace; font-size: 0.85rem; }
 	.row { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 0.75rem; }
-	button, .button { font: inherit; background: var(--blue); color: #fff; border: 0; border-radius: 4px; padding: 0.45rem 0.9rem; cursor: pointer; text-decoration: none; display: inline-block; margin-top: 0.6rem; }
+	button, .button { font: inherit; background: var(--blue); color: #fff; border: 2px solid transparent; border-radius: 4px; padding: 0.45rem 0.9rem; cursor: pointer; text-decoration: none; display: inline-block; margin-top: 0.6rem; }
 	button.secondary, .button.secondary { background: #fff; color: var(--blue); border: 1px solid var(--blue); }
 	button.danger { background: #b3261e; }
 	.small { font-size: 0.85rem; color: #444; }
 	.tag { display: inline-block; font-size: 0.75rem; padding: 0.05rem 0.4rem; border-radius: 3px; background: #eee; }
 	.tag.wait { background: #ffe8b3; } .tag.pending { background: #e3e3ff; } .tag.ok { background: #d9f2c4; }
 	.preview { border: 1px dashed #889; padding: 0.75rem; margin-top: 0.6rem; background: #fcfcfc; }
-	fieldset { border: 1px solid var(--line); border-radius: 6px; margin: 0.75rem 0; }
+	/* A fieldset is otherwise at least as wide as its content, so a poll's results table widened the page on a phone. */
+	fieldset { border: 1px solid var(--line); border-radius: 6px; margin: 0.75rem 0; min-inline-size: 0; }
 	legend { font-weight: 700; }
 	#toast { position: fixed; bottom: 1rem; right: 1rem; background: #111; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; max-width: 30rem; }
 	#toast:empty { display: none; }
@@ -57,7 +58,7 @@ const HTML = /* html */ `<!doctype html>
 	<h1>Registrations admin</h1>
 	<span id="ev-title" class="small"></span>
 	<a href="/" class="small">Website</a>
-	<span class="small">Events&amp;I ${VERSION} (beta)</span>
+	<span class="small">Events&amp;I ${VERSION}</span>
 </header>
 <main>
 	<section aria-labelledby="h-setup" id="setup" hidden><h2 id="h-setup">Set-up check</h2><p class="small">Things to put right in your Cloudflare settings. This list disappears when everything is in order.</p><ul id="setup-list"></ul></section>
@@ -81,6 +82,7 @@ const HTML = /* html */ `<!doctype html>
 					<div><label for="e-lrem">Wording for attending remotely (optional)</label><input id="e-lrem" type="text" maxlength="120" placeholder="Remotely (online sessions only)" /></div>
 					<div><label for="e-ltour">Heading for the tour choice (optional)</label><input id="e-ltour" type="text" maxlength="120" placeholder="Optional tour (in person only)" /></div>
 				</div>
+				<p class="small">Moving the event to another day moves its sessions and registration deadline with it.</p>
 				<button type="submit">Save event</button>
 			</form>
 		</details>
@@ -88,7 +90,7 @@ const HTML = /* html */ `<!doctype html>
 			<form id="clone-form">
 				<p class="small">Copies the programme (times moved to the new start, without hosts or online links), the latest joining instructions and the polls' options. Never people or answers.</p>
 				<div class="row">
-					<div><label for="c-id">New event id</label><input id="c-id" type="text" required pattern="[a-z0-9][a-z0-9-]{2,59}" placeholder="2027-03-12-london" /></div>
+					<div><label for="c-id">New event id</label><input id="c-id" type="text" required pattern="[a-z0-9][a-z0-9\\-]{2,59}" placeholder="2027-03-12-london" /></div>
 					<div><label for="c-title">New title</label><input id="c-title" type="text" maxlength="200" /></div>
 					<div><label for="c-start">New start (<span class="tzl">UK time</span>)</label><input id="c-start" type="datetime-local" required /></div>
 					<div><label for="c-page">New event page</label><input id="c-page" type="text" required maxlength="200" placeholder="/events/2027-03-12-london/" /></div>
@@ -99,7 +101,7 @@ const HTML = /* html */ `<!doctype html>
 		<details id="new-details"><summary>New event</summary>
 			<form id="new-form">
 				<div class="row">
-					<div><label for="n-id">Event id</label><input id="n-id" type="text" required pattern="[a-z0-9][a-z0-9-]{2,59}" placeholder="2027-03-12-london" /></div>
+					<div><label for="n-id">Event id</label><input id="n-id" type="text" required pattern="[a-z0-9][a-z0-9\\-]{2,59}" placeholder="2027-03-12-london" /></div>
 					<div><label for="n-title">Title</label><input id="n-title" type="text" required maxlength="200" /></div>
 					<div><label for="n-tz">Time zone</label><input id="n-tz" type="text" required value="Europe/London" /></div>
 					<div><label for="n-start">Starts (in that time zone)</label><input id="n-start" type="datetime-local" required /></div>
@@ -159,7 +161,7 @@ const HTML = /* html */ `<!doctype html>
 	<section aria-labelledby="h-regs">
 		<h2 id="h-regs" tabindex="-1">Registrations</h2>
 		<p><a class="button secondary" id="csv-link" href="#">Download CSV</a> <a class="button secondary" id="log-link" href="#">Download sent log (markdown)</a></p>
-		<div style="overflow-x:auto"><table id="regs"><caption class="small" style="text-align:left">Waiting lists are in order of confirmation. Unconfirmed = email not yet confirmed.</caption><thead><tr><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Attendance</th><th scope="col">Tour</th><th scope="col">Affiliation</th><th scope="col">Needs</th><th scope="col">Extra</th><th scope="col">Shares email with hosts</th><th scope="col">Instr. v</th><th scope="col">Actions</th></tr></thead><tbody></tbody></table></div>
+		<div style="overflow-x:auto" tabindex="0" role="region" aria-label="Registrations table"><table id="regs"><caption class="small" style="text-align:left">Waiting lists are in order of confirmation. Unconfirmed = email not yet confirmed.</caption><thead><tr><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Attendance</th><th scope="col">Tour</th><th scope="col">Affiliation</th><th scope="col">Needs</th><th scope="col">Extra</th><th scope="col">Shares email with hosts</th><th scope="col">Instr. v</th><th scope="col">Actions</th></tr></thead><tbody></tbody></table></div>
 	</section>
 
 	<section aria-labelledby="h-polls" id="polls">
@@ -214,7 +216,7 @@ const HTML = /* html */ `<!doctype html>
 			<div class="preview" id="m-body-preview" hidden></div>
 		</form>
 		<h3>Sent and scheduled</h3>
-		<div style="overflow-x:auto"><table id="msgs"><thead><tr><th scope="col">When</th><th scope="col">Subject</th><th scope="col">Status</th><th scope="col">Recipients</th><th scope="col">Audience</th><th scope="col">Actions</th></tr></thead><tbody></tbody></table></div>
+		<div style="overflow-x:auto" tabindex="0" role="region" aria-label="Sent and scheduled messages"><table id="msgs"><thead><tr><th scope="col">When</th><th scope="col">Subject</th><th scope="col">Status</th><th scope="col">Recipients</th><th scope="col">Audience</th><th scope="col">Actions</th></tr></thead><tbody></tbody></table></div>
 	</section>
 </main>
 <div id="toast" role="status" aria-live="polite"></div>
@@ -246,7 +248,10 @@ const tzLabel = () => TZ === 'Europe/London' ? 'UK time' : TZ.split('/').pop().r
 function ukLocalToIso(v, tz = TZ) {
 	if (!v) return null;
 	const wall = new Date(v + 'Z').getTime();
-	const offset = (ms) => { const d = new Date(ms); return new Date(d.toLocaleString('en-US', { timeZone: tz })).getTime() - new Date(d.toLocaleString('en-US', { timeZone: 'UTC' })).getTime(); };
+	// The zone's wall clock read field by field: parsing toLocaleString() output would read it in the browser's own zone,
+	// an hour out whenever the browser's clocks change on a different day from the event's.
+	const fmt = new Intl.DateTimeFormat('en-GB', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
+	const offset = (ms) => { const p = Object.fromEntries(fmt.formatToParts(new Date(ms)).map((x) => [x.type, x.value])); return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - Math.floor(ms / 1000) * 1000; };
 	// The offset that applies at the instant itself, so a second pass from the first guess: near a change of offset the
 	// first guess can be on the other side of it. A wall time that does not exist (in the hour clocks skip) moves forward.
 	const first = wall - offset(wall), second = wall - offset(first);
@@ -260,6 +265,11 @@ function isoToUkLocal(iso) {
 }
 const uk = (iso) => iso ? new Date(iso).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: TZ }) : '';
 let sessions = [], tours = [], latestVersion = 0, eventId = EVENT;
+// Fields typed into in the sessions editor and not yet saved, by input id. Every other save reloads the page's data,
+// which rebuilds the editor: these are put back, and leaving the page asks first while there are any.
+let sessionTyped = {};
+const typed = () => Object.keys(sessionTyped).length > 0;
+addEventListener('beforeunload', (e) => { if (typed()) { e.preventDefault(); e.returnValue = ''; } });
 
 function audience() {
 	return { attendance: $('m-att').value, optin: $('m-optin').value || undefined, tour_id: $('m-tour').value || undefined, below_version: $('m-below').value ? Number($('m-below').value) : undefined, include_waitlist: $('m-wait').checked };
@@ -335,6 +345,7 @@ async function load() {
 			+ (x.choice_group || x.optin ? f('dl', 'Booking closes (blank = at start)', 'datetime-local', isoToUkLocal(x.booking_deadline)) : '')
 			+ '</div><button type="button" class="danger" data-delsess="' + id + '" data-label="' + esc(x.label) + '">Delete session</button></fieldset>';
 	}).join('');
+	for (const [id, v] of Object.entries(sessionTyped)) { const el = $(id); if (el) el.value = v; else delete sessionTyped[id]; }
 
 	const optSel = $('m-optin');
 	optSel.querySelectorAll('option[data-o]').forEach((o) => o.remove());
@@ -389,6 +400,7 @@ $('sessions-form').addEventListener('submit', async (e) => {
 		const dry = await api('/api/admin/sessions', 'POST', { event: eventId, sessions: sessionEdits(), dry_run: true });
 		if (!confirm('Save sessions? ' + dry.calendar_updates + ' person(s) will get updated calendar invitations.')) return;
 		const d = await api('/api/admin/sessions', 'POST', { event: eventId, sessions: sessionEdits() });
+		sessionTyped = {};
 		toast('Sessions saved. ' + d.calendar_updates + ' calendar update(s)' + (d.calendar_queued ? ': ' + (d.calendar_updates - d.calendar_queued) + ' sent now, the rest within a few minutes.' : ' sent.')); load();
 	} catch (err) { toast(err.message); }
 });
@@ -398,7 +410,7 @@ document.body.addEventListener('click', async (e) => {
 	try {
 		if (b.id === 'sess-quiet') {
 			if (!confirm('Save sessions without emailing attendees? Session hosts still get their updated lists. Calendars update with each person\'s next joining-instructions email.')) return;
-			await api('/api/admin/sessions', 'POST', { event: eventId, sessions: sessionEdits(), quiet: true }); toast('Sessions saved. No attendee was emailed; hosts get their updated lists.'); load();
+			await api('/api/admin/sessions', 'POST', { event: eventId, sessions: sessionEdits(), quiet: true }); sessionTyped = {}; toast('Sessions saved. No attendee was emailed; hosts get their updated lists.'); load();
 		} else if (b.id === 'sess-dry') {
 			const d = await api('/api/admin/sessions', 'POST', { event: eventId, sessions: sessionEdits(), dry_run: true });
 			toast(d.calendar_updates + ' person(s) would get updated calendar invitations.');
@@ -440,7 +452,7 @@ async function loadPolls() {
 		return '<fieldset data-poll="' + pid + '"><legend>' + esc(p.question) + '</legend>'
 			+ '<p class="small">' + (p.open ? 'Open' : 'Closed') + ', ' + (p.closes_at ? 'closes ' + esc(uk(p.closes_at)) : 'closes when the event ends') + '. ' + p.tally.voters + ' answer(s)' + (p.tally.nothing ? ', of whom ' + p.tally.nothing + ' would join none of the options' : '') + '. Suggestions ' + (p.allow_suggestions ? 'on' : 'off') + '.</p>'
 			+ (pending.length ? '<h3>Suggestions waiting for you</h3><ul>' + pending.map((o) => '<li><strong>' + esc(o.label) + '</strong> from ' + esc(o.suggested_by_name || 'someone who has since cancelled') + ' <button data-poll-decide="add" data-option="' + esc(o.id) + '">Add for everyone</button> <button class="secondary" data-poll-decide="use" data-option="' + esc(o.id) + '" data-label="' + esc(o.label) + '">Add in my words…</button> <button class="danger" data-poll-decide="reject" data-option="' + esc(o.id) + '">Don\'t add</button></li>').join('') + '</ul>' : '')
-			+ '<div style="overflow-x:auto"><table><caption class="small" style="text-align:left">Sorted by how many would join, then by preference (each person\'s top choice above their line scores most).</caption><thead><tr><th scope="col">Option</th><th scope="col">Would join</th><th scope="col">Would stay at home</th><th scope="col">First choice</th><th scope="col">Score</th><th scope="col">Who would join</th><th scope="col">Actions</th></tr></thead><tbody>' + (rows || '<tr><td colspan="7">No options yet.</td></tr>') + '</tbody></table></div>'
+			+ '<div style="overflow-x:auto" tabindex="0" role="region" aria-label="Results: ' + esc(p.question) + '"><table><caption class="small" style="text-align:left">Sorted by how many would join, then by preference (each person\'s top choice above their line scores most).</caption><thead><tr><th scope="col">Option</th><th scope="col">Would join</th><th scope="col">Would stay at home</th><th scope="col">First choice</th><th scope="col">Score</th><th scope="col">Who would join</th><th scope="col">Actions</th></tr></thead><tbody>' + (rows || '<tr><td colspan="7">No options yet.</td></tr>') + '</tbody></table></div>'
 			+ '<div class="row"><div><label for="po-' + pid + '">Add an option</label><input id="po-' + pid + '" type="text" maxlength="80" /></div></div><button data-poll-add="' + pid + '">Add option</button> '
 			+ '<button class="secondary" data-poll-toggle="' + pid + '" data-allow="' + (p.allow_suggestions ? '1' : '0') + '">' + (p.allow_suggestions ? 'Stop taking suggestions' : 'Take suggestions') + '</button> '
 			+ '<button class="secondary" data-poll-close="' + pid + '" data-open="' + (p.open ? '1' : '0') + '">' + (p.open ? 'Close now' : 'Reopen until the event ends') + '</button> '
@@ -485,6 +497,12 @@ $('polls-box').addEventListener('click', async (e) => {
 		loadPolls();
 	} catch (err) { toast(err.message); }
 });
+// The option box is not in a form of its own (the poll's buttons share its fieldset), so Enter is wired to its button.
+$('polls-box').addEventListener('keydown', (e) => {
+	if (e.key !== 'Enter' || !e.target.id || !e.target.id.startsWith('po-')) return;
+	e.preventDefault();
+	document.querySelector('button[data-poll-add="' + CSS.escape(e.target.id.slice(3)) + '"]')?.click();
+});
 const goTo = (id) => { location.search = '?event=' + encodeURIComponent(id); };
 $('ev-pick').addEventListener('change', (e) => goTo(e.target.value));
 $('ev-form').addEventListener('submit', async (e) => {
@@ -492,9 +510,9 @@ $('ev-form').addEventListener('submit', async (e) => {
 	try {
 		const tz = $('e-tz').value.trim();
 		// The times shown are in the event's current zone, so they are read in it: a new zone keeps the event at the same moment.
-		await api('/api/admin/events', 'POST', { action: 'update', event: eventId, title: $('e-title').value, location: $('e-loc').value, page_path: $('e-page').value, timezone: tz,
+		const d = await api('/api/admin/events', 'POST', { action: 'update', event: eventId, title: $('e-title').value, location: $('e-loc').value, page_path: $('e-page').value, timezone: tz,
 			starts_at: ukLocalToIso($('e-start').value), ends_at: ukLocalToIso($('e-end').value), extra_question: $('e-q').value, in_person_label: $('e-lip').value, remote_label: $('e-lrem').value, tour_legend: $('e-ltour').value });
-		toast('Event saved. Nobody has been emailed.'); load();
+		toast('Event saved. Nobody has been emailed.' + (d.days ? ' The registration deadline' + (d.sessions_moved ? ' and ' + d.sessions_moved + ' session(s)' : '') + ' moved with it.' : '')); load();
 	} catch (err) { toast(err.message); }
 });
 $('clone-form').addEventListener('submit', async (e) => {
@@ -507,6 +525,9 @@ $('clone-form').addEventListener('submit', async (e) => {
 $('new-form').addEventListener('submit', async (e) => {
 	e.preventDefault();
 	const tz = $('n-tz').value.trim();
+	// The times are converted in this zone before the server sees them, so a bad name would otherwise fail here with
+	// the browser's own wording.
+	try { new Intl.DateTimeFormat('en-GB', { timeZone: tz }); } catch { toast('Unknown time zone: use a name such as Europe/London or America/New_York.'); $('n-tz').focus(); return; }
 	try {
 		const d = await api('/api/admin/events', 'POST', { action: 'create', id: $('n-id').value, title: $('n-title').value, timezone: tz, starts_at: ukLocalToIso($('n-start').value, tz), ends_at: ukLocalToIso($('n-end').value, tz),
 			deadline: ukLocalToIso($('n-deadline').value, tz), in_person_max: Number($('n-max').value), page_path: $('n-page').value, location: $('n-loc').value });
@@ -522,6 +543,9 @@ $('addsess-form').addEventListener('submit', async (e) => {
 		toast('Session added. Nobody has been emailed.'); e.target.reset(); load();
 	} catch (err) { toast(err.message); }
 });
+const noteTyped = (e) => { if (e.target.id && e.target.id.startsWith('sx-')) sessionTyped[e.target.id] = e.target.value; };
+$('sessions-box').addEventListener('input', noteTyped);
+$('sessions-box').addEventListener('change', noteTyped);
 $('sessions-box').addEventListener('click', async (e) => {
 	const b = e.target.closest('button[data-delsess]');
 	if (!b) return;

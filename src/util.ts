@@ -8,7 +8,7 @@ export function json(data: unknown, status = 200, headers: Record<string, string
 	});
 }
 
-export const bad = (message: string, status = 400) => json({ ok: false, error: message }, status);
+export const bad = (message: string, status = 400, field?: string) => json({ ok: false, error: message, ...(field ? { field } : {}) }, status);
 
 /** 32 random bytes, base64url. Used for self-service and confirmation links. */
 export function randomToken(bytes = 32): string {

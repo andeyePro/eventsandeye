@@ -52,6 +52,22 @@ function wallToIso(stamp: string, tz: string): string {
 	return new Date(offset(second) === offset(first) ? second : first).toISOString();
 }
 
+/**
+ * Moves times by the number of calendar days between two instants, counted in the event's zone. Every time keeps its
+ * wall-clock time, so a move across a change to or from summer time stays at the same hour.
+ */
+function dayMover(tz: string, fromIso: string, toIso: string) {
+	const dayOf = (iso: string) => { const s = localStamp(iso, tz); return Date.UTC(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8)); };
+	const days = Math.round((dayOf(toIso) - dayOf(fromIso)) / DAY);
+	const move = (iso: string | null) => {
+		if (!iso || !days) return iso;
+		const s = localStamp(iso, tz);
+		const d = new Date(Date.UTC(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8)) + days * DAY).toISOString();
+		return wallToIso(`${d.slice(0, 4)}${d.slice(5, 7)}${d.slice(8, 10)}${s.slice(8)}`, tz);
+	};
+	return { days, move };
+}
+
 export async function listEvents(env: Env) {
 	return { ok: true as const, events: (await env.DB.prepare('SELECT id, title, starts_at FROM events ORDER BY starts_at DESC').all<{ id: string; title: string; starts_at: string }>()).results };
 }
@@ -118,17 +134,26 @@ export async function eventAction(env: Env, input: Record<string, unknown>, by: 
 		}
 		case 'update': {
 			const ev = await getEvent(env, String(input.event ?? ''));
-			const d = details(input, ev);
+			// A new date takes the programme with it: sessions left on the old day would stay in everyone's calendars
+			// there. Whole days only, as a clone does, so correcting the start time alone leaves the sessions where they are.
+			// The registration deadline moves too, unless a new one was given.
+			const { days, move } = input.starts_at === undefined ? { days: 0, move: (x: string | null) => x } : dayMover(ev.timezone, ev.starts_at, when(input.starts_at, 'start'));
+			const d = details(days && input.deadline === undefined ? { ...input, deadline: move(ev.deadline) } : input, ev);
 			// Registrations, polls and host lists go 30 days after the end, and polls close at it: an end typed into the
 			// past by mistake would delete everyone at the next cron run.
 			const people = (await env.DB.prepare('SELECT COUNT(*) AS n FROM registrations WHERE event_id = ?').bind(ev.id).first<{ n: number }>())?.n ?? 0;
 			if (people && d.ends_at !== ev.ends_at && Date.parse(d.ends_at) < Date.now()) {
 				throw new UserError('People are registered for this event, so its end cannot be moved into the past: 30 days after the end, their registrations are deleted.', 409);
 			}
-			const latest = (await getSessions(env, ev.id)).reduce((m, s) => Math.max(m, Date.parse(s.ends_at)), 0);
+			const sessions = (await getSessions(env, ev.id)).map((s) => ({ ...s, starts_at: move(s.starts_at)!, ends_at: move(s.ends_at)!, booking_deadline: move(s.booking_deadline) }));
+			const latest = sessions.reduce((m, s) => Math.max(m, Date.parse(s.ends_at)), 0);
 			if (latest && Date.parse(d.ends_at) < latest - DAY) throw new UserError('The event would end more than a day before its last session.');
-			await env.DB.prepare(`UPDATE events SET ${COLS.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`).bind(...COLS.map((c) => d[c]), ev.id).run();
-			return { ok: true as const };
+			// Nobody is emailed, as for any event edit: calendars already sent catch up with each person's next email.
+			await env.DB.batch([
+				env.DB.prepare(`UPDATE events SET ${COLS.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`).bind(...COLS.map((c) => d[c]), ev.id),
+				...(days ? sessions.map((s) => env.DB.prepare('UPDATE sessions SET starts_at = ?, ends_at = ?, booking_deadline = ? WHERE id = ?').bind(s.starts_at, s.ends_at, s.booking_deadline, s.id)) : []),
+			]);
+			return { ok: true as const, sessions_moved: days ? sessions.length : 0, days };
 		}
 		case 'clone': return cloneEvent(env, input, by);
 		case 'add_session': {
@@ -183,15 +208,7 @@ async function cloneEvent(env: Env, input: Record<string, unknown>, by: string) 
 	const start = when(input.starts_at, 'new start');
 	const page_path = pagePath(input.page_path);
 	if (page_path === from.page_path) throw new UserError('Give the new event its own page: emails link to it.');
-	const tz = from.timezone;
-	const dayOf = (iso: string) => { const s = localStamp(iso, tz); return Date.UTC(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8)); };
-	const days = Math.round((dayOf(start) - dayOf(from.starts_at)) / DAY);
-	const move = (iso: string | null) => {
-		if (!iso) return null;
-		const s = localStamp(iso, tz);
-		const d = new Date(Date.UTC(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8)) + days * DAY).toISOString();
-		return wallToIso(`${d.slice(0, 4)}${d.slice(5, 7)}${d.slice(8, 10)}${s.slice(8)}`, tz);
-	};
+	const { move } = dayMover(from.timezone, from.starts_at, start);
 	const d = { ...details({}, from), title: cleanLine(input.title, 200) ?? from.title, starts_at: start, ends_at: move(from.ends_at)!, deadline: move(from.deadline)!, page_path };
 	const sessions = await getSessions(env, from.id);
 	const ids = sessions.map((s) => (s.id.startsWith(`${from.id}-`) ? id + s.id.slice(from.id.length) : `${id}-${randomToken(6).toLowerCase().replace(/[^a-z0-9]/g, 'x')}`));

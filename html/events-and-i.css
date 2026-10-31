@@ -1,6 +1,9 @@
 /* Events&I components, generated from the Astro components by scripts/build-html.mjs. Plain fallbacks for the Starlight variables. */
 /* RsvpForm */
 .eai .rsvp { display: grid; gap: 1rem; max-width: 40rem; margin-block: 1.5rem; }
+	
+	.eai .rsvp [hidden] { display: none !important; }
+	.eai #rsvp-result.error { color: #b3261e; color: light-dark(#b3261e, #ff8a80); font-weight: 600; }
 	.eai .field { display: grid; gap: 0.35rem; border: 0; padding: 0; margin: 0; }
 	.eai .field label:not(.choice), .eai legend { font-weight: 600; }
 	
@@ -8,6 +11,11 @@
 	.eai .rsvp .choice input { margin-top: 0.3rem; }
 	.eai #rsvp-tours, .eai #rsvp-optins { display: grid; gap: 0.35rem; }
 	.eai #rsvp-polls { display: grid; gap: 1rem; }
+	
+	.eai #rsvp-polls .field { display: grid; gap: 0.35rem; border: 0; padding: 0; margin: 0; }
+	.eai #rsvp-polls legend { font-weight: 600; }
+	.eai #rsvp-polls .help { font-size: var(--sl-text-sm, 0.875rem); color: #4b5563; color: light-dark(#4b5563, #b0b5bd); margin: 0; }
+	[data-theme] .eai #rsvp-polls .help { color: var(--sl-color-gray-2); }
 	.eai #rsvp-polls .rank { list-style: decimal; padding-left: 1.75rem; margin: 0; display: grid; gap: 0.35rem; }
 	.eai #rsvp-polls .rank li { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.4rem 0.6rem; border: 1px solid var(--sl-color-gray-4, #c7cad1); border-radius: 0.3rem; background: var(--sl-color-bg, Canvas); color: var(--sl-color-text, CanvasText); }
 	.eai #rsvp-polls .rank li[draggable='true'] { cursor: grab; }
@@ -26,17 +34,19 @@
 	
 	[data-theme] .eai .help { color: var(--sl-color-gray-2); }
 	.eai .hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
-	.eai .submit { justify-self: start; background: var(--sl-color-accent-high, #0069a0); color: var(--sl-color-black, #fff); border: 0; border-radius: 999px; padding: 0.7rem 1.6rem; font-weight: 700; font-size: var(--sl-text-base, 1rem); cursor: pointer; }
+	.eai .submit { justify-self: start; background: var(--sl-color-accent-high, #0069a0); color: var(--sl-color-black, #fff); border: 2px solid transparent; border-radius: 999px; padding: 0.7rem 1.6rem; font-weight: 700; font-size: var(--sl-text-base, 1rem); cursor: pointer; }
 	[data-theme='light'] .eai .submit { background: #0069a0; color: #fff; }
 	.eai .submit:disabled { opacity: 0.6; cursor: wait; }
 	.eai .status-line { font-weight: 600; }
 	.eai #rsvp-result .notice { padding: 1rem; border: 2px solid var(--sl-color-accent, #0069a0); border-radius: 0.5rem; }
 /* ConfirmPanel */
 .eai .panel { margin-block: 1.5rem; }
-	.eai .big { background: #0069a0; color: #fff; border: 0; border-radius: 0.4rem; padding: 0.9rem 1.8rem; font-size: var(--sl-text-lg, 1.125rem); font-weight: 700; cursor: pointer; }
+	.eai .panel [hidden] { display: none !important; }
+	.eai .big { background: #0069a0; color: #fff; border: 2px solid transparent; border-radius: 0.4rem; padding: 0.9rem 1.8rem; font-size: var(--sl-text-lg, 1.125rem); font-weight: 700; cursor: pointer; }
 	.eai .big:disabled { opacity: 0.6; }
 /* ManagePanel */
-.eai #manage-form { display: grid; gap: 1rem; max-width: 40rem; margin-block: 1.5rem; }
+.eai #manage [hidden] { display: none !important; }
+	.eai #manage-form { display: grid; gap: 1rem; max-width: 40rem; margin-block: 1.5rem; }
 	.eai .summary { font-weight: 600; }
 	.eai .field { display: grid; gap: 0.35rem; border: 0; padding: 0; margin: 0; }
 	.eai .field label:not(.choice), .eai legend { font-weight: 600; }
@@ -72,5 +82,5 @@
 	[data-theme] .eai .help { color: var(--sl-color-gray-2); }
 	.eai .actions { display: flex; gap: 1rem; flex-wrap: wrap; }
 	.eai .actions button:disabled { opacity: 0.6; cursor: wait; }
-	.eai #manage .primary { background: #0069a0; color: #fff; border: 0; border-radius: 999px; padding: 0.6rem 1.4rem; font-weight: 700; cursor: pointer; }
-	.eai .danger { background: transparent; color: var(--sl-color-text, inherit); border: 2px solid #b3261e; border-radius: 999px; padding: 0.5rem 1.2rem; font-weight: 700; cursor: pointer; }
+	.eai #manage .primary { background: #0069a0; color: #fff; border: 2px solid transparent; border-radius: 999px; padding: 0.6rem 1.4rem; font-weight: 700; cursor: pointer; }
+	.eai .danger { background: transparent; color: var(--sl-color-text, inherit); border: 2px solid #b3261e; border-color: light-dark(#b3261e, #ff8a80); border-radius: 999px; padding: 0.5rem 1.2rem; font-weight: 700; cursor: pointer; }

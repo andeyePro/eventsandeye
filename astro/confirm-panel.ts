@@ -5,6 +5,7 @@ const t = q.get('t');
 const notMe = q.get('not-me') === '1';
 if (t) history.replaceState(null, '', location.pathname);
 const btn = document.getElementById('confirm-btn') as HTMLButtonElement;
+btn.hidden = !t;
 const out = document.getElementById('confirm-result')!;
 const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 interface Reply {

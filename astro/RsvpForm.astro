@@ -29,7 +29,9 @@ const siteKey = import.meta.env.PUBLIC_TURNSTILE_ALLOW_TEST_KEY === 'true' ? TES
 if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production builds (or PUBLIC_TURNSTILE_ALLOW_TEST_KEY=true for local test builds).');
 ---
 <form class="rsvp not-content" id="rsvp-form" data-event={event} data-contact={contactHref} data-next={next} method="post" novalidate>
-	<p class="status-line" id="rsvp-availability" aria-live="polite">Checking availability…</p>
+	<noscript><p class="help">Registering needs JavaScript. Please turn it on, or <a href={contactHref}>contact us</a> to register.</p></noscript>
+	<!-- Filled in by the script: without it, "checking availability" would never end. -->
+	<p class="status-line" id="rsvp-availability" aria-live="polite"></p>
 
 	<div class="field">
 		<label for="rsvp-name">Name <span aria-hidden="true">*</span></label>
@@ -93,8 +95,7 @@ if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production buil
 	<p class="help"><span aria-hidden="true">*</span> Required</p>
 	<!-- Disabled until the script runs: without it the form would post personal data to this page and go nowhere. -->
 	<button type="submit" class="submit" disabled>Register</button>
-	<noscript><p class="help">Registering needs JavaScript. Please turn it on, or <a href={contactHref}>contact us</a> to register.</p></noscript>
-	<div id="rsvp-result" role="status" aria-live="polite"></div>
+	<div id="rsvp-result" role="status" aria-live="polite" tabindex="-1"></div>
 	<p class="help beta">Registrations via <a href={sourceUrl}>Events&amp;I</a> (beta): <a href={contactHref}>feedback welcome</a>.</p>
 </form>
 
@@ -105,6 +106,9 @@ if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production buil
 
 <style>
 	.rsvp { display: grid; gap: 1rem; max-width: 40rem; margin-block: 1.5rem; }
+	/* The display rules below would otherwise beat the hidden attribute, and show parts the event does not use. */
+	.rsvp :global([hidden]) { display: none !important; }
+	#rsvp-result.error { color: #b3261e; color: light-dark(#b3261e, #ff8a80); font-weight: 600; }
 	.field { display: grid; gap: 0.35rem; border: 0; padding: 0; margin: 0; }
 	.field label:not(.choice), legend { font-weight: 600; }
 	/* :global because tour and opt-in choices are added by the script after the page loads, and Astro's scoped
@@ -113,6 +117,11 @@ if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production buil
 	.rsvp :global(.choice input) { margin-top: 0.3rem; }
 	#rsvp-tours, #rsvp-optins { display: grid; gap: 0.35rem; }
 	#rsvp-polls { display: grid; gap: 1rem; }
+	/* The poll fieldsets are made by the script, so the scoped .field, legend and .help rules above do not reach them. */
+	#rsvp-polls :global(.field) { display: grid; gap: 0.35rem; border: 0; padding: 0; margin: 0; }
+	#rsvp-polls :global(legend) { font-weight: 600; }
+	#rsvp-polls :global(.help) { font-size: var(--sl-text-sm, 0.875rem); color: #4b5563; color: light-dark(#4b5563, #b0b5bd); margin: 0; }
+	:global([data-theme]) #rsvp-polls :global(.help) { color: var(--sl-color-gray-2); }
 	#rsvp-polls :global(.rank) { list-style: decimal; padding-left: 1.75rem; margin: 0; display: grid; gap: 0.35rem; }
 	#rsvp-polls :global(.rank li) { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.4rem 0.6rem; border: 1px solid var(--sl-color-gray-4, #c7cad1); border-radius: 0.3rem; background: var(--sl-color-bg, Canvas); color: var(--sl-color-text, CanvasText); }
 	#rsvp-polls :global(.rank li[draggable='true']) { cursor: grab; }
@@ -131,7 +140,7 @@ if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production buil
 	/* Starlight's own grey where it is used; elsewhere the plain colours above (var() with light-dark() inside has no fallback in older browsers). */
 	:global([data-theme]) .help { color: var(--sl-color-gray-2); }
 	.hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
-	.submit { justify-self: start; background: var(--sl-color-accent-high, #0069a0); color: var(--sl-color-black, #fff); border: 0; border-radius: 999px; padding: 0.7rem 1.6rem; font-weight: 700; font-size: var(--sl-text-base, 1rem); cursor: pointer; }
+	.submit { justify-self: start; background: var(--sl-color-accent-high, #0069a0); color: var(--sl-color-black, #fff); border: 2px solid transparent; border-radius: 999px; padding: 0.7rem 1.6rem; font-weight: 700; font-size: var(--sl-text-base, 1rem); cursor: pointer; }
 	:global([data-theme='light']) .submit { background: #0069a0; color: #fff; }
 	.submit:disabled { opacity: 0.6; cursor: wait; }
 	.status-line { font-weight: 600; }

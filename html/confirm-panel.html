@@ -2,7 +2,8 @@
 <div class="eai">
 <div class="not-content panel" id="confirm-panel" data-contact="YOUR-CONTACT-LINK">
 	<p id="confirm-intro">Click the button to confirm your email address and complete your registration.</p>
-	<button type="button" id="confirm-btn" class="big">Complete registration</button>
+	<!-- Shown by the script: without it the button would do nothing. -->
+	<button type="button" id="confirm-btn" class="big" hidden>Complete registration</button>
 	<noscript><p>Confirming needs JavaScript. Please turn it on, or <a href="YOUR-CONTACT-LINK">contact us</a>.</p></noscript>
 	<div id="confirm-result" role="status" aria-live="polite" tabindex="-1"></div>
 	<p class="help"><a href="YOUR-CONTACT-LINK">Contact us</a> if something is not right.</p>

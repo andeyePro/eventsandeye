@@ -1,7 +1,9 @@
 <!-- Events&I RsvpForm, generated from astro/RsvpForm.astro by scripts/build-html.mjs: do not edit. Replace the capitalised placeholders. The privacy notice link is /privacy/: change it if yours is elsewhere. -->
 <div class="eai">
 <form class="rsvp not-content" id="rsvp-form" data-event="YOUR-EVENT-ID" data-contact="YOUR-CONTACT-LINK" data-next="/events/check-email/" method="post" novalidate>
-	<p class="status-line" id="rsvp-availability" aria-live="polite">Checking availability…</p>
+	<noscript><p class="help">Registering needs JavaScript. Please turn it on, or <a href="YOUR-CONTACT-LINK">contact us</a> to register.</p></noscript>
+	<!-- Filled in by the script: without it, "checking availability" would never end. -->
+	<p class="status-line" id="rsvp-availability" aria-live="polite"></p>
 
 	<div class="field">
 		<label for="rsvp-name">Name <span aria-hidden="true">*</span></label>
@@ -65,8 +67,7 @@
 	<p class="help"><span aria-hidden="true">*</span> Required</p>
 	<!-- Disabled until the script runs: without it the form would post personal data to this page and go nowhere. -->
 	<button type="submit" class="submit" disabled>Register</button>
-	<noscript><p class="help">Registering needs JavaScript. Please turn it on, or <a href="YOUR-CONTACT-LINK">contact us</a> to register.</p></noscript>
-	<div id="rsvp-result" role="status" aria-live="polite"></div>
+	<div id="rsvp-result" role="status" aria-live="polite" tabindex="-1"></div>
 	<p class="help beta">Registrations via <a href="https://github.com/andeyePro/eventsandeye">Events&amp;I</a> (beta): <a href="YOUR-CONTACT-LINK">feedback welcome</a>.</p>
 </form>
 </div>

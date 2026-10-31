@@ -1,4 +1,4 @@
-# Unit tests, the generated plain HTML check, and the end-to-end test on the starter site in examples/starter.
+# Unit tests, the generated plain HTML check, and the end-to-end and browser tests on the starter site in examples/starter.
 name: Test
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -21,3 +21,7 @@ jobs:
       - run: npm test
       - name: End-to-end test
         run: sh scripts/starter-e2e.sh
+      - name: Browser tests
+        run: |
+          npx playwright-core install --with-deps chromium
+          sh scripts/browser-tests.sh

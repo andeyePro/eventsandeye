@@ -102,7 +102,7 @@ const poweredBy = (b: Brand) =>
 const poweredByText = (b: Brand) => `Registrations via Events&I (beta) – all feedback hugely welcome: ${b.notify}`;
 
 function layout(b: Brand, title: string, bodyHtml: string, extraFooter = ''): string {
-	return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${escapeHtml(title)}</title></head>
+	return `<!doctype html><html lang="en-GB"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${escapeHtml(title)}</title></head>
 <body style="margin:0;background:#f4f7f2;font-family:Arial,Helvetica,sans-serif;color:#111;line-height:1.5">
 <div style="max-width:600px;margin:0 auto;padding:24px">
 <p style="font-size:20px;font-weight:bold;margin:0 0 16px;color:${BLUE}">${escapeHtml(b.org)}</p>
@@ -211,7 +211,7 @@ function calendarText(cal: CalendarBlock | undefined, tz: string): string {
 export function confirmEmail(b: Brand, ev: EventRow, reg: RegistrationRow, sessions: SessionRow[], confirmUrl: string, opts: { unheld?: boolean } = {}): OutgoingEmail {
 	const subject = `Complete your registration: ${ev.title}`;
 	const choices = [
-		...statusLines(reg, sessions).map((l) => l.replace('You have an in-person place.', 'An in-person place is held for you.')
+		...statusLines(reg, sessions).map((l) => l.replace('You have an in-person place.', 'An in-person place is held for you.').replace(/^You have a place at (.*)\.$/, 'A place at $1 is held for you.')
 			.replace('You are on the waiting list for an in-person place. We will email you if a place becomes available.', opts.unheld ? 'An in-person place: places are filling up, so one can be held only once you confirm. If one is free then, it is yours; if not, you join the waiting list.' : '$&').replace(/^You are on the waiting list for (.*?)\.( We will email you if a place becomes available\.)?$/, opts.unheld ? 'For $1, a place if one is free when you confirm; if not, its waiting list.' : '$&').replace('You are booked on', 'A place is held for you on').replace('You are on the waiting list for an in-person place. We will email you if a place becomes available.', 'You are joining the waiting list for an in-person place.').replace(/^You are on the waiting list for (.*)\. We will email you if a place becomes available\.$/, 'You are joining the waiting list for $1.')),
 		reg.share_contact ? 'You chose to share your email address with the hosts of the sessions you attend.' : 'Session hosts will see only your name and whether you have a place.',
 	];

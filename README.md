@@ -220,6 +220,8 @@ E2E_DB=events E2E_SEED=eventsandeye/examples/seed.example.sql E2E_NOTIFY=<your N
 
 It loads `/`, `/privacy/`, `/events/confirm/` and `/events/manage/` from your build; set `E2E_PAGES` to a comma-separated list if your site's pages differ. The comment at the top of the test lists every setting.
 
+**Browser tests.** `sh scripts/browser-tests.sh` drives the booking form, the confirm and manage pages, the admin page and the plain HTML versions in headless Chromium, on a throwaway copy of the starter site: keyboard use, error messages, phones, dark mode, large text and an automated accessibility check (axe-core). Install the browser once with `npx playwright-core install chromium`, or set `CHROMIUM_PATH` to one you have.
+
 **Calendar caveat.** How an invitation is shown depends on the recipient's email app: Gmail, Outlook and Apple Mail usually show it as an invitation and add it to the calendar, but some apps only offer the file. The add-to-calendar links and `.ics` download cover the rest. Many calendar apps also apply their own reminder settings instead of the ones in the invitation.
 
 ## Settings reference

@@ -6,7 +6,8 @@ const { contactHref } = Astro.props;
 ---
 <div class="not-content panel" id="confirm-panel" data-contact={contactHref}>
 	<p id="confirm-intro">Click the button to confirm your email address and complete your registration.</p>
-	<button type="button" id="confirm-btn" class="big">Complete registration</button>
+	<!-- Shown by the script: without it the button would do nothing. -->
+	<button type="button" id="confirm-btn" class="big" hidden>Complete registration</button>
 	<noscript><p>Confirming needs JavaScript. Please turn it on, or <a href={contactHref}>contact us</a>.</p></noscript>
 	<div id="confirm-result" role="status" aria-live="polite" tabindex="-1"></div>
 	<p class="help"><a href={contactHref}>Contact us</a> if something is not right.</p>
@@ -16,6 +17,7 @@ const { contactHref } = Astro.props;
 </script>
 <style>
 	.panel { margin-block: 1.5rem; }
-	.big { background: #0069a0; color: #fff; border: 0; border-radius: 0.4rem; padding: 0.9rem 1.8rem; font-size: var(--sl-text-lg, 1.125rem); font-weight: 700; cursor: pointer; }
+	.panel :global([hidden]) { display: none !important; }
+	.big { background: #0069a0; color: #fff; border: 2px solid transparent; border-radius: 0.4rem; padding: 0.9rem 1.8rem; font-size: var(--sl-text-lg, 1.125rem); font-weight: 700; cursor: pointer; }
 	.big:disabled { opacity: 0.6; }
 </style>

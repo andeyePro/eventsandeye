@@ -8,6 +8,6 @@ export const onRequestGet = handle(async ({ env, request }) => {
 	const url = new URL(request.url);
 	const id = await readToken(env, 'calendar', url.searchParams.get('t'));
 	if (!id) throw new UserError('This link is not valid.', 404);
-	const ics = await calendarFile(env, id, url.searchParams.get('entry') || '');
-	return new Response(ics, { headers: { 'content-type': 'text/calendar; charset=utf-8', 'content-disposition': 'attachment; filename="event.ics"', 'cache-control': 'no-store' } });
+	const { ics, filename } = await calendarFile(env, id, url.searchParams.get('entry') || '');
+	return new Response(ics, { headers: { 'content-type': 'text/calendar; charset=utf-8', 'content-disposition': `attachment; filename="${filename}"`, 'cache-control': 'no-store' } });
 });

@@ -5,7 +5,7 @@ Thanks for looking. Agents and humans alike: [AGENTS.md](AGENTS.md) is the short
 ## The short version
 
 - Open an issue before a large change, so nobody builds the same thing twice.
-- Run the unit tests (`npm install`, then `npm test`) and the end-to-end test before you open a pull request. The end-to-end test needs no site of your own: `sh scripts/starter-e2e.sh` builds a throwaway copy of the starter site in `examples/starter/` around your working tree and runs it (set `STARTER_DIR` to keep the copy and skip `npm install` next time). GitHub Actions runs both on every pull request. To run it from a site that hosts Events&I instead, see the README.
+- Run the unit tests (`npm install`, then `npm test`) and the end-to-end test before you open a pull request. The end-to-end test needs no site of your own: `sh scripts/starter-e2e.sh` builds a throwaway copy of the starter site in `examples/starter/` around your working tree and runs it (set `STARTER_DIR` to keep the copy and skip `npm install` next time). If you change a component, the admin page or anything else people click, also run the browser tests: `npx playwright-core install chromium`, then `sh scripts/browser-tests.sh` (or name the files in `tests/browser/` to run only those). GitHub Actions runs all three on every pull request. To run it from a site that hosts Events&I instead, see the README.
 
 - Add a check to `tests/e2e.mjs` for every behaviour you add or change.
 - Sign the CLA when the bot asks on your first pull request, and add your name to `CONTRIBUTORS.md` in your own commit.

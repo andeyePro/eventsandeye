@@ -243,8 +243,12 @@ try {
 
 	console.log('\nValidation and spam protection');
 	const before = (await outbox()).length;
-	check('missing consent → 400', (await register({ consent: false })).status === 400);
-	check('bad email → 400', (await register({ email: 'not-an-email' })).status === 400);
+	r = await register({ consent: false });
+	check('missing consent → 400, naming the consent box so the form can mark it', r.status === 400 && r.data.field === 'consent', JSON.stringify(r.data));
+	r = await register({ email: 'not-an-email' });
+	check('bad email → 400, naming the email field', r.status === 400 && r.data.field === 'email', JSON.stringify(r.data));
+	r = await register({ name: '   ' });
+	check('a name of spaces → 400, naming the name field', r.status === 400 && r.data.field === 'name', JSON.stringify(r.data));
 	check('missing Turnstile token → 403', (await register({ 'cf-turnstile-response': '' })).status === 403);
 	const honeyStart = Date.now();
 	r = await register({ website: 'http://spam.example', email: 'bot@example.org' });
@@ -268,6 +272,7 @@ try {
 	const aliceConfirm = tokenFrom(mails[0].text_body, 'confirm');
 	check('confirm link present; no manage link before the address is confirmed', !!aliceConfirm && !tokenFrom(mails[0].text_body, 'manage'));
 	check('confirm email lists the choices being confirmed, without repeating the typed name', /You are confirming:/.test(mails[0].text_body) && /10:30 lab tour/.test(mails[0].text_body) && /share your email address with the hosts/.test(mails[0].text_body) && !/Alice/.test(mails[0].text_body));
+	check('confirm email words the dinner as held, not already had', /A place at dinner is held for you\./i.test(mails[0].text_body) && !/You have a place at/.test(mails[0].text_body), mails[0].text_body.slice(0, 900));
 	// The link is one long word: unbroken, it widens the email past a phone screen.
 	check('the confirm email\'s copy-this-link fallback wraps on a phone', /<p style="[^"]*word-break:break-all">If the button does not work/.test(mails[0].html_body));
 	check('confirm email offers a link to delete a registration the recipient did not make', /not-me=1/.test(mails[0].text_body) && /click here to delete the registration/.test(mails[0].html_body));
@@ -453,6 +458,9 @@ try {
 	const dl = await fetch(r.data.calendar[0].url);
 	const dlText = await dl.text();
 	check('.ics download works (METHOD:PUBLISH, text/calendar, with the organiser)', dl.status === 200 && /text\/calendar/.test(dl.headers.get('content-type')) && /METHOD:PUBLISH/.test(dlText) && /BEGIN:VALARM/.test(dlText) && /ORGANIZER;CN="AMYBO"/.test(unfold(dlText)));
+	const dlName = (h) => /filename="([^"]*)"/.exec(h.get('content-disposition'))?.[1];
+	const dlDinner = await fetch(r.data.calendar[1].url);
+	check('.ics downloads are named from the event and the entry, so the day and the dinner differ', /^[\w.-]+\.ics$/.test(dlName(dl.headers) ?? '') && dlName(dl.headers).includes(EVENT) && dlName(dl.headers) !== dlName(dlDinner.headers) && dlName(dlDinner.headers).includes(r.data.calendar[1].key), `${dlName(dl.headers)} ${dlName(dlDinner.headers)}`);
 	let n = (await mailsTo(alice)).length;
 	r = await req('POST', '/api/rsvp/manage', { t: aliceManage, name: 'Alice', attendance: 'in_person', tour_id: TOUR1, affiliation: 'Lab A', needs: 'Vegan, step-free access', share_contact: true });
 	check('changing only dietary needs sends no calendar email', r.data.ok && (await mailsTo(alice)).length === n);
@@ -851,6 +859,31 @@ try {
 		check('an offset is not a time zone', (await req('POST', EV, { ...base, id: 'e2e-offset', timezone: '+01:00' }, ADMIN)).status === 400);
 		check('registration must close before the event ends', (await req('POST', EV, { ...base, id: 'e2e-late', deadline: at(7) }, ADMIN)).status === 400);
 		check('a session days away from the event is refused', (await req('POST', EV, { action: 'add_session', event: 'e2e-new-event', label: 'Lost', starts_at: at(24 * 10), ends_at: at(24 * 10 + 1) }, ADMIN)).status === 400);
+		{
+			// Moving an event to another day takes its sessions and registration deadline with it, at the same local times.
+			const was = (await req('GET', `/api/admin/summary?event=e2e-new-event`, undefined, ADMIN)).data;
+			const din = was.sessions.find((x) => x.label === 'Dinner');
+			r = await req('POST', EV, { action: 'update', event: 'e2e-new-event', starts_at: at(24 * 7), ends_at: at(24 * 7 + 6) }, ADMIN);
+			const now = (await req('GET', `/api/admin/summary?event=e2e-new-event`, undefined, ADMIN)).data;
+			const din2 = now.sessions.find((x) => x.label === 'Dinner');
+			const aWeek = (a, b) => Math.abs(Date.parse(b) - Date.parse(a) - 7 * 86400_000) <= 3600_000 && local(a).slice(9) === local(b).slice(9);
+			check('moving an event a week moves its sessions a week, at the same local time', r.data.ok && r.data.sessions_moved === 1 && aWeek(din.starts_at, din2.starts_at) && aWeek(din.ends_at, din2.ends_at), JSON.stringify([r.data, din.starts_at, din2?.starts_at]));
+			check('…and its registration deadline', aWeek(was.event.deadline, now.event.deadline), JSON.stringify([was.event.deadline, now.event.deadline]));
+			// A new start on the same day is a correction of the time, not a move: the sessions stay put.
+			const nudge = +local(now.event.starts_at).slice(9, 11) >= 1 ? -1800_000 : 1800_000;
+			r = await req('POST', EV, { action: 'update', event: 'e2e-new-event', starts_at: new Date(Date.parse(now.event.starts_at) + nudge).toISOString() }, ADMIN);
+			const nudged = (await req('GET', `/api/admin/summary?event=e2e-new-event`, undefined, ADMIN)).data;
+			check('a new start time on the same day leaves the sessions and deadline where they are', r.data.ok && !r.data.sessions_moved && nudged.sessions.find((x) => x.label === 'Dinner').starts_at === din2.starts_at && nudged.event.deadline === now.event.deadline, JSON.stringify(r.data));
+			r = await req('POST', '/api/admin/settings', { event: 'e2e-new-event', deadline: new Date(Date.parse(now.event.ends_at) + 86400_000).toISOString() }, ADMIN);
+			check('settings refuse a registration deadline after the event ends', r.status === 400 && /before the event ends/.test(r.data.error) && (await req('GET', `/api/admin/summary?event=e2e-new-event`, undefined, ADMIN)).data.event.deadline === now.event.deadline, JSON.stringify(r.data));
+			r = await req('POST', '/api/admin/sessions', { event: 'e2e-new-event', sessions: [{ id: din2.id, starts_at: at(24 * 30), ends_at: at(24 * 30 + 2) }] }, ADMIN);
+			check('the sessions editor refuses a session moved days outside the event', r.status === 400 && /during the event/.test(r.data.error), JSON.stringify(r.data));
+			r = await req('POST', EV, { action: 'update', event: 'e2e-new-event', starts_at: was.event.starts_at, ends_at: was.event.ends_at }, ADMIN);
+			const back = (await req('GET', `/api/admin/summary?event=e2e-new-event`, undefined, ADMIN)).data;
+			// To the second: moved times are rebuilt from their wall-clock time, which has no milliseconds.
+			const same = (a, b) => Math.abs(Date.parse(a) - Date.parse(b)) < 1000;
+			check('moving it back brings everything back', same(back.sessions.find((x) => x.label === 'Dinner').starts_at, din.starts_at) && same(back.event.deadline, was.event.deadline), JSON.stringify([back.event.deadline, was.event.deadline]));
+		}
 		r = await req('POST', EV, { action: 'update', event: EVENT, ends_at: new Date(Date.now() - 31 * 86400_000).toISOString(), starts_at: new Date(Date.now() - 32 * 86400_000).toISOString(), deadline: new Date(Date.now() - 33 * 86400_000).toISOString() }, ADMIN);
 		check('an event with registrations cannot have its end moved into the past (retention would delete everyone)', r.status === 409 && (await req('GET', `/api/admin/summary?event=${EVENT}`, undefined, ADMIN)).data.event.ends_at === seeded.event.ends_at, JSON.stringify(r.data));
 		check('an opt-in session someone signed up for cannot be deleted', (await req('POST', EV, { action: 'delete_session', session: DINNER }, ADMIN)).status === 409);
@@ -1046,6 +1079,9 @@ try {
 	check('organiser notified of the cancellation', (await mailsTo(NOTIFY)).some((x) => /Cancellation/.test(x.subject) && /Carol/.test(x.text_body)));
 	r = await req('POST', '/api/rsvp/manage', { t: bobManage, name: 'Bob', attendance: 'remote', tour_id: 'none' });
 	check('switching to remote drops a tour whose booking has closed', r.data.ok && r.data.registration.attendance === 'remote' && r.data.registration.tour_id === null, JSON.stringify(r.data));
+	r = await req('POST', '/api/rsvp/manage', { t: bobManage, name: 'Bob', attendance: 'extras', optins: [DINNER] });
+	check('after the registration deadline, a remote attendee cannot move to just the dinner → 409', r.status === 409 && /closed/.test(r.data.error ?? ''), JSON.stringify(r.data));
+	check('…and stays remote', (await req('GET', `/api/rsvp/manage?t=${encodeURIComponent(bobManage)}`)).data.registration.attendance === 'remote');
 	m = await last(bob);
 	check('switching to remote says so, releases the in-person place, and sends the remote instructions', /You have changed to joining remotely/.test(m.text_body) && /in-person place has been deleted/.test(m.text_body) && /Joining instructions/.test(m.subject), m.subject);
 	check('online calendar entries drop the place from the event name', m.att.some((a) => /METHOD:REQUEST/.test(a.content) && /SUMMARY:[^\r\n]*\(online\)/.test(a.content) && !/SUMMARY:[^\r\n]*, London/.test(a.content)) && m.att.some((a) => /METHOD:CANCEL/.test(a.content)), m.att.map((a) => (/SUMMARY:[^\r\n]*/.exec(a.content) || [''])[0]).join(' | '));

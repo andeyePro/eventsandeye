@@ -1,7 +1,8 @@
 <!-- Events&I ManagePanel, generated from astro/ManagePanel.astro by scripts/build-html.mjs: do not edit. -->
 <div class="eai">
 <div class="not-content" id="manage">
-	<p id="manage-loading" role="status">Loading your registration…</p>
+	<!-- Shown by the script: without it, "loading" would never end. -->
+	<p id="manage-loading" role="status" hidden>Loading your registration…</p>
 	<noscript><p>Managing your registration needs JavaScript. Please turn it on, or contact the organisers.</p></noscript>
 	<form id="manage-form" hidden novalidate>
 		<p id="manage-summary" class="summary"></p>
@@ -45,7 +46,7 @@
 			<button type="submit" id="m-save" class="primary">Save changes</button>
 			<button type="button" id="m-cancel" class="danger">Cancel my registration</button>
 		</div>
-		<div id="manage-result" role="status" aria-live="polite"></div>
+		<div id="manage-result" role="status" aria-live="polite" tabindex="-1"></div>
 	</form>
 	<div id="m-polls" hidden></div>
 </div>

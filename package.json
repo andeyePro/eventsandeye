@@ -10,5 +10,5 @@
   "private": true,
   "engines": { "node": ">=22" },
   "scripts": { "test": "node --test tests/markdown.test.mjs tests/inbound.test.mjs tests/polls.test.mjs tests/turnstile.test.mjs tests/ics.test.mjs tests/components.test.mjs tests/dates.test.mjs tests/health.test.mjs tests/access.test.mjs tests/register.test.mjs" },
-  "devDependencies": { "esbuild": "0.27.7" }
+  "devDependencies": { "axe-core": "4.11.0", "esbuild": "0.27.7", "playwright-core": "1.63.0" }
 }

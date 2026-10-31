@@ -26,7 +26,8 @@ const MAX_REMINDERS_A_DAY = 3;
 const MAX_CHANGE_EMAILS_PER_HOUR = 10;
 
 export class UserError extends Error {
-	constructor(message: string, public status = 400) {
+	/** field names the form input at fault, so the form can mark and focus it. */
+	constructor(message: string, public status = 400, public field?: string) {
 		super(message);
 	}
 }
@@ -189,11 +190,11 @@ const truthy = (v: unknown) => v === true || v === 'on' || v === 'true' || v ===
 
 function parseCommon(input: RegistrationInput, sessions: SessionRow[]) {
 	const name = cleanLine(input.name, 120);
-	if (!name) throw new UserError('Please enter your name.');
+	if (!name) throw new UserError('Please enter your name.', 400, 'name');
 	// 'extras' (just the opt-in sessions, e.g. only the dinner) is stored as in person with no place: see mode.ts.
 	const extras = input.attendance === 'extras';
 	const attendance = input.attendance === 'remote' ? 'remote' : input.attendance === 'in_person' || extras ? 'in_person' : null;
-	if (!attendance) throw new UserError('Please choose how you will attend.');
+	if (!attendance) throw new UserError('Please choose how you will attend.', 400, 'attendance');
 	let tour_id: string | null = null;
 	if (attendance === 'in_person' && !extras && input.tour_id && input.tour_id !== 'none') {
 		const t = tourSessions(sessions).find((x) => x.id === input.tour_id);
@@ -202,7 +203,7 @@ function parseCommon(input: RegistrationInput, sessions: SessionRow[]) {
 	}
 	const asked = Array.isArray(input.optins) ? input.optins.map(String) : typeof input.optins === 'string' && input.optins ? input.optins.split(',') : [];
 	const optins = attendance === 'in_person' ? sessions.filter((s) => s.optin && asked.includes(s.id)).map((s) => s.id).join(',') || null : null;
-	if (extras && !optins) throw new UserError('Please tick what you would like to join us for.');
+	if (extras && !optins) throw new UserError('Please tick what you would like to join us for.', 400, 'optins');
 	return {
 		name, attendance, extras, tour_id, optins, affiliation: cleanLine(input.affiliation, 200), needs: cleanText(input.needs, 1000), extra_answer: cleanText(input.extra_answer, 500),
 		share_contact: truthy(input.share_contact) ? 1 : 0,
@@ -217,11 +218,11 @@ function parseCommon(input: RegistrationInput, sessions: SessionRow[]) {
 export async function register(env: Env, eventId: string, input: RegistrationInput) {
 	const ev = await getEvent(env, eventId);
 	if (!registrationOpen(ev)) throw new UserError('Registration for this event has closed.', 409);
-	if (!truthy(input.consent)) throw new UserError('Please tick the consent box to register.');
+	if (!truthy(input.consent)) throw new UserError('Please tick the consent box to register.', 400, 'consent');
 	const sessions = await getSessions(env, ev.id);
 	const c = parseCommon(input, sessions);
 	const email = cleanText(input.email, 254)?.toLowerCase() ?? '';
-	if (!EMAIL_RE.test(email)) throw new UserError('Please enter a valid email address.');
+	if (!EMAIL_RE.test(email)) throw new UserError('Please enter a valid email address.', 400, 'email');
 
 	// Checked before looking the address up, so the answer is the same whether or not the address is already registered.
 	const tour = c.tour_id ? sessions.find((s) => s.id === c.tour_id)! : null;
@@ -496,6 +497,9 @@ export async function updateRegistration(env: Env, id: string, input: Registrati
 	const cap = await capacity(env, ev, sessions, now);
 
 	let place = reg.place, waitlist_since = reg.waitlist_since;
+	// The opt-in sessions have places of their own, so after the close the move from remote to just the extras is refused
+	// like the move to the full day. Someone already in person may still tick opt-ins (each session has its own deadline).
+	if (c.extras && reg.attendance === 'remote' && !registrationOpen(ev)) throw new UserError('Registration has closed, so places can no longer be added. Please email ' + notifyEmail(env) + '.', 409);
 	if (c.attendance === 'remote' || c.extras) {
 		place = null;
 		waitlist_since = null;
@@ -609,7 +613,9 @@ export async function calendarFile(env: Env, id: string, key: string) {
 	const sent = parseState(reg.calendar_state)[key];
 	const entry = sent ? { ...fresh, uid: sent.uid } : fresh;
 	const seq = !sent ? 0 : sent.hash === await hashEntry(entry) ? sent.seq : sent.seq + 1;
-	return buildIcs({ method: 'PUBLISH', entry, sequence: seq, organizer: { name: orgName(env), email: fromAddress(env) }, tz: ev.timezone });
+	const ics = buildIcs({ method: 'PUBLISH', entry, sequence: seq, organizer: { name: orgName(env), email: fromAddress(env) }, tz: ev.timezone });
+	// Named from the event and the entry so the day and the dinner do not both save as "event.ics".
+	return { ics, filename: `${ev.id}-${key}.ics`.replace(/[^A-Za-z0-9._-]+/g, '-') };
 }
 
 // ---------- admin ----------
@@ -964,6 +970,8 @@ export async function updateSettings(env: Env, eventId: string, input: Record<st
 	const max = input.in_person_max === undefined ? ev.in_person_max : Number(input.in_person_max);
 	if (!Number.isInteger(max) || max < 0 || max > 10000) throw new UserError('In-person maximum must be a whole number.');
 	const deadline = input.deadline === undefined ? ev.deadline : optDate(input.deadline, 'deadline') ?? ev.deadline;
+	// As when the event is created or edited: a deadline after the end would leave registration open after the event.
+	if (deadline !== ev.deadline && Date.parse(deadline) > Date.parse(ev.ends_at)) throw new UserError('Registration must close before the event ends.');
 	const travel = input.travel_minutes === undefined ? ev.travel_minutes : Number(input.travel_minutes);
 	if (!Number.isInteger(travel) || travel < 0 || travel > 1440) throw new UserError('Travel time must be a whole number of minutes.');
 	const hostMinutes = input.host_list_minutes === undefined ? ev.host_list_minutes ?? 0 : Number(input.host_list_minutes);
@@ -992,6 +1000,13 @@ export async function updateSessions(env: Env, eventId: string, input: Record<st
 		if (e.starts_at !== undefined) s.starts_at = optDate(e.starts_at, 'start time') ?? s.starts_at;
 		if (e.ends_at !== undefined) s.ends_at = optDate(e.ends_at, 'end time') ?? s.ends_at;
 		if (Date.parse(s.ends_at) <= Date.parse(s.starts_at)) throw new UserError(`${s.label}: the end must be after the start.`);
+		// The rule for adding a session, a day's slack either side; only for a time changed now, so an old session
+		// outside it can still have its other details edited.
+		const old = sessions.find((x) => x.id === s.id)!;
+		if ((s.starts_at !== old.starts_at || s.ends_at !== old.ends_at)
+			&& (Date.parse(s.ends_at) < Date.parse(ev.starts_at) - 86400_000 || Date.parse(s.starts_at) > Date.parse(ev.ends_at) + 86400_000)) {
+			throw new UserError(`${s.label}: the session must be during the event, give or take a day.`);
+		}
 		if (e.location !== undefined) s.location = cleanLine(e.location, 300);
 		if (e.online_url !== undefined) {
 			const u = cleanText(e.online_url, 500);

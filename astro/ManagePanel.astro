@@ -12,7 +12,8 @@ interface Props {
 const { inPersonLabel, remoteLabel, tourLegend } = Astro.props;
 ---
 <div class="not-content" id="manage">
-	<p id="manage-loading" role="status">Loading your registration…</p>
+	<!-- Shown by the script: without it, "loading" would never end. -->
+	<p id="manage-loading" role="status" hidden>Loading your registration…</p>
 	<noscript><p>Managing your registration needs JavaScript. Please turn it on, or contact the organisers.</p></noscript>
 	<form id="manage-form" hidden novalidate>
 		<p id="manage-summary" class="summary"></p>
@@ -56,7 +57,7 @@ const { inPersonLabel, remoteLabel, tourLegend } = Astro.props;
 			<button type="submit" id="m-save" class="primary">Save changes</button>
 			<button type="button" id="m-cancel" class="danger">Cancel my registration</button>
 		</div>
-		<div id="manage-result" role="status" aria-live="polite"></div>
+		<div id="manage-result" role="status" aria-live="polite" tabindex="-1"></div>
 	</form>
 	<div id="m-polls" hidden></div>
 </div>
@@ -64,6 +65,8 @@ const { inPersonLabel, remoteLabel, tourLegend } = Astro.props;
 	import './manage-panel';
 </script>
 <style>
+	/* The display rules below would otherwise beat the hidden attribute, and show parts the registration does not use. */
+	#manage :global([hidden]) { display: none !important; }
 	#manage-form { display: grid; gap: 1rem; max-width: 40rem; margin-block: 1.5rem; }
 	.summary { font-weight: 600; }
 	.field { display: grid; gap: 0.35rem; border: 0; padding: 0; margin: 0; }
@@ -100,6 +103,6 @@ const { inPersonLabel, remoteLabel, tourLegend } = Astro.props;
 	:global([data-theme]) .help { color: var(--sl-color-gray-2); }
 	.actions { display: flex; gap: 1rem; flex-wrap: wrap; }
 	.actions button:disabled { opacity: 0.6; cursor: wait; }
-	#manage :global(.primary) { background: #0069a0; color: #fff; border: 0; border-radius: 999px; padding: 0.6rem 1.4rem; font-weight: 700; cursor: pointer; }
-	.danger { background: transparent; color: var(--sl-color-text, inherit); border: 2px solid #b3261e; border-radius: 999px; padding: 0.5rem 1.2rem; font-weight: 700; cursor: pointer; }
+	#manage :global(.primary) { background: #0069a0; color: #fff; border: 2px solid transparent; border-radius: 999px; padding: 0.6rem 1.4rem; font-weight: 700; cursor: pointer; }
+	.danger { background: transparent; color: var(--sl-color-text, inherit); border: 2px solid #b3261e; border-color: light-dark(#b3261e, #ff8a80); border-radius: 999px; padding: 0.5rem 1.2rem; font-weight: 700; cursor: pointer; }
 </style>

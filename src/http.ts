@@ -12,7 +12,7 @@ export function handle(fn: (ctx: Ctx) => Promise<Response | unknown>) {
 			const r = await fn(ctx);
 			return r instanceof Response ? r : json(r);
 		} catch (e) {
-			if (e instanceof UserError) return bad(e.message, e.status);
+			if (e instanceof UserError) return bad(e.message, e.status, e.field);
 			console.error(e);
 			return bad(`Something went wrong. Please try again, or email ${notifyEmail(ctx.env)}.`, 500);
 		}
