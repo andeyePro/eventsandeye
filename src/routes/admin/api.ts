@@ -29,7 +29,7 @@ export const sessions = handle(async ({ env, request }) => {
  * organiser knows is coming. Confirming shares this endpoint so host sites need no new function file. */
 export const promoteHandler = handle(async ({ env, request }) => {
 	const body = await readJson(request);
-	if (body.what === 'confirm') return adminConfirm(env, String(body.id || ''));
+	if (body.what === 'confirm') return adminConfirm(env, String(body.id || ''), body);
 	return promote(env, String(body.id || ''), body.what === 'tour' ? 'tour' : body.what === 'optin' ? 'optin' : 'event', String(body.session || ''));
 });
 

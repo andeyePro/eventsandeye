@@ -1079,19 +1079,47 @@ try {
 
 	console.log('\nAdmin confirms for someone who said they are coming');
 	const ivy = 'ivy@example.org';
+	const pendingId = async (email) => (await req('GET', `/api/admin/summary?event=${EVENT}`, undefined, ADMIN)).data.registrations.find((x) => x.email === email)?.id;
 	await register({ name: 'Ivy', email: ivy, attendance: 'remote' });
-	const ivyId = (await req('GET', `/api/admin/summary?event=${EVENT}`, undefined, ADMIN)).data.registrations.find((x) => x.email === ivy).id;
-	check('confirming for someone needs Access', (await req('POST', '/api/admin/promote', { id: ivyId, what: 'confirm' })).status === 401);
+	const ivyId = await pendingId(ivy);
+	check('confirming for someone needs Access', (await req('POST', '/api/admin/promote', { id: ivyId, what: 'confirm', email: ivy })).status === 401);
 	n = (await mailsTo(ivy)).length;
-	r = await req('POST', '/api/admin/promote', { id: ivyId, what: 'confirm' }, ADMIN);
+	check('…and the address they gave the organiser', (await req('POST', '/api/admin/promote', { id: ivyId, what: 'confirm' }, ADMIN)).status === 400);
+	r = await req('POST', '/api/admin/promote', { id: ivyId, what: 'confirm', email: ' IVY@example.org ' }, ADMIN);
 	m = await last(ivy);
-	check('the organiser confirms an unconfirmed registration: joining instructions, saying it was confirmed for them', r.data.ok && r.data.already === false && r.data.registration.status === 'confirmed'
+	check('the organiser confirms with the matching address (any case): joining instructions, saying it was confirmed for them', r.data.ok && r.data.already === false && r.data.registration.status === 'confirmed'
 		&& (await mailsTo(ivy)).length === n + 1 && /confirmed your registration[^\n]*for you, so there is no need to use the link/.test(m.text_body) && m.att.length > 0, JSON.stringify(r.data) + ' | ' + m?.text_body.slice(0, 300));
 	check('…and shows as confirmed on the admin page', (await req('GET', `/api/admin/summary?event=${EVENT}`, undefined, ADMIN)).data.registrations.find((x) => x.email === ivy).status === 'confirmed');
-	r = await req('POST', '/api/admin/promote', { id: ivyId, what: 'confirm' }, ADMIN);
+	r = await req('POST', '/api/admin/promote', { id: ivyId, what: 'confirm', email: ivy }, ADMIN);
 	check('confirming again sends nothing more', r.data.ok && r.data.already === true && (await mailsTo(ivy)).length === n + 1, JSON.stringify(r.data));
-	check('confirming a registration that no longer exists → 404', (await req('POST', '/api/admin/promote', { id: 'nope', what: 'confirm' }, ADMIN)).status === 404);
+	check('confirming a registration that no longer exists → 404', (await req('POST', '/api/admin/promote', { id: 'nope', what: 'confirm', email: ivy }, ADMIN)).status === 404);
 	await req('DELETE', '/api/admin/registration', { id: ivyId }, ADMIN);
+
+	// A typo in the form: one character out.
+	const typo = 'jon@example.org', john = 'john@example.org';
+	await register({ name: 'John', email: typo, attendance: 'remote' });
+	const johnId = await pendingId(typo);
+	r = await req('POST', '/api/admin/promote', { id: johnId, what: 'confirm', email: john }, ADMIN);
+	check('a pasted address that differs is refused until the organiser says theirs was mistyped', r.status === 409 && r.data.field === 'email' && /jon@example\.org/.test(r.data.error) && (await mailsTo(john)).length === 0, JSON.stringify(r.data));
+	r = await req('POST', '/api/admin/promote', { id: johnId, what: 'confirm', email: john, fix_email: true }, ADMIN);
+	m = await last(john);
+	check('one character out: corrected, confirmed, and the joining instructions go to the corrected address only', r.data.ok && r.data.registration.status === 'confirmed' && m && /for you, so there is no need/.test(m.text_body)
+		&& (await mailsTo(typo)).length === 1 && await pendingId(john) === johnId && !(await pendingId(typo)), JSON.stringify(r.data));
+	await req('DELETE', '/api/admin/registration', { id: johnId }, ADMIN);
+
+	// Further out: may be somebody else, so the organiser must have their permission.
+	const far = 'kim.typed@example.org', kim = 'kim@example.net';
+	await register({ name: 'Kim', email: far, attendance: 'remote' });
+	const kimId = await pendingId(far);
+	r = await req('POST', '/api/admin/promote', { id: kimId, what: 'confirm', email: kim, fix_email: true }, ADMIN);
+	check('more than one character out: refused without the owner\'s permission', r.status === 409 && /permission/.test(r.data.error) && (await mailsTo(kim)).length === 0, JSON.stringify(r.data));
+	await register({ name: 'Kim again', email: kim, attendance: 'remote' });
+	r = await req('POST', '/api/admin/promote', { id: kimId, what: 'confirm', email: kim, fix_email: true, permission: true }, ADMIN);
+	check('…and refused when the corrected address already has a registration', r.status === 409 && /already has a registration/.test(r.data.error), JSON.stringify(r.data));
+	await req('DELETE', '/api/admin/registration', { id: await pendingId(kim) }, ADMIN);
+	r = await req('POST', '/api/admin/promote', { id: kimId, what: 'confirm', email: kim, fix_email: true, permission: true }, ADMIN);
+	check('…with permission: corrected and confirmed', r.data.ok && r.data.registration.status === 'confirmed' && /for you, so there is no need/.test((await last(kim)).text_body), JSON.stringify(r.data));
+	await req('DELETE', '/api/admin/registration', { id: kimId }, ADMIN);
 
 	r = await req('POST', '/api/admin/settings', { event: EVENT, deadline: new Date(Date.now() - 60_000).toISOString() }, ADMIN);
 	check('registration deadline moved into the past', r.data.ok);

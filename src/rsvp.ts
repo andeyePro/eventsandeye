@@ -13,7 +13,7 @@ import { mdToHtml, mdToText } from './markdown';
 import { adminPolls, parseBookingBallots, saveBookingBallots, unansweredPolls, voterPolls } from './polls';
 import { recordCronRun } from './health';
 import { makeToken } from './tokens';
-import { cleanLine, cleanText, EMAIL_RE, escapeHtml, nowIso, randomToken, sha256, ukDateTime } from './util';
+import { cleanLine, cleanText, editDistance, EMAIL_RE, escapeHtml, nowIso, randomToken, sha256, ukDateTime } from './util';
 
 const HOUR = 3600_000;
 export const MAX_HOLD_MS = 48 * HOUR;
@@ -624,10 +624,29 @@ export async function calendarFile(env: Env, id: string, key: string) {
 // ---------- admin ----------
 
 /** The organiser confirms an unconfirmed registration for someone they know is coming: same place rules and the same
- * email as pressing the button, opening with a line saying who confirmed it. Already confirmed is not an error. */
-export async function adminConfirm(env: Env, id: string) {
+ * email as pressing the button, opening with a line saying who confirmed it. Already confirmed is not an error.
+ * The organiser pastes the address the person gave them, so a typo in the form cannot send joining instructions to a
+ * stranger. If it differs, they must say the typed one was wrong (fix_email), and if it differs by more than one
+ * character, which may well be someone else's address, that its owner has agreed to be registered (permission). */
+export async function adminConfirm(env: Env, id: string, input: { email?: unknown; fix_email?: unknown; permission?: unknown }) {
 	const reg = await getRegistration(env, id);
 	if (!reg) throw new UserError('This registration no longer exists: it may have lapsed or been removed.', 404);
+	const email = cleanText(input.email, 254)?.toLowerCase() ?? '';
+	if (!EMAIL_RE.test(email)) throw new UserError('Please paste the email address the person gave you.', 400, 'email');
+	if (reg.status === 'confirmed') return confirm(env, id);
+	if (email !== reg.email) {
+		if (!truthy(input.fix_email)) throw new UserError(`That is not the address they registered with (${reg.email}). Confirm that theirs was mistyped to correct it.`, 409, 'email');
+		if (editDistance(email, reg.email) > 1 && !truthy(input.permission)) {
+			throw new UserError('The addresses differ by more than one character, so this may be someone else: confirm you have their permission to register them.', 409, 'email');
+		}
+		try {
+			const r = await env.DB.prepare("UPDATE registrations SET email = ?, updated_at = ? WHERE id = ? AND status = 'pending'").bind(email, nowIso(), id).run();
+			if (!r.meta.changes) return confirm(env, id);
+		} catch (e) {
+			if (/UNIQUE/i.test(String(e))) throw new UserError(`${email} already has a registration for this event. Remove one of the two first.`, 409, 'email');
+			throw e;
+		}
+	}
 	return confirm(env, id, { byOrganiser: true });
 }
 

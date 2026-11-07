@@ -161,7 +161,7 @@ const HTML = /* html */ `<!doctype html>
 	<section aria-labelledby="h-regs">
 		<h2 id="h-regs" tabindex="-1">Registrations</h2>
 		<p><a class="button secondary" id="csv-link" href="#">Download CSV</a> <a class="button secondary" id="log-link" href="#">Download sent log (markdown)</a></p>
-		<div style="overflow-x:auto" tabindex="0" role="region" aria-label="Registrations table"><table id="regs"><caption class="small" style="text-align:left">Waiting lists are in order of confirmation. Unconfirmed = email not yet confirmed. If someone has told you they are coming, "Confirm for them" does it without their pressing the button in the email.</caption><thead><tr><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Attendance</th><th scope="col">Tour</th><th scope="col">Affiliation</th><th scope="col">Needs</th><th scope="col">Extra</th><th scope="col">Shares email with hosts</th><th scope="col">Instr. v</th><th scope="col">Actions</th></tr></thead><tbody></tbody></table></div>
+		<div style="overflow-x:auto" tabindex="0" role="region" aria-label="Registrations table"><table id="regs"><caption class="small" style="text-align:left">Waiting lists are in order of confirmation. Unconfirmed = email not yet confirmed. If someone has told you they are coming, "Confirm for them" does it without their pressing the button in the email: paste the address they gave you, and it is checked against the one they typed.</caption><thead><tr><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Attendance</th><th scope="col">Tour</th><th scope="col">Affiliation</th><th scope="col">Needs</th><th scope="col">Extra</th><th scope="col">Shares email with hosts</th><th scope="col">Instr. v</th><th scope="col">Actions</th></tr></thead><tbody></tbody></table></div>
 	</section>
 
 	<section aria-labelledby="h-polls" id="polls">
@@ -231,6 +231,9 @@ function SCRIPT() {
 const EVENT = new URLSearchParams(location.search).get('event') || '';
 const $ = (id) => document.getElementById(id);
 const toast = (msg) => { const t = $('toast'); t.textContent = msg; setTimeout(() => { if (t.textContent === msg) t.textContent = ''; }, 7000); };
+const nl = String.fromCharCode(10);
+/** As editDistance in util.ts: one insert, delete or replaced character per step. */
+const editDistance = (a, b) => { let prev = Array.from({ length: b.length + 1 }, (_, j) => j); for (let i = 1; i <= a.length; i++) { const row = [i]; for (let j = 1; j <= b.length; j++) row[j] = Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = row; } return prev[b.length]; };
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 async function api(path, method = 'GET', body) {
 	let res;
@@ -428,10 +431,23 @@ document.body.addEventListener('click', async (e) => {
 			if (!confirm('Promote this person? They will be emailed the latest joining instructions.')) return;
 			await api('/api/admin/promote', 'POST', { id: b.dataset.id, what: b.dataset.promote, session: b.dataset.session }); toast('Promoted and emailed.'); load().then(() => $('h-regs').focus());
 		} else if (b.dataset.adminconfirm) {
-			if (!confirm('Confirm ' + b.dataset.name + ' (' + b.dataset.email + ') for them? Only do this if they have told you they are coming and this is their address. They get a place if one is free (or join the waiting list), and are emailed the latest joining instructions, saying you confirmed for them.')) return;
-			const d = await api('/api/admin/promote', 'POST', { id: b.dataset.adminconfirm, what: 'confirm' });
+			// The address must come from the person, not this table, so a typo in the form never gets joining instructions.
+			const typed = (prompt('Paste the email address ' + b.dataset.name + ' gave you (from their message to you, not from this table):') || '').trim().toLowerCase();
+			if (!typed) return;
+			const theirs = b.dataset.email.toLowerCase();
+			const body = { id: b.dataset.adminconfirm, what: 'confirm', email: typed };
+			if (typed !== theirs) {
+				if (!confirm('These do not match.' + nl + nl + 'They registered with: ' + theirs + nl + 'You pasted: ' + typed + nl + nl + 'Was the address they registered with mistyped? OK corrects it to ' + typed + ', and the joining instructions go there.')) return;
+				body.fix_email = true;
+				if (editDistance(typed, theirs) > 1) {
+					if (!confirm('These differ by more than one character, so ' + typed + ' may belong to someone else.' + nl + nl + 'Do you have the permission of the person at ' + typed + ' to register them for this event?')) return;
+					body.permission = true;
+				}
+			}
+			if (!confirm('Confirm ' + b.dataset.name + ' (' + typed + ') for them? They get a place if one is free (or join the waiting list), and are emailed the latest joining instructions, saying you confirmed for them.')) return;
+			const d = await api('/api/admin/promote', 'POST', body);
 			const st = d.registration || {};
-			toast(d.already ? 'They had already confirmed.' : st.place === 'waitlist' ? 'Confirmed onto the in-person waiting list, and emailed.' : 'Confirmed and emailed the joining instructions.'); load().then(() => $('h-regs').focus());
+			toast((d.already ? 'They had already confirmed.' : st.place === 'waitlist' ? 'Confirmed onto the in-person waiting list, and emailed.' : 'Confirmed and emailed the joining instructions.') + (body.fix_email && !d.already ? ' Address corrected to ' + typed + '.' : '')); load().then(() => $('h-regs').focus());
 		} else if (b.dataset.delete) {
 			if (!confirm(b.dataset.confirmed === '1' ? 'Remove ' + b.dataset.name + '? They have confirmed, so they will be emailed that their registration has been cancelled, and their calendar entries removed.' : 'Remove ' + b.dataset.name + '? They never confirmed, so no email is sent (use this for spam, typos or duplicates).')) return;
 			await api('/api/admin/registration', 'DELETE', { id: b.dataset.delete }); toast('Removed.'); load().then(() => $('h-regs').focus());

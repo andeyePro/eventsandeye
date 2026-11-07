@@ -2,7 +2,7 @@
 
 ## 2026-11-07
 
-- [x] **Confirm for them** — Unconfirmed registrations on the admin page have a "Confirm for them" button, for someone who has told the organiser they are coming but has not pressed the button in the confirm email. It asks first, then confirms exactly as the button would (a place if one is free, otherwise the waiting list), and the person gets the usual joining instructions (or waiting-list email) opening with a line saying the organiser confirmed for them, so the unused link does not worry them. It goes through `/api/admin/promote` (`what: 'confirm'`), so host sites need no new function wrapper, migration or setting. Checked in `tests/e2e.mjs`.
+- [x] **Confirm for them** — Unconfirmed registrations on the admin page have a "Confirm for them" button, for someone who has told the organiser they are coming but has not pressed the button in the confirm email. The organiser pastes the address the person gave them; if it differs from the one typed in the form, they must say that one was mistyped (the registration is corrected to the pasted address and only it is emailed), and if it is more than one character out, which may be someone else's address, also that they have its owner's permission. The server enforces both, and refuses a correction to an address that already has a registration. It then confirms exactly as the button would (a place if one is free, otherwise the waiting list), and the person gets the usual joining instructions (or waiting-list email) opening with a line saying the organiser confirmed for them, so the unused link does not worry them. It goes through `/api/admin/promote` (`what: 'confirm'`), so host sites need no new function wrapper, migration or setting. Checked in `tests/e2e.mjs`.
 
 ## 2026-10-30
 

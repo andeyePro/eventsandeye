@@ -27,3 +27,11 @@ test('an event that runs past midnight is still one day', () => {
 test('an event entirely in the small hours is one day, not a backwards range', () => {
 	assert.equal(ukDates('2026-11-14T00:30:00Z', '2026-11-14T03:00:00Z'), 'Saturday 14 November 2026');
 });
+
+test('editDistance counts single-character edits between addresses', async () => {
+	const { editDistance } = await import(`data:text/javascript;base64,${Buffer.from(out.outputFiles[0].text).toString('base64')}`);
+	assert.equal(editDistance('john@example.org', 'john@example.org'), 0);
+	assert.equal(editDistance('jon@example.org', 'john@example.org'), 1);
+	assert.equal(editDistance('john@exampel.org', 'john@example.org'), 2);
+	assert.equal(editDistance('', 'abc'), 3);
+});

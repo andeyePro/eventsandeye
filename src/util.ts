@@ -34,6 +34,17 @@ export async function sha256(text: string): Promise<string> {
 	return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+/** Edits (insert, delete, replace one character) between two strings: how far a typed address is from another. */
+export function editDistance(a: string, b: string): number {
+	let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+	for (let i = 1; i <= a.length; i++) {
+		const row = [i];
+		for (let j = 1; j <= b.length; j++) row[j] = Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+		prev = row;
+	}
+	return prev[b.length];
+}
+
 export const EMAIL_RE = /^[^\s@<>()[\]\\,;:"]+@[^\s@<>()[\]\\,;:"]+\.[^\s@<>()[\]\\,;:"]{2,}$/;
 
 /** Trim, strip control characters (line breaks and tabs stay), cap length. Returns null for empty. */
