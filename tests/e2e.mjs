@@ -1077,6 +1077,22 @@ try {
 	r = await req('DELETE', '/api/admin/registration', { id: sumR.data.registrations.find((x) => x.email === hal).id }, ADMIN);
 	check('removing an unconfirmed one (spam, typos) sends nothing', r.data.ok && (await mailsTo(hal)).length === n);
 
+	console.log('\nAdmin confirms for someone who said they are coming');
+	const ivy = 'ivy@example.org';
+	await register({ name: 'Ivy', email: ivy, attendance: 'remote' });
+	const ivyId = (await req('GET', `/api/admin/summary?event=${EVENT}`, undefined, ADMIN)).data.registrations.find((x) => x.email === ivy).id;
+	check('confirming for someone needs Access', (await req('POST', '/api/admin/promote', { id: ivyId, what: 'confirm' })).status === 401);
+	n = (await mailsTo(ivy)).length;
+	r = await req('POST', '/api/admin/promote', { id: ivyId, what: 'confirm' }, ADMIN);
+	m = await last(ivy);
+	check('the organiser confirms an unconfirmed registration: joining instructions, saying it was confirmed for them', r.data.ok && r.data.already === false && r.data.registration.status === 'confirmed'
+		&& (await mailsTo(ivy)).length === n + 1 && /confirmed your registration[^\n]*for you, so there is no need to use the link/.test(m.text_body) && m.att.length > 0, JSON.stringify(r.data) + ' | ' + m?.text_body.slice(0, 300));
+	check('…and shows as confirmed on the admin page', (await req('GET', `/api/admin/summary?event=${EVENT}`, undefined, ADMIN)).data.registrations.find((x) => x.email === ivy).status === 'confirmed');
+	r = await req('POST', '/api/admin/promote', { id: ivyId, what: 'confirm' }, ADMIN);
+	check('confirming again sends nothing more', r.data.ok && r.data.already === true && (await mailsTo(ivy)).length === n + 1, JSON.stringify(r.data));
+	check('confirming a registration that no longer exists → 404', (await req('POST', '/api/admin/promote', { id: 'nope', what: 'confirm' }, ADMIN)).status === 404);
+	await req('DELETE', '/api/admin/registration', { id: ivyId }, ADMIN);
+
 	r = await req('POST', '/api/admin/settings', { event: EVENT, deadline: new Date(Date.now() - 60_000).toISOString() }, ADMIN);
 	check('registration deadline moved into the past', r.data.ok);
 	check('new registration refused after the deadline', (await register({ email: 'late@example.org' })).status === 409);

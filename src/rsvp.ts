@@ -6,7 +6,7 @@ import { syncHosts } from './hosts';
 import { buildIcs } from './ics';
 import {
 	alreadyRegisteredIntro, type Brand, calendarUpdateEmail, cancellationEmail, confirmEmail, declinedEmail, type EventRow, instructionsEmail, messageEmail,
-	hostReleasedEmail, notification, onlyWaiting, optedIn, optinWaiting, type RegistrationRow, type SessionRow, waitingForPlace, waitlistReminderEmail,
+	organiserConfirmedIntro, 	hostReleasedEmail, notification, onlyWaiting, optedIn, optinWaiting, type RegistrationRow, type SessionRow, waitingForPlace, waitlistReminderEmail,
 } from './templates';
 import { modeOf } from './mode';
 import { mdToHtml, mdToText } from './markdown';
@@ -397,8 +397,10 @@ export function publicStatus(reg: RegistrationRow, sessions: SessionRow[]) {
 	};
 }
 
-/** Confirms the email address. Idempotent. Sends joining instructions unless the person is waitlisted in person. */
-export async function confirm(env: Env, id: string) {
+/** Confirms the email address. Idempotent. Sends joining instructions unless the person is waitlisted in person.
+ * byOrganiser: the organiser confirms for someone who has told them they are coming (in person, by phone, by email)
+ * but has not pressed the button; their email says so, so the earlier confirm link does not leave them wondering. */
+export async function confirm(env: Env, id: string, opts: { byOrganiser?: boolean } = {}) {
 	let reg = await getRegistration(env, id);
 	if (!reg) throw new UserError('This registration no longer exists. Unconfirmed registrations are deleted after a while, so please register again.', 404);
 	const ev = await getEvent(env, reg.event_id);
@@ -450,13 +452,14 @@ export async function confirm(env: Env, id: string) {
 		}
 	}
 
-	if (!waitingForPlace(reg, sessions)) await sendInstructions(env, ev, reg, sessions);
+	const intro = opts.byOrganiser ? organiserConfirmedIntro(ev) : undefined;
+	if (!waitingForPlace(reg, sessions)) await sendInstructions(env, ev, reg, sessions, { intro });
 	else {
 		// Waiting for an in-person place: no joining instructions yet, but they need their manage link.
-		const pid = await sendEmail(env, waitlistReminderEmail(brand(env), ev, reg, sessions, await manageUrl(env, reg.id), true));
+		const pid = await sendEmail(env, waitlistReminderEmail(brand(env), ev, reg, sessions, await manageUrl(env, reg.id), true, intro));
 		await recordDelivery(env, reg.id, 'waitlist_confirmed', pid);
 	}
-	await notifyWaitlist(env, ev, sessions, reg, joinsWaitlist, joinsTourWaitlist, 'has confirmed and joined', ids(reg.optins_waiting));
+	await notifyWaitlist(env, ev, sessions, reg, joinsWaitlist, joinsTourWaitlist, opts.byOrganiser ? 'was confirmed by an organiser and joined' : 'has confirmed and joined', ids(reg.optins_waiting));
 	await syncHosts(env, brand(env), ev, sessions);
 	return { ok: true as const, already: false, registration: confirmStatus(reg, sessions) };
 }
@@ -619,6 +622,14 @@ export async function calendarFile(env: Env, id: string, key: string) {
 }
 
 // ---------- admin ----------
+
+/** The organiser confirms an unconfirmed registration for someone they know is coming: same place rules and the same
+ * email as pressing the button, opening with a line saying who confirmed it. Already confirmed is not an error. */
+export async function adminConfirm(env: Env, id: string) {
+	const reg = await getRegistration(env, id);
+	if (!reg) throw new UserError('This registration no longer exists: it may have lapsed or been removed.', 404);
+	return confirm(env, id, { byOrganiser: true });
+}
 
 export async function promote(env: Env, id: string, what: 'event' | 'tour' | 'optin', sessionId = '', opts: { skipHosts?: boolean } = {}) {
 	const reg = await getRegistration(env, id);

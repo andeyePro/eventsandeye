@@ -5,7 +5,7 @@ import { mdToHtml } from '../../markdown';
 import { adminPollAction, adminPolls } from '../../polls';
 import { eventAction, listEvents } from '../../setup';
 import {
-	addInstructions, adminDelete, adminSummary, audienceRecipients, cancelMessage, createMessage, listInstructions, listMessages, parseAudience,
+	addInstructions, adminConfirm, adminDelete, adminSummary, audienceRecipients, cancelMessage, createMessage, listInstructions, listMessages, parseAudience,
 	promote, promoteAll, registrationsCsv, resumeMessage, sentLogMarkdown, updateSessions, updateSettings,
 } from '../../rsvp';
 
@@ -25,8 +25,11 @@ export const sessions = handle(async ({ env, request }) => {
 	return updateSessions(env, String(body.event || ''), body);
 });
 
+/** Promote someone from a waiting list, or (what: 'confirm') confirm an unconfirmed registration for someone the
+ * organiser knows is coming. Confirming shares this endpoint so host sites need no new function file. */
 export const promoteHandler = handle(async ({ env, request }) => {
 	const body = await readJson(request);
+	if (body.what === 'confirm') return adminConfirm(env, String(body.id || ''));
 	return promote(env, String(body.id || ''), body.what === 'tour' ? 'tour' : body.what === 'optin' ? 'optin' : 'event', String(body.session || ''));
 });
 

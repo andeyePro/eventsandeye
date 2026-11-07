@@ -161,7 +161,7 @@ const HTML = /* html */ `<!doctype html>
 	<section aria-labelledby="h-regs">
 		<h2 id="h-regs" tabindex="-1">Registrations</h2>
 		<p><a class="button secondary" id="csv-link" href="#">Download CSV</a> <a class="button secondary" id="log-link" href="#">Download sent log (markdown)</a></p>
-		<div style="overflow-x:auto" tabindex="0" role="region" aria-label="Registrations table"><table id="regs"><caption class="small" style="text-align:left">Waiting lists are in order of confirmation. Unconfirmed = email not yet confirmed.</caption><thead><tr><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Attendance</th><th scope="col">Tour</th><th scope="col">Affiliation</th><th scope="col">Needs</th><th scope="col">Extra</th><th scope="col">Shares email with hosts</th><th scope="col">Instr. v</th><th scope="col">Actions</th></tr></thead><tbody></tbody></table></div>
+		<div style="overflow-x:auto" tabindex="0" role="region" aria-label="Registrations table"><table id="regs"><caption class="small" style="text-align:left">Waiting lists are in order of confirmation. Unconfirmed = email not yet confirmed. If someone has told you they are coming, "Confirm for them" does it without their pressing the button in the email.</caption><thead><tr><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Attendance</th><th scope="col">Tour</th><th scope="col">Affiliation</th><th scope="col">Needs</th><th scope="col">Extra</th><th scope="col">Shares email with hosts</th><th scope="col">Instr. v</th><th scope="col">Actions</th></tr></thead><tbody></tbody></table></div>
 	</section>
 
 	<section aria-labelledby="h-polls" id="polls">
@@ -369,6 +369,7 @@ async function load() {
 		const opts = optSessions.map((x) => waitingFor.includes(x.id) ? '<span class="tag wait">' + esc(x.label) + ': waiting</span>' : esc(x.label));
 		const tourCell = (tour ? (r.tour_place === 'waitlist' ? '<span class="tag wait">' + esc(tour.label) + ': waiting</span>' : esc(tour.label)) : '') + (opts.length ? (tour ? '<br>' : '') + 'Signed up: ' + opts.join(', ') : '');
 		const actions = [
+			r.status === 'pending' ? '<button data-adminconfirm="' + esc(r.id) + '" data-name="' + esc(r.name) + '" data-email="' + esc(r.email) + '">Confirm for them</button>' : '',
 			r.status === 'confirmed' && r.place === 'waitlist' ? '<button data-promote="event" data-id="' + esc(r.id) + '">Promote to place</button>' : '',
 			r.status === 'confirmed' && r.tour_place === 'waitlist' ? '<button data-promote="tour" data-id="' + esc(r.id) + '">Promote to tour</button>' : '',
 			...(r.status === 'confirmed' ? optSessions.filter((x) => waitingFor.includes(x.id)).map((x) => '<button data-promote="optin" data-session="' + esc(x.id) + '" data-id="' + esc(r.id) + '">Promote to ' + esc(x.label.toLowerCase()) + '</button>') : []),
@@ -426,6 +427,11 @@ document.body.addEventListener('click', async (e) => {
 		} else if (b.dataset.promote) {
 			if (!confirm('Promote this person? They will be emailed the latest joining instructions.')) return;
 			await api('/api/admin/promote', 'POST', { id: b.dataset.id, what: b.dataset.promote, session: b.dataset.session }); toast('Promoted and emailed.'); load().then(() => $('h-regs').focus());
+		} else if (b.dataset.adminconfirm) {
+			if (!confirm('Confirm ' + b.dataset.name + ' (' + b.dataset.email + ') for them? Only do this if they have told you they are coming and this is their address. They get a place if one is free (or join the waiting list), and are emailed the latest joining instructions, saying you confirmed for them.')) return;
+			const d = await api('/api/admin/promote', 'POST', { id: b.dataset.adminconfirm, what: 'confirm' });
+			const st = d.registration || {};
+			toast(d.already ? 'They had already confirmed.' : st.place === 'waitlist' ? 'Confirmed onto the in-person waiting list, and emailed.' : 'Confirmed and emailed the joining instructions.'); load().then(() => $('h-regs').focus());
 		} else if (b.dataset.delete) {
 			if (!confirm(b.dataset.confirmed === '1' ? 'Remove ' + b.dataset.name + '? They have confirmed, so they will be emailed that their registration has been cancelled, and their calendar entries removed.' : 'Remove ' + b.dataset.name + '? They never confirmed, so no email is sent (use this for spam, typos or duplicates).')) return;
 			await api('/api/admin/registration', 'DELETE', { id: b.dataset.delete }); toast('Removed.'); load().then(() => $('h-regs').focus());

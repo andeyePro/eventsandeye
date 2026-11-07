@@ -283,8 +283,16 @@ export function alreadyRegisteredIntro(ev: EventRow, reg: RegistrationRow) {
 	return { html: lines.map((l) => `<p>${escapeHtml(l)}</p>`).join(''), text: lines.join('\n') };
 }
 
-export function waitlistReminderEmail(b: Brand, ev: EventRow, reg: RegistrationRow, sessions: SessionRow[], manageUrl: string, justConfirmed = false): OutgoingEmail {
-	const intro = justConfirmed
+/** Opens the email someone gets when the organiser confirms their registration for them, so the unused confirm link in
+ * the earlier email does not leave them wondering whether they still need to press it. */
+export function organiserConfirmedIntro(ev: EventRow) {
+	const line = `We have confirmed your registration for the ${ev.title} for you, so there is no need to use the link in our earlier email.`;
+	return { html: `<p><strong>${escapeHtml(line)}</strong></p>`, text: line };
+}
+
+export function waitlistReminderEmail(b: Brand, ev: EventRow, reg: RegistrationRow, sessions: SessionRow[], manageUrl: string, justConfirmed = false, confirmedIntro?: { html: string; text: string }): OutgoingEmail {
+	const intro = confirmedIntro ? { html: `${confirmedIntro.html}<p>Your latest joining instructions follow.</p>`, text: `${confirmedIntro.text}\nYour latest joining instructions follow.` }
+		: justConfirmed
 		? { html: `<p>Thank you for confirming your registration for the ${escapeHtml(ev.title)}.</p><p>Your latest joining instructions follow.</p>`, text: `Thank you for confirming your registration for the ${ev.title}.\nYour latest joining instructions follow.` }
 		: alreadyRegisteredIntro(ev, reg);
 	const st = statusLines(reg, sessions);

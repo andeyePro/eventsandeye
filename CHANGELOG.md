@@ -1,5 +1,9 @@
 # Events&I – changelog
 
+## 2026-11-07
+
+- [x] **Confirm for them** — Unconfirmed registrations on the admin page have a "Confirm for them" button, for someone who has told the organiser they are coming but has not pressed the button in the confirm email. It asks first, then confirms exactly as the button would (a place if one is free, otherwise the waiting list), and the person gets the usual joining instructions (or waiting-list email) opening with a line saying the organiser confirmed for them, so the unused link does not worry them. It goes through `/api/admin/promote` (`what: 'confirm'`), so host sites need no new function wrapper, migration or setting. Checked in `tests/e2e.mjs`.
+
 ## 2026-10-30
 
 **0.3.0-beta, the public beta.** Upgrading from 0.2.0-beta: apply migrations 0006 to 0010; copy the new function wrappers (`cp -Rn eventsandeye/examples/functions/. functions/`: polls, events, inbound); set `ADMIN_EMAILS` if you had not (now required); redeploy the cron Worker, which now finishes big messages and calendar updates, with the same `TOKEN_SECRET` and settings as the site; then check the admin page's set-up check is empty. Optional: `POLL_REPLY_EMAIL` and Email Routing to answer poll suggestions by email (README step 12).
