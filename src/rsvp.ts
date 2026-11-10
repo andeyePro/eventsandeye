@@ -9,6 +9,7 @@ import {
 	organiserConfirmedIntro, 	hostReleasedEmail, noImagesEmail, notification, onlyWaiting, optedIn, optinWaiting, type RegistrationRow, type SessionRow, waitingForPlace, waitlistReminderEmail,
 } from './templates';
 import { modeOf } from './mode';
+import { badgeSummary } from './badges';
 import { mdToHtml, mdToText } from './markdown';
 import { adminPolls, parseBookingBallots, saveBookingBallots, unansweredPolls, voterPolls } from './polls';
 import { recordCronRun } from './health';
@@ -1177,6 +1178,7 @@ export async function adminSummary(env: Env, eventId: string) {
 	return {
 		ok: true as const, event: ev, sessions, tours: tourSessions(sessions), capacity: cap,
 		registrations: regs.map(({ calendar_state: _c, ...r }) => r), latest_instructions_version: latest?.version ?? 0,
+		badges: badgeSummary(env, ev, regs),
 	};
 }
 

@@ -6,11 +6,11 @@ Events&I is registration for small community events on the organiser's own Cloud
 
 ## Map
 
-- `src/rsvp.ts`: the registration flows (register, confirm, change, cancel, promote, messages). `templates.ts`: every email's wording. `calendar.ts` and `ics.ts`: invitations and updates. `hosts.ts`: session host lists. `access.ts`: Cloudflare Access JWT checks.
+- `src/rsvp.ts`: the registration flows (register, confirm, change, cancel, promote, messages). `templates.ts`: every email's wording. `calendar.ts` and `ics.ts`: invitations and updates. `hosts.ts`: session host lists. `access.ts`: Cloudflare Access JWT checks. `badges.ts`: who gets a name badge, the label sheets, and the print page's layout code (run by the admin page).
 - `src/routes/`: request handlers, called from the host site's `functions/` (copies of the wrappers are in `examples/functions/`).
 - `migrations/`: the D1 schema. `worker/`: the cron Worker. `astro/`: the booking form, confirm and manage panels; `html/`: plain HTML versions generated from them by `scripts/build-html.mjs` (rerun after changing their markup).
 - `examples/`: config, function wrappers and a seed (AMYBO's event) for a new site; `examples/starter/` is a minimal Astro site with every page Events&I needs, which the end-to-end test runs on. `site/`: events.andeye.com, a separate Astro build; it is not part of the product.
-- `tests/e2e.mjs`: the end-to-end test, run against local D1 from a host site or, with `sh scripts/starter-e2e.sh`, from a throwaway copy of the starter site. `tests/browser/`: browser tests of the components, the admin page and the plain HTML versions in headless Chromium (`sh scripts/browser-tests.sh`). `tests/markdown.test.mjs`: unit tests (`npm install`, then `npm test`).
+- `tests/e2e.mjs`: the end-to-end test, run against local D1 from a host site or, with `sh scripts/starter-e2e.sh`, from a throwaway copy of the starter site. `tests/browser/`: browser tests of the components, the admin page and the plain HTML versions in headless Chromium (`sh scripts/browser-tests.sh`). `tests/*.test.mjs`: unit tests (`npm install`, then `npm test`).
 
 ## Rules that will bite
 

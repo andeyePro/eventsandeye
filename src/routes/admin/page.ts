@@ -1,4 +1,5 @@
 // Events&I – Copyright (C) 2026 andeye Ltd. AGPL-3.0, see ../../../LICENSE.
+import { BADGE_JS, BADGE_PRESETS } from '../../badges';
 import { VERSION } from '../../env';
 
 /**
@@ -34,6 +35,9 @@ const HTML = /* html */ `<!doctype html>
 	th { background: #eef2ea; }
 	label { font-weight: 600; display: block; margin-top: 0.6rem; }
 	input[type=text], input[type=email], input[type=url], input[type=number], input[type=datetime-local], textarea, select { font: inherit; padding: 0.4rem; border: 1px solid #889; border-radius: 4px; width: 100%; box-sizing: border-box; }
+	/* A file input is as wide as its button and file name, which outgrew a phone screen with wider text spacing. */
+	input[type=file] { font: inherit; width: 100%; max-width: 100%; min-width: 0; }
+	input[type=color] { width: 4rem; height: 2.4rem; padding: 0.15rem; border: 1px solid #889; border-radius: 4px; }
 	textarea { min-height: 12rem; font-family: ui-monospace, Menlo, monospace; font-size: 0.85rem; }
 	.row { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 0.75rem; }
 	button, .button { font: inherit; background: var(--blue); color: #fff; border: 2px solid transparent; border-radius: 4px; padding: 0.45rem 0.9rem; cursor: pointer; text-decoration: none; display: inline-block; margin-top: 0.6rem; }
@@ -171,6 +175,43 @@ const HTML = /* html */ `<!doctype html>
 		<div style="overflow-x:auto" tabindex="0" role="region" aria-label="Registrations table"><table id="regs"><caption class="small" style="text-align:left">Waiting lists are in order of confirmation. Unconfirmed = email not yet confirmed. If someone has told you they are coming, "Confirm for them" does it without their pressing the button in the email: paste the address they gave you, and it is checked against the one they typed.</caption><thead><tr><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Attendance</th><th scope="col">Tour</th><th scope="col">Affiliation</th><th scope="col">Needs</th><th scope="col">Extra</th><th scope="col">Shares email with hosts</th><th scope="col">Instr. v</th><th scope="col">Actions</th></tr></thead><tbody></tbody></table></div>
 	</section>
 
+	<section aria-labelledby="h-badges" id="badges">
+		<h2 id="h-badges">Name badges</h2>
+		<p id="b-who"></p>
+		<p class="small">A named badge goes to each confirmed in-person attendee with a place, sorted by family name. Not included: remote attendees, the in-person waiting list, people coming only to opt-in sessions (such as just the dinner), and unconfirmed registrations. Blank badges, with the logo but no name, are for anyone else who comes: by default enough for every place in the room, and more to fill the last sheet.</p>
+		<form id="badge-form">
+			<div class="row">
+				<div><label for="b-preset">Badge sheet</label><select id="b-preset"></select></div>
+				<div><label for="b-logo">Logo (SVG, PNG or JPEG; it stays on this computer)</label><input id="b-logo" type="file" accept="image/svg+xml,image/png,image/jpeg,.svg,.png,.jpg,.jpeg" /><p class="small" id="b-logo-note"></p></div>
+				<div><label for="b-blanks">Blank badges (empty: enough for the room, filling the last sheet)</label><input id="b-blanks" type="number" min="0" step="1" /></div>
+				<div><label for="b-logopos">Logo position (automatic: a tall logo at the side, a wide one across the top)</label><select id="b-logopos"><option value="auto">Automatic, by its shape</option><option value="right">On the right</option><option value="left">On the left</option><option value="top">Across the top</option></select></div>
+				<div><label for="b-names">Names</label><select id="b-names"><option value="split">Given name, family name beneath</option><option value="one">Full name on one line</option></select></div>
+				<div><label for="b-colour">Text colour</label><input id="b-colour" type="color" value="#000000" /></div>
+			</div>
+			<details><summary>Badge and sheet sizes (mm)</summary>
+				<p class="small">Changing any of these makes the sheet "Custom". Margins are from the sheet's top and left edges to the first badge; gaps are between badges.</p>
+				<div class="row">
+					<div><label for="b-badge_w">Badge width</label><input id="b-badge_w" type="number" min="0" step="0.01" /></div>
+					<div><label for="b-badge_h">Badge height</label><input id="b-badge_h" type="number" min="0" step="0.01" /></div>
+					<div><label for="b-sheet_w">Sheet width</label><input id="b-sheet_w" type="number" min="0" step="0.01" /></div>
+					<div><label for="b-sheet_h">Sheet height</label><input id="b-sheet_h" type="number" min="0" step="0.01" /></div>
+					<div><label for="b-cols">Badges across</label><input id="b-cols" type="number" min="1" step="1" /></div>
+					<div><label for="b-rows">Badges down</label><input id="b-rows" type="number" min="1" step="1" /></div>
+					<div><label for="b-margin_top">Top margin</label><input id="b-margin_top" type="number" min="0" step="0.01" /></div>
+					<div><label for="b-margin_left">Left margin</label><input id="b-margin_left" type="number" min="0" step="0.01" /></div>
+					<div><label for="b-gap_x">Gap across</label><input id="b-gap_x" type="number" min="0" step="0.01" /></div>
+					<div><label for="b-gap_y">Gap down</label><input id="b-gap_y" type="number" min="0" step="0.01" /></div>
+				</div>
+			</details>
+			<label><input type="checkbox" id="b-title" checked style="width:auto" /> Print the event title above the names (untick if the logo already says it)</label>
+			<label><input type="checkbox" id="b-guides" style="width:auto" /> Print cut lines around each badge</label>
+			<label><input type="checkbox" id="b-noimg" style="width:auto" /> Mark the badges of people who asked us not to share images of them, with a small crossed-out camera explained on each sheet</label>
+			<p id="b-count" class="small" role="status"></p>
+			<button type="submit">Open the badges to print</button>
+			<p class="small">They open in a new tab, where you can correct any name before printing (nothing there is saved). Print at actual size, with margins set to none; try a sheet on plain paper first.</p>
+		</form>
+	</section>
+
 	<section aria-labelledby="h-polls" id="polls">
 		<h2 id="h-polls">Polls</h2>
 		<p class="small">Registrants rank the options on their manage page, most wanted first, and draw a line under the ones they would join. Their suggestions wait here (and in your inbox) until you add them for everyone, in their words or yours, or turn them down. Nothing in this section emails anyone: to tell people about a poll, send a message below.</p>
@@ -235,6 +276,8 @@ ${SCRIPT()}
 
 function SCRIPT() {
 	return String.raw`
+${BADGE_JS}
+const BADGE_PRESETS = ${JSON.stringify(BADGE_PRESETS)};
 const EVENT = new URLSearchParams(location.search).get('event') || '';
 const $ = (id) => document.getElementById(id);
 const toast = (msg) => { const t = $('toast'); t.textContent = msg; setTimeout(() => { if (t.textContent === msg) t.textContent = ''; }, 7000); };
@@ -398,6 +441,7 @@ async function load() {
 		const noRec = r.no_images ? ' <span class="tag wait">no images</span>' : '';
 		return '<tr><td>' + esc(r.name) + noRec + '</td><td>' + esc(r.email) + '</td><td>' + pend + where + '</td><td>' + tourCell + '</td><td>' + esc(r.affiliation) + '</td><td>' + esc(r.needs) + '</td><td>' + esc(r.extra_answer) + '</td><td>' + (r.share_contact ? 'yes' : 'no') + '</td><td>' + esc(r.instructions_version) + '</td><td>' + actions + '</td></tr>';
 	}).join('') || '<tr><td colspan="10">No registrations yet.</td></tr>';
+	showBadges(s);
 	$('csv-link').href = '/api/admin/export?format=csv&event=' + encodeURIComponent(eventId);
 	$('log-link').href = '/api/admin/sent-log?event=' + encodeURIComponent(eventId);
 
@@ -616,6 +660,100 @@ $('msg-form').addEventListener('submit', async (e) => {
 		const m = sent.message || {};
 		toast(when ? 'Scheduled.' : m.status === 'sending' && m.error ? 'Not sent yet: ' + m.error + '. It will be tried again within a few minutes; do not send it again.' : m.status === 'sending' ? 'Sending: the first copies have gone, and the rest go out within a few minutes.' : 'Sent.'); e.target.reset(); load();
 	} catch (err) { toast(err.message); }
+});
+// ---- name badges ----
+// The print page is built here and opened from a blob: URL, so the logo the organiser chooses never leaves the computer.
+const BADGE_FIELDS = ['badge_w', 'badge_h', 'sheet_w', 'sheet_h', 'cols', 'rows', 'margin_top', 'margin_left', 'gap_x', 'gap_y'];
+let badgeData = null, badgeLogo = '', badgeEvent = null, badgeAspect = 0, badgeSiteAspect = null;
+/** A logo's width over its height, for placing it: from an SVG's viewBox (or width and height), which an image of it
+ * may not report, otherwise from the decoded image. 0 when it cannot be told. */
+async function logoAspect(url, svgText) {
+	if (svgText) {
+		const svg = new DOMParser().parseFromString(svgText, 'image/svg+xml').documentElement;
+		const vb = (svg.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number);
+		if (vb.length === 4 && vb[2] > 0 && vb[3] > 0) return vb[2] / vb[3];
+		const w = parseFloat(svg.getAttribute('width')), h = parseFloat(svg.getAttribute('height'));
+		if (w > 0 && h > 0) return w / h;
+	}
+	return new Promise((res) => { const i = new Image(); i.onload = () => res(i.naturalWidth && i.naturalHeight ? i.naturalWidth / i.naturalHeight : 0); i.onerror = () => res(0); i.src = url; });
+}
+async function siteLogoAspect() {
+	if (badgeSiteAspect !== null || !badgeData || !badgeData.logo_url) return badgeSiteAspect || 0;
+	const url = new URL(badgeData.logo_url, location.href).href;
+	try { const r = await fetch(url); const type = r.headers.get('content-type') || ''; badgeSiteAspect = /svg/.test(type) || /\.svg(\?|#|$)/i.test(url) ? await logoAspect(url, await r.text()) : await logoAspect(url); }
+	catch { badgeSiteAspect = 0; }
+	return badgeSiteAspect;
+}
+const badgeGeometry = () => Object.fromEntries(BADGE_FIELDS.map((f) => [f, $('b-' + f).value === '' ? NaN : Number($('b-' + f).value)]));
+function badgeUsePreset(id) {
+	const p = BADGE_PRESETS.find((x) => x.id === id);
+	if (!p) return;
+	for (const f of BADGE_FIELDS) $('b-' + f).value = p[f];
+	$('b-guides').checked = p.guides;
+}
+const badgeLogoUrl = () => badgeLogo || (badgeData && badgeData.logo_url ? new URL(badgeData.logo_url, location.href).href : '');
+function badgeCount() {
+	if (!badgeData) return;
+	const g = badgeGeometry(), problem = badgeGeometryProblem(g);
+	const named = badgeData.people.length;
+	if (problem) { $('b-count').textContent = problem; return; }
+	const per = badgePerSheet(g), blanks = badgeBlanks(named, badgeEvent.in_person_max, per, $('b-blanks').value);
+	$('b-blanks').placeholder = String(badgeBlanks(named, badgeEvent.in_person_max, per, ''));
+	const sheets = Math.ceil((named + blanks) / per);
+	$('b-count').textContent = named + ' named and ' + blanks + ' blank: ' + (named + blanks) + ' badges on ' + sheets + ' sheet' + (sheets === 1 ? '' : 's') + ' of ' + per + '.';
+}
+function showBadges(s) {
+	badgeData = s.badges; badgeEvent = s.event;
+	if (!badgeData) { $('badges').hidden = true; return; }
+	const n = badgeData.people.length;
+	$('b-who').textContent = n === 1 ? '1 named badge.' : n + ' named badges.';
+	// Filled once: a reload after another save must not undo the organiser's choices here.
+	if (!$('b-preset').options.length) {
+		$('b-preset').innerHTML = BADGE_PRESETS.map((p) => '<option value="' + esc(p.id) + '">' + esc(p.label) + '</option>').join('') + '<option value="custom">Custom (sizes below)</option>';
+		$('b-preset').value = badgeData.template;
+		badgeUsePreset(badgeData.template);
+		$('b-colour').value = badgeData.colour || '#000000';
+		$('b-logopos').value = badgeData.logo_position || 'auto';
+	}
+	const notes = [];
+	if (badgeData.logo_url) notes.push('Without a file, the site\'s logo is used (BADGE_LOGO_URL).');
+	if (badgeData.font) notes.push('Printed in ' + badgeData.font.family + ' (BADGE_FONT_URL).');
+	for (const x of badgeData.ignored || []) notes.push('Not used: ' + x + '.');
+	$('b-logo-note').textContent = notes.join(' ');
+	badgeCount();
+}
+$('b-preset').addEventListener('change', (e) => { badgeUsePreset(e.target.value); badgeCount(); });
+$('badge-form').addEventListener('input', (e) => {
+	if (BADGE_FIELDS.includes(e.target.id.slice(2))) $('b-preset').value = 'custom';
+	badgeCount();
+});
+$('b-logo').addEventListener('change', (e) => {
+	const f = e.target.files[0];
+	badgeLogo = '';
+	if (!f) return;
+	if (!/^image\/(svg\+xml|png|jpeg)$/.test(f.type) && !/\.(svg|png|jpe?g)$/i.test(f.name)) { toast('Choose an SVG, PNG or JPEG image.'); e.target.value = ''; return; }
+	const r = new FileReader();
+	r.onload = async () => {
+		badgeLogo = String(r.result);
+		badgeAspect = await logoAspect(badgeLogo, /svg/.test(f.type) || /\.svg$/i.test(f.name) ? await f.text() : '');
+	};
+	r.readAsDataURL(f);
+});
+$('badge-form').addEventListener('submit', async (e) => {
+	e.preventDefault();
+	const g = badgeGeometry(), problem = badgeGeometryProblem(g);
+	if (problem) { toast(problem); $('b-preset').focus(); return; }
+	const blanks = badgeBlanks(badgeData.people.length, badgeEvent.in_person_max, badgePerSheet(g), $('b-blanks').value);
+	if (!badgeData.people.length && !blanks) { toast('No badges to print: nobody is confirmed in person yet, and no blanks are wanted.'); return; }
+	// Opened before anything is awaited, so the browser counts it as the click's own tab, then filled.
+	const tab = window.open('', '_blank');
+	if (!tab) { toast('The browser stopped the new tab opening: allow pop-ups for this page, then try again.'); return; }
+	const html = badgeSheetHtml({ title: badgeEvent.title, people: badgeData.people, blanks, geometry: g, logo: badgeLogoUrl(), guides: $('b-guides').checked, markNoImages: $('b-noimg').checked,
+		logoAspect: badgeLogo ? badgeAspect : await siteLogoAspect(), logoPosition: $('b-logopos').value, oneLine: $('b-names').value === 'one', showTitle: $('b-title').checked, colour: $('b-colour').value,
+		font: badgeData.font ? { family: badgeData.font.family, url: new URL(badgeData.font.url, location.href).href } : null });
+	const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+	tab.location.href = url;
+	setTimeout(() => URL.revokeObjectURL(url), 60000);
 });
 load().catch((err) => { document.querySelector('main').innerHTML = '<section><h2>Not available</h2><p>' + esc(err.message) + '</p><p class="small">This page needs Cloudflare Access sign-in, and an event id (?event=...).</p></section>'; });
 `;

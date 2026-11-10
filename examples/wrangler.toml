@@ -16,6 +16,13 @@ ACCESS_AUD = "REPLACE_WITH_ACCESS_APPLICATION_AUD_TAG"
 ADMIN_EMAILS = "events@example.org"                  # comma-separated; only these can use the admin page
 # ACCESS_MFA = "application"                         # see the README: Cloudflare Access and two-factor sign-in
 # POLL_REPLY_EMAIL = "polls@reply.example.org"       # optional: decide poll suggestions by replying (README step 12)
+# Name badges on the admin page (all optional; the README's settings reference lists the sheets):
+# BADGE_TEMPLATE = "avery-4822"                      # the sheet to start with (default plain-a4)
+# BADGE_LOGO_URL = "/images/badge-logo.svg"          # a logo when none is chosen on the page
+# BADGE_LOGO_POSITION = "auto"                       # auto, right, left or top
+# BADGE_FONT_URL = "/fonts/Example-SemiBold.woff2"   # a font file on your site, and its name:
+# BADGE_FONT_FAMILY = "Example SemiBold"
+# BADGE_COLOUR = "#000000"                           # text colour
 
 [[d1_databases]]
 binding = "DB"

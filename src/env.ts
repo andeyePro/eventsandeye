@@ -43,6 +43,17 @@ export interface Env {
 	 * suggestions use it as their reply-to, so an organiser can answer "yes", "no" or "use <wording>" by email. Optional:
 	 * without it, suggestions are decided on the admin page. */
 	POLL_REPLY_EMAIL?: string;
+	/** Name badges: the sheet the admin page starts with, one of the ids in badges.ts (default "plain-a4"). */
+	BADGE_TEMPLATE?: string;
+	/** Name badges: a logo to use when the organiser does not choose a file (absolute or site-relative; SVG, PNG or JPEG). */
+	BADGE_LOGO_URL?: string;
+	/** Name badges: where the logo goes, "auto" (default: from its shape), "top", "right" or "left". */
+	BADGE_LOGO_POSITION?: string;
+	/** Name badges: a font file (.woff2, .woff, .ttf or .otf, ideally on this site) and the family name to give it. */
+	BADGE_FONT_URL?: string;
+	BADGE_FONT_FAMILY?: string;
+	/** Name badges: the text colour, as #rrggbb (default black, which every printer does well). */
+	BADGE_COLOUR?: string;
 	/** "true" on the Workers paid plan: messages carrying joining instructions go out in bigger pieces. */
 	PAID_PLAN?: string;
 	/** Local development only: the shortest time a registration is answered in (default 1500 ms; see register.ts). */

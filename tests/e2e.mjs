@@ -1093,6 +1093,40 @@ try {
 		for (const e of race.slice(0, 5)) await req('POST', '/api/rsvp/decline', { t: await confirmOf(e) });
 	}
 
+	console.log('\nName badges');
+	{
+		// A room of 4: who gets a named badge, in what order, and how many blanks the admin page starts from.
+		const EV = '/api/admin/events', NB = 'e2e-badges';
+		const t0 = Date.now() + 50 * 86400_000;
+		const at = (h) => new Date(t0 + h * 3600_000).toISOString();
+		await req('POST', EV, { action: 'create', id: NB, title: 'Badge Day', timezone: 'Europe/London', starts_at: at(0), ends_at: at(6), deadline: at(-24), in_person_max: 4, page_path: '/events/e2e-badges/', location: 'Room' }, ADMIN);
+		await req('POST', EV, { action: 'add_session', event: NB, label: 'Talk', mode: 'hybrid', starts_at: at(1), ends_at: at(2) }, ADMIN);
+		await req('POST', EV, { action: 'add_session', event: NB, label: 'Supper', mode: 'in_person', optin: true, starts_at: at(4), ends_at: at(6) }, ADMIN);
+		const supper = (await req('GET', `/api/admin/summary?event=${NB}`, undefined, ADMIN)).data.sessions.find((x) => x.optin)?.id;
+		const em = (n) => `badge-${n}@example.org`;
+		await registerAndConfirm({ event: NB, name: 'zed adams', email: em('zed'), affiliation: 'UCL' });
+		await registerAndConfirm({ event: NB, name: 'Ludwig van Beethoven', email: em('ludwig'), no_images: true });
+		await register({ event: NB, name: 'Una Confirmed', email: em('una') });
+		await registerAndConfirm({ event: NB, name: 'Amy Brown', email: em('amy') });
+		await registerAndConfirm({ event: NB, name: 'Wendy Waiting', email: em('wendy') });
+		await registerAndConfirm({ event: NB, name: 'Rita Remote', email: em('rita'), attendance: 'remote' });
+		await registerAndConfirm({ event: NB, name: 'Sam Supper', email: em('sam'), attendance: 'extras', optins: [supper] });
+		let b = (await req('GET', `/api/admin/summary?event=${NB}`, undefined, ADMIN)).data;
+		const named = (x) => x.badges.people.map((p) => `${p.given}|${p.family}`).join(', ');
+		check('badges: named for confirmed in-person places only, by family name, names as typed', named(b) === 'zed|adams, Amy|Brown, Ludwig|van Beethoven', named(b));
+		check('badges: Wendy is on the waiting list, Una unconfirmed, Sam supper only, Rita remote', b.registrations.find((x) => x.email === em('wendy'))?.place === 'waitlist' && b.registrations.find((x) => x.email === em('sam'))?.place === null);
+		check('badges: affiliation and the no-images request come with them', b.badges.people[0].affiliation === 'UCL' && b.badges.people.find((p) => p.given === 'Ludwig').no_images === true && b.badges.people.filter((p) => p.no_images).length === 1);
+		check('badges: one blank for the room (4 places, 3 named), the plain A4 sheet by default', b.badges.blanks_for_room === 1 && b.badges.template === 'plain-a4' && b.badges.colour === '#000000' && b.badges.font === null, JSON.stringify(b.badges));
+		check('badges: no email addresses in the badge data', !JSON.stringify(b.badges).includes('@'));
+		r = await req('POST', '/api/admin/promote', { id: b.registrations.find((x) => x.email === em('una')).id, what: 'confirm', email: em('una') }, ADMIN);
+		b = (await req('GET', `/api/admin/summary?event=${NB}`, undefined, ADMIN)).data;
+		check('badges: once confirmed for her, Una has a badge and the blanks go', r.data.ok && b.badges.people.length === 4 && b.badges.people.some((p) => p.given === 'Una') && b.badges.blanks_for_room === 0, named(b));
+		r = await req('POST', '/api/admin/promote', { id: b.registrations.find((x) => x.email === em('wendy')).id, what: 'event' }, ADMIN);
+		b = (await req('GET', `/api/admin/summary?event=${NB}`, undefined, ADMIN)).data;
+		check('badges: promoted beyond the maximum, Wendy gets a badge, and blanks never go below 0', b.badges.people.length === 5 && b.badges.blanks_for_room === 0, JSON.stringify([r.data, b.badges.people.length]));
+		for (const n of ['zed', 'ludwig', 'una', 'amy', 'wendy', 'rita', 'sam']) { const t = await manageOf(em(n)); if (t) await req('DELETE', '/api/rsvp/manage', { t }); }
+	}
+
 	console.log('\nAdmin removal');
 	const gina = 'gina@example.org', hal = 'hal@example.org';
 	await registerAndConfirm({ name: 'Gina', email: gina, attendance: 'remote' });
