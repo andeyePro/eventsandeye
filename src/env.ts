@@ -47,13 +47,21 @@ export interface Env {
 	BADGE_TEMPLATE?: string;
 	/** Name badges: a logo to use when the organiser does not choose a file (absolute or site-relative; SVG, PNG or JPEG). */
 	BADGE_LOGO_URL?: string;
-	/** Name badges: where the logo goes, "auto" (default: from its shape), "top", "right" or "left". */
+	/** Name badges: where the logo goes, "auto" (default: from its shape and the badge's), "corner", "top", "right" or "left". */
 	BADGE_LOGO_POSITION?: string;
 	/** Name badges: a font file (.woff2, .woff, .ttf or .otf, ideally on this site) and the family name to give it. */
 	BADGE_FONT_URL?: string;
 	BADGE_FONT_FAMILY?: string;
 	/** Name badges: the text colour, as #rrggbb (default black, which every printer does well). */
 	BADGE_COLOUR?: string;
+	/** Name badges: the affiliation's colour (default: BADGE_COLOUR). */
+	BADGE_AFFILIATION_COLOUR?: string;
+	/** Name badges: a short line under the logo, such as "EVENT’26", its colour, and its width as a share of the logo's (0.2 to 1, default 1). */
+	BADGE_TAG?: string;
+	BADGE_TAG_COLOUR?: string;
+	BADGE_TAG_WIDTH?: string;
+	/** Name badges: a colour for the dots on i and j, and for hyphens in names without them, as some brands draw them (default: none). */
+	BADGE_ACCENT_COLOUR?: string;
 	/** "true" on the Workers paid plan: messages carrying joining instructions go out in bigger pieces. */
 	PAID_PLAN?: string;
 	/** Local development only: the shortest time a registration is answered in (default 1500 ms; see register.ts). */

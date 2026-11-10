@@ -71,8 +71,9 @@ export async function start() {
 		'ACCESS_AUD=e2e-aud', 'ACCESS_TEAM_DOMAIN=e2e.cloudflareaccess.com', 'ADMIN_EMAILS=admin@example.org', 'ACCESS_MFA=claim',
 		'ORG_NAME=AMYBO', 'EMAIL_FROM=AMYBO <hello@amybo.org>', 'NOTIFY_EMAIL=events@example.org', 'POLL_REPLY_EMAIL=polls@example.org',
 		'REGISTER_MIN_MS=200',
-		// AMYBO's badges: Avery 4822 holders, in its brand blue (README, settings reference).
-		'BADGE_TEMPLATE=avery-4822', 'BADGE_COLOUR="#007CBB"', // quoted: in .dev.vars a bare # starts a comment
+		// AMYBO's badges: Avery 4822 holders, its tag line and brand colours (README, settings reference). Colours are
+		// quoted: in .dev.vars a bare # starts a comment.
+		'BADGE_TEMPLATE=avery-4822', 'BADGE_AFFILIATION_COLOUR="#007CBB"', 'BADGE_TAG=EVENT’26', 'BADGE_TAG_COLOUR="#007CBB"', 'BADGE_TAG_WIDTH=0.64', 'BADGE_ACCENT_COLOUR="#87BD25"',
 		// Served only by tests/browser/badges.mjs, which routes it to a font file on the machine.
 		'BADGE_FONT_URL=/fonts/badge-test.ttf', 'BADGE_FONT_FAMILY=Badge Test',
 		`ACCESS_JWKS_JSON=${JSON.stringify({ keys: [{ ...publicKey.export({ format: 'jwk' }), kid: 'e2e', alg: 'RS256' }] })}`, '',

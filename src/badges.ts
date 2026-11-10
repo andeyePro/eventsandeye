@@ -107,7 +107,11 @@ export function badgeSummary(env: Env, ev: { in_person_max: number }, regs: Para
 	const family = env.BADGE_FONT_FAMILY?.trim() || '';
 	const fontUrl = env.BADGE_FONT_URL?.trim() || '';
 	const position = env.BADGE_LOGO_POSITION?.trim().toLowerCase() || '';
-	const positionOk = ['auto', 'top', 'right', 'left'].includes(position);
+	const positionOk = ['auto', 'corner', 'top', 'right', 'left'].includes(position);
+	const colours = { colour: 'BADGE_COLOUR', affiliation_colour: 'BADGE_AFFILIATION_COLOUR', tag_colour: 'BADGE_TAG_COLOUR', accent_colour: 'BADGE_ACCENT_COLOUR' } as const;
+	const colourOf = (k: keyof typeof colours) => env[colours[k]]?.trim() || '';
+	const tagWidth = env.BADGE_TAG_WIDTH?.trim() || '';
+	const tagWidthOk = /^(0(\.\d+)?|1(\.0+)?)$/.test(tagWidth) && Number(tagWidth) >= 0.2;
 	return {
 		people,
 		/** Before rounding up to fill the last sheet, which depends on the sheet chosen. */
@@ -116,14 +120,23 @@ export function badgeSummary(env: Env, ev: { in_person_max: number }, regs: Para
 		/** Settings that were set but could not be used, so the admin page can say so rather than quietly ignore them. */
 		ignored: [
 			set && !known ? `BADGE_TEMPLATE "${set}" is not one of the built-in sheets` : '',
-			colour && !COLOUR_RE.test(colour) ? `BADGE_COLOUR "${colour}" is not a colour like #007CBB` : '',
+			...(Object.keys(colours) as (keyof typeof colours)[]).map((k) => colourOf(k) && !COLOUR_RE.test(colourOf(k)) ? `${colours[k]} "${colourOf(k)}" is not a colour like #007CBB` : ''),
+			tagWidth && !tagWidthOk ? `BADGE_TAG_WIDTH "${tagWidth}" is not a share of the logo's width from 0.2 to 1, such as 0.64` : '',
 			family && !FONT_NAME_RE.test(family) ? 'BADGE_FONT_FAMILY may only have letters, digits, spaces, - and _' : '',
 			fontUrl && !(family && FONT_NAME_RE.test(family)) ? 'BADGE_FONT_URL needs BADGE_FONT_FAMILY, the name to use for it' : '',
-			position && !positionOk ? `BADGE_LOGO_POSITION "${position}" is not auto, top, right or left` : '',
+			position && !positionOk ? `BADGE_LOGO_POSITION "${position}" is not auto, corner, top, right or left` : '',
 		].filter(Boolean),
 		logo_url: env.BADGE_LOGO_URL?.trim() || null,
 		logo_position: positionOk ? position : 'auto',
 		colour: COLOUR_RE.test(colour) ? colour.toUpperCase() : '#000000',
+		/** null: the same as the text colour. */
+		affiliation_colour: COLOUR_RE.test(colourOf('affiliation_colour')) ? colourOf('affiliation_colour').toUpperCase() : null,
+		tag: env.BADGE_TAG?.trim().slice(0, 40) || '',
+		tag_colour: COLOUR_RE.test(colourOf('tag_colour')) ? colourOf('tag_colour').toUpperCase() : null,
+		tag_width: tagWidthOk ? Number(tagWidth) : 1,
+		/** Set: the dots on i and j (and hyphens in names without any) are drawn in this colour; the admin page can turn
+		 * it off. null: off. */
+		accent_colour: COLOUR_RE.test(colourOf('accent_colour')) ? colourOf('accent_colour').toUpperCase() : null,
 		font: fontUrl && FONT_NAME_RE.test(family) ? { url: fontUrl, family } : null,
 	};
 }
@@ -236,10 +249,89 @@ function badgePrintPage(doc) {
 		el.classList.remove('anywhere');
 		shrink(min);
 		if (over()) { el.classList.add('anywhere'); shrink(1.5); }
+		// The tag line fills its width exactly, so it ends where the logo ends: grown until one more step would not fit.
+		if (el.dataset.fill) {
+			let size = parseFloat(el.style.fontSize);
+			const most = parseFloat(el.dataset.fill), wide = () => el.scrollWidth > el.clientWidth + 0.5 || el.scrollHeight > el.clientHeight + 0.5;
+			const ink = () => { const r = doc.createRange(); r.selectNodeContents(el); return r.getBoundingClientRect().width; };
+			while (size < most && !wide() && ink() < el.clientWidth * 0.98) { size *= 1.02; el.style.fontSize = size + 'mm'; }
+			if (wide() || ink() > el.clientWidth + 0.5) { size /= 1.02; el.style.fontSize = size + 'mm'; }
+		}
 		if (el.closest('.text')) el.style.height = 'auto';
 	};
+	// The line's own text: while it is being edited, what is in it; otherwise what was there before it was decorated.
+	const textOf = (el) => el === doc.activeElement || el.dataset.text == null ? el.textContent : el.dataset.text;
 	const flags = doc.getElementById('checks');
-	const flag = (el) => { el.classList.toggle('check', !!badgeCaseFlag(el.textContent)); };
+	const flag = (el) => { el.classList.toggle('check', !!badgeCaseFlag(textOf(el))); };
+
+	/*
+	 * Accent colour (body data-accent): the dot on every lower-case i and j, in names and affiliations, and the hyphens
+	 * in a name with no i or j at all. A dot cannot be coloured on its own, so the letter is drawn dotless (ı, ȷ) in the
+	 * text colour, and the dotted letter laid exactly over it in the accent colour, clipped to its dot: so the dot is the
+	 * font's own, its shape and place exact in any font. Where to clip (halfway between the dot and the top of the stem)
+	 * comes from the font itself: the dotted and dotless letters are drawn on a canvas and compared pixel by pixel, once
+	 * per font and weight, in em so it follows the fitted size. A font without the dotless letters (the two must match
+	 * apart from the dot) is left as it is. The real text stays in the line for screen readers and copying; the drawing
+	 * is aria-hidden.
+	 */
+	const accent = doc.body.dataset.accent === '1';
+	const dots = {};
+	const dotFor = (el, ch) => {
+		const cs = getComputedStyle(el), key = cs.fontStyle + '|' + cs.fontWeight + '|' + cs.fontFamily + '|' + ch;
+		if (key in dots) return dots[key];
+		const S = 200, n = 420, ox = 110, oy = 300, plain = ch === 'i' ? '\u0131' : '\u0237';
+		const cv = doc.createElement('canvas'); cv.width = cv.height = n;
+		const x = cv.getContext('2d', { willReadFrequently: true });
+		const font = cs.fontStyle + ' ' + cs.fontWeight + ' ' + S + 'px ' + cs.fontFamily;
+		const shot = (g) => { x.clearRect(0, 0, n, n); x.font = font; x.fillStyle = '#000'; x.textBaseline = 'alphabetic'; x.fillText(g, ox, oy); return x.getImageData(0, 0, n, n).data; };
+		const a = shot(ch), b = shot(plain);
+		let maxY = -1, stemTop = n, dot = 0, stem = 0, extra = 0;
+		for (let p = 3; p < a.length; p += 4) {
+			const d = a[p] - b[p], Y = Math.floor((p - 3) / 4 / n);
+			if (b[p] > 16) { stem++; stemTop = Math.min(stemTop, Y); }
+			if (d < -64) extra++;
+			if (d > 16) { dot++; maxY = Math.max(maxY, Y); }
+		}
+		x.font = font;
+		const same = Math.abs(x.measureText(ch).width - x.measureText(plain).width) < S * 0.02;
+		// The dotless letter must be the dotted one less its dot: otherwise it came from another font, or is missing.
+		const ok = dot > 20 && stem > 20 && extra <= stem * 0.02 && same && maxY < stemTop;
+		if (!ok) return (dots[key] = null);
+		// The dotted letter is an inline-block on the line's own baseline, then pulled back by its advance so the dotless
+		// letter is drawn over it. The cut is halfway between the bottom of the dot and the top of the stem, measured from
+		// the inline-block's top, whose baseline is found on the page with a marker.
+		const mid = (oy - (maxY + stemTop) / 2) / S;
+		const over = doc.createElement('span'), base = doc.createElement('span');
+		over.className = 'tt'; over.textContent = ch;
+		base.style.cssText = 'display:inline-block;width:0;height:0;vertical-align:baseline';
+		over.append(base); el.append(over);
+		const px = parseFloat(cs.fontSize), baseline = (base.getBoundingClientRect().top - over.getBoundingClientRect().top) / px;
+		over.remove();
+		x.font = font;
+		return (dots[key] = { cut: baseline - mid, adv: x.measureText(ch).width / S });
+	};
+	const decorate = (el) => {
+		if (!accent || el === doc.activeElement) return;
+		const text = textOf(el);
+		el.dataset.text = text;
+		const badge = el.closest('.badge');
+		const name = [...badge.querySelectorAll('.given, .family')].map(textOf).join(' ');
+		const hyphens = !el.classList.contains('aff') && !/[ij]/.test(name);
+		if (!/[ij]/.test(text) && !(hyphens && /[-\u2010\u2011]/.test(text))) { el.textContent = text; return; }
+		el.textContent = '';
+		let out = '';
+		for (const ch of text) {
+			const d = ch === 'i' || ch === 'j' ? dotFor(el, ch) : null;
+			if (d) out += '<span class="tt" style="clip-path:inset(0 0 calc(100% - ' + d.cut.toFixed(4) + 'em) 0);margin-right:-' + d.adv.toFixed(4) + 'em">' + ch + '</span>' + (ch === 'i' ? '\u0131' : '\u0237');
+			else if (hyphens && /[-\u2010\u2011]/.test(ch)) out += '<span class="acc">' + ch + '</span>';
+			else out += badgeEsc(ch);
+		}
+		el.innerHTML = '<span class="sr">' + badgeEsc(text) + '</span><span aria-hidden="true">' + out + '</span>';
+	};
+	const decorateBadge = (badge) => badge.querySelectorAll('.given.edit, .family.edit, .aff.edit').forEach((x) => { decorate(x); fit(x); });
+	// Edited as plain text, decorated again when done (the hyphen rule looks at the whole name, so the badge's lines).
+	doc.addEventListener('focusin', (e) => { const el = e.target.closest && e.target.closest('.edit'); if (el && accent && el.dataset.text != null) { el.textContent = el.dataset.text; fit(el); } });
+	doc.addEventListener('focusout', (e) => { const el = e.target.closest && e.target.closest('.edit'); if (el && accent) { el.dataset.text = el.textContent; setTimeout(() => decorateBadge(el.closest('.badge')), 0); } });
 	const count = () => {
 		const n = doc.querySelectorAll('.edit.check').length;
 		flags.hidden = !n;
@@ -250,7 +342,7 @@ function badgePrintPage(doc) {
 	doc.addEventListener('input', (e) => { const el = e.target.closest && e.target.closest('.fit'); if (el) { fit(el); if (el.classList.contains('edit')) { flag(el); count(); } } });
 	// One line each: Enter finishes the edit rather than adding a line the badge has no room for.
 	doc.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.closest && e.target.closest('.edit')) { e.preventDefault(); e.target.blur(); } });
-	const done = () => { all(); doc.body.dataset.fitted = '1'; };
+	const done = () => { if (accent) doc.querySelectorAll('.edit').forEach(decorate); all(); doc.body.dataset.fitted = '1'; };
 	all();
 	// A site font may arrive after the first fit, with different widths: fit again once it (and the logo) have, and only
 	// then say the page is ready.
@@ -262,56 +354,78 @@ const badgeEsc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({
 const BADGE_NO_IMAGES_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 8h4l2-3h6l2 3h4v11H3z" fill="none" stroke="#000" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.5" fill="none" stroke="#000" stroke-width="1.8"/><path d="M3 3l18 18" stroke="#000" stroke-width="2"/></svg>';
 
 /**
- * Where the logo goes when the organiser leaves it to us: a tall or square logo on a landscape badge makes a column at
- * the side (on the right, so the name is read first), and anything wider, or any logo on a portrait badge, a band
- * across the top. aspect is the logo's width over its height (0 when unknown, read as wide).
+ * Where the logo goes when the organiser leaves it to us. On a landscape badge, in the top right-hand corner with the
+ * names across the full width beneath it, unless the logo is very wide (a banner), which goes in a band across the
+ * top; on a portrait badge, across the top. aspect is the logo's width over its height (0 when unknown).
  */
 function badgeLogoPosition(g, aspect, chosen) {
-	if (chosen === 'top' || chosen === 'right' || chosen === 'left') return chosen;
-	return g.badge_w > g.badge_h * 1.1 && aspect > 0 && aspect < 1.25 ? 'right' : 'top';
+	if (chosen === 'corner' || chosen === 'top' || chosen === 'right' || chosen === 'left') return chosen;
+	if (g.badge_w <= g.badge_h * 1.1) return 'top';
+	return aspect >= 2.2 ? 'top' : 'corner';
 }
 
 /**
- * The parts of a badge, in mm. With the logo in a band at the top, the band is capped at about a quarter of the
- * badge's height so even a tall logo leaves the name large, and the text is centred beneath it. With the logo at the
- * side, it is a column about a third of the badge's width, as high as the badge allows and centred in it, and the text,
- * left-aligned, has the rest. The text is the event title (if wanted), the given name (largest), family name and
- * affiliation; with oneLine, the full name takes the given and family names' room.
+ * The parts of a badge, in mm.
+ * - corner: the logo in the top right-hand corner, about 22% of the badge's width (20 mm on a 90 mm badge) and never
+ *   more than about a third of its height, with the tag line under it, right-aligned to it; the names run the full
+ *   width beneath, left-aligned, and the event title (if wanted) sits to the left of the logo.
+ * - top: a band across the top, capped at about a quarter of the badge's height, the names centred beneath.
+ * - left or right: a column about a third of the badge's width, the names left-aligned beside it.
+ * The names are the given name (largest), family name and affiliation; with oneLine, the full name takes the given and
+ * family names' room. tagWidth is the tag line's width as a share of the logo's.
  */
 function badgeLayout(g, o) {
 	const w = g.badge_w, h = g.badge_h;
 	const pos = o.logo ? badgeLogoPosition(g, o.logoAspect || 0, o.logoPosition) : '';
-	const side = pos === 'left' || pos === 'right';
+	const side = pos === 'left' || pos === 'right', corner = pos === 'corner';
 	const pad = badgeRound(Math.min(5, Math.max(2, 0.08 * Math.min(w, h))));
 	const iw = badgeRound(w - 2 * pad), ih = badgeRound(h - 2 * pad);
-	const colGap = side ? badgeRound(Math.min(4, 0.05 * w)) : 0;
-	const logoW = side ? badgeRound(w / 3) : pos ? iw : 0;
-	const logoH = side ? ih : pos ? badgeRound(Math.min(0.27 * h, 0.3 * ih)) : 0;
-	const tw = badgeRound(side ? iw - logoW - colGap : iw);
 	const gap = badgeRound(0.025 * ih);
-	const th = side ? ih : ih - logoH - gap;
+	const colGap = side ? badgeRound(Math.min(4, 0.05 * w)) : 0;
+	const tag = !!(pos && o.tag);
+	let logoW = 0, logoH = 0;
+	if (corner) {
+		// As wide as 22% of the badge, unless that makes it too tall for the names to stay large.
+		const aspect = o.logoAspect > 0 ? o.logoAspect : 1;
+		logoW = Math.min(0.22 * w, 0.3 * ih * aspect);
+		logoH = badgeRound(logoW / aspect);
+		logoW = badgeRound(logoW);
+	} else if (side) { logoW = badgeRound(w / 3); logoH = ih; }
+	else if (pos) { logoW = iw; logoH = badgeRound(Math.min(0.27 * h, 0.3 * ih)); }
+	const tagH = tag ? badgeRound(0.075 * h) : 0;
+	const tagW = tag ? badgeRound(Math.min(1, Math.max(0.2, o.tagWidth > 0 ? o.tagWidth : 1)) * logoW) : 0;
+	if (side && tag) logoH = badgeRound(ih - tagH - gap);
+	const headH = corner || pos === 'top' ? badgeRound(logoH + (tag ? tagH + gap : 0)) : 0;
+	const tw = badgeRound(side ? iw - logoW - colGap : iw);
+	const th = side ? ih : ih - headH - (headH ? gap : 0);
+	// In the corner layout the title sits beside the logo, so it takes nothing from the names.
 	const titleH = o.showTitle ? badgeRound((pos === 'top' ? 0.09 : 0.12) * ih) : 0;
-	const text = th - titleH - 3 * gap;
+	const text = th - (corner ? 0 : titleH) - 3 * gap;
 	// Side by side there is no band to fill, so the lines keep their sizes and the block is centred in the height.
 	const share = side ? 0.82 : 1;
 	const affH = badgeRound(0.2 * text * share);
-	const givenH = badgeRound((o.oneLine ? text * share - affH : 0.48 * text * share));
+	const givenH = badgeRound((o.oneLine ? text * share - affH : (corner ? 0.5 : 0.48) * text * share));
 	const familyH = o.oneLine ? 0 : badgeRound(text * share - affH - givenH);
-	return { pos, side, pad, iw, ih, tw, colGap, logoW, logoH, titleH, gap, givenH, familyH, affH };
+	return { pos, side, corner, pad, iw, ih, tw, colGap, logoW, logoH, tagW, tagH, headH, titleH, gap, givenH, familyH, affH };
 }
 
 /**
  * The print page: one section per sheet, the named badges first (in the order given), then the blanks.
  * opts: { title, people: [{ given, family, affiliation, no_images }], blanks, geometry, logo (URL or data URL, or ''),
- *   logoAspect (width / height, 0 if unknown), logoPosition ('auto', 'top', 'right' or 'left'), guides, markNoImages,
- *   oneLine, showTitle, colour ('#rrggbb'), font ({ url, family } or null) }
+ *   logoAspect (width / height, 0 if unknown), logoPosition ('auto', 'corner', 'top', 'right' or 'left'), tag (a line
+ *   under the logo), tagColour, tagWidth (share of the logo's width), guides, markNoImages, oneLine, showTitle, colour,
+ *   affColour (the affiliation's), accent (the dots on i and j, and hyphens in names without them, or '' for none;
+ *   all colours '#rrggbb'),
+ *   font ({ url, family } or null) }
  */
 function badgeSheetHtml(opts) {
 	const g = opts.geometry, h = g.badge_h;
 	const L = badgeLayout(g, opts);
-	const colour = /^#[0-9a-fA-F]{6}$/.test(opts.colour || '') ? opts.colour : '#000000';
+	const hex = (c, or) => /^#[0-9a-fA-F]{6}$/.test(c || '') ? c : or;
+	const colour = hex(opts.colour, '#000000'), affColour = hex(opts.affColour, colour), tagColour = hex(opts.tagColour, colour), accent = hex(opts.accent, '');
 	const mark = opts.markNoImages && opts.people.some((p) => p.no_images);
-	const givenCap = Math.min(L.givenH / 1.25, 0.2 * h);
+	const givenCap = Math.min(L.givenH / 1.25, (L.corner ? 0.24 : 0.2) * h);
+	const named = badgeEsc;
 	const titleSize = badgeRound(Math.min(L.titleH / 1.3, 0.07 * h));
 	const edit = (label) => ' edit" contenteditable="plaintext-only" spellcheck="false" role="textbox" aria-label="' + label + '"';
 	const box = (cls, height, size, min, inner, label) => '<div class="' + cls + ' fit' + (label ? edit(label) : '"') + ' style="height:' + height + 'mm;font-size:' + size + 'mm" data-h="' + height + '" data-size="' + size + '" data-min="' + min + '">' + inner + '</div>';
@@ -323,12 +437,12 @@ function badgeSheetHtml(opts) {
 			const full = [p.given, p.family].filter(Boolean).join(' ');
 			const who = badgeEsc(full) + ', badge ' + (i + 1);
 			const gSize = badgeNameFit(opts.oneLine ? full : p.given, L.tw, L.givenH, givenCap).size;
-			if (opts.oneLine) parts += box('given', L.givenH, gSize, 4, badgeEsc(full), 'Name: ' + who);
+			if (opts.oneLine) parts += box('given', L.givenH, gSize, 4, named(full), 'Name: ' + who);
 			else {
-				parts += box('given', L.givenH, gSize, 4, badgeEsc(p.given), 'Given name: ' + who);
+				parts += box('given', L.givenH, gSize, 4, named(p.given), 'Given name: ' + who);
 				// Smaller than the given name, always, however short the family name.
 				const fSize = Math.min(badgeNameFit(p.family, L.tw, L.familyH, L.familyH / 1.2).size, badgeRound(gSize * 0.62));
-				parts += box('family', L.familyH, Math.max(2.2, fSize), 3, badgeEsc(p.family), 'Family name: ' + who);
+				parts += box('family', L.familyH, Math.max(2.2, fSize), 3, named(p.family), 'Family name: ' + who);
 				if (p.family) smaller = Math.max(2.2, fSize) * 0.9;
 			}
 			// Smaller still than the family name: the affiliation is the least of the three.
@@ -336,10 +450,17 @@ function badgeSheetHtml(opts) {
 			parts += box('aff', L.affH, Math.max(1.8, aSize), 2, badgeEsc(p.affiliation || ''), 'Affiliation: ' + who);
 		} else parts = space('given', L.givenH) + space('family', L.familyH) + space('aff', L.affH);
 		// Blank badges keep the same layout, with the text area left empty for writing in.
+		const img = '<img src="' + badgeEsc(opts.logo) + '" alt="">';
+		const tagLine = L.tagW ? box('tag', L.tagH, badgeRound(Math.min(L.tagH / 1.25, L.tagW / (Math.max(1, String(opts.tag).length) * 0.62))), 1.5, badgeEsc(opts.tag)).replace(' data-min=', ' data-fill="' + badgeRound(L.tagH / 1.25) + '" data-min=') : '';
+		const logo = !L.pos ? '' : L.corner || L.pos === 'top'
+			? '<div class="head" style="height:' + L.headH + 'mm">'
+				+ (L.corner && opts.showTitle ? box('title', L.titleH, titleSize, 1.6, badgeEsc(opts.title)) : '')
+				+ '<div class="mark-block" style="width:' + L.logoW + 'mm"><div class="logo" style="width:' + L.logoW + 'mm;height:' + L.logoH + 'mm">' + img + '</div>' + tagLine + '</div></div>'
+			: '<div class="mark-block" style="width:' + L.logoW + 'mm"><div class="logo" style="width:' + L.logoW + 'mm;height:' + L.logoH + 'mm">' + img + '</div>' + tagLine + '</div>';
 		return '<div class="badge pos-' + (L.pos || 'none') + (p ? '' : ' blank') + '">'
-			+ (L.pos ? '<div class="logo" style="width:' + L.logoW + 'mm;height:' + L.logoH + 'mm"><img src="' + badgeEsc(opts.logo) + '" alt=""></div>' : '')
+			+ logo
 			+ '<div class="text" style="width:' + L.tw + 'mm">'
-			+ (opts.showTitle ? box('title', L.titleH, titleSize, 1.6, badgeEsc(opts.title)) : '')
+			+ (opts.showTitle && !L.corner ? box('title', L.titleH, titleSize, 1.6, badgeEsc(opts.title)) : '')
 			+ parts + '</div>'
 			+ (p && mark && p.no_images ? '<span class="noimg" title="Asked us not to share images of them">' + BADGE_NO_IMAGES_SVG + '</span>' : '')
 			+ '</div>';
@@ -377,6 +498,13 @@ function badgeSheetHtml(opts) {
 		+ ' .sheet { position: relative; width: ' + g.sheet_w + 'mm; height: ' + g.sheet_h + 'mm; margin: 8mm auto; background: #fff; overflow: hidden; box-shadow: 0 1px 4px #0004; }'
 		+ ' .badge { position: absolute; width: ' + g.badge_w + 'mm; height: ' + h + 'mm; padding: ' + L.pad + 'mm; display: flex; justify-content: center; align-items: center; gap: ' + (L.side ? L.colGap : L.gap) + 'mm; overflow: hidden; color: ' + colour + '; font-family: ' + stack + '; }'
 		+ ' .pos-top, .pos-none { flex-direction: column; text-align: center; } .pos-right { flex-direction: row-reverse; text-align: left; } .pos-left { flex-direction: row; text-align: left; }'
+		+ ' .pos-corner { flex-direction: column; justify-content: flex-start; align-items: stretch; text-align: left; } .pos-corner .text { flex: 1 1 auto; min-height: 0; }'
+		+ ' .head { width: 100%; display: flex; justify-content: space-between; align-items: flex-start; gap: ' + L.gap + 'mm; } .pos-top .head { justify-content: center; }'
+		+ ' .head .title { flex: 1 1 auto; width: auto; justify-content: flex-start; } .mark-block { display: flex; flex-direction: column; gap: ' + L.gap + 'mm; margin-left: auto; } .pos-top .mark-block { margin: 0 auto; }'
+		+ ' .mark-block { flex: none; } .mark-block .tag { color: ' + tagColour + '; font-weight: 700; width: ' + L.tagW + 'mm; align-self: ' + (L.corner ? 'flex-end' : 'center') + '; text-align: ' + (L.corner ? 'right' : 'center') + '; white-space: nowrap; }'
+		+ ' .aff { color: ' + affColour + '; } .acc { color: ' + (accent || colour) + '; }'
+		+ ' .fit { position: relative; } .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }'
+		+ ' .tt { display: inline-block; color: ' + (accent || colour) + '; }'
 		+ ' .text { display: flex; flex-direction: column; justify-content: center; gap: ' + L.gap + 'mm; } .pos-top .text { flex: 1 1 auto; min-height: 0; }'
 		+ (opts.guides ? ' .badge { outline: 0.2mm dashed #777; outline-offset: -0.1mm; }' : '')
 		+ ' .badge > *, .text > * { flex: none; }'
@@ -386,14 +514,14 @@ function badgeSheetHtml(opts) {
 		+ ' .given { font-weight: 700; } .family { font-weight: 700; } .aff { font-weight: 400; } .title { font-weight: 700; }'
 		+ ' .edit { cursor: text; border-radius: 1mm; } .edit:focus { outline: 0.5mm solid #0069a0; }'
 		+ ' .edit.check { outline: 0.6mm dashed #d35f00; }'
-		// The mark sits in a bottom corner away from the logo, so it never covers it.
-		+ ' .noimg { position: absolute; bottom: ' + badgeRound(L.pad / 2) + 'mm; ' + (L.pos === 'left' ? 'right' : L.pos === 'right' ? 'left' : 'right') + ': ' + badgeRound(L.pad / 2) + 'mm; width: 4mm; height: 4mm; display: inline-block; }'
+		// The mark sits in a corner away from the logo and the names (top left beside a corner logo), so it covers neither.
+		+ ' .noimg { position: absolute; bottom: ' + badgeRound(L.pad / 2) + 'mm; ' + (L.pos === 'left' ? 'right' : L.pos === 'right' ? 'left' : 'right') + ': ' + badgeRound(L.pad / 2) + 'mm;' + (L.corner && !opts.showTitle ? ' bottom: auto; top: ' + badgeRound(L.pad / 2) + 'mm; left: ' + badgeRound(L.pad / 2) + 'mm; right: auto;' : '') + ' width: 4mm; height: 4mm; display: inline-block; }'
 		+ ' .noimg svg { width: 100%; height: 100%; display: block; }'
 		+ ' .legend { position: absolute; left: 10mm; right: 10mm; margin: 0; font-size: 3mm; line-height: 1.2; text-align: center; color: #000; }'
 		+ ' .legend .noimg { position: static; vertical-align: -0.8mm; }'
 		+ ' @media print { body { background: #fff; } .bar { display: none; } .sheet { margin: 0; box-shadow: none; break-after: page; } .sheet:last-child { break-after: auto; } .edit, .edit.check, .edit:focus { outline: none; } }';
 	return '<!doctype html><html lang="en-GB"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
-		+ '<title>Name badges – ' + badgeEsc(opts.title) + '</title><style>' + css + '</style></head><body>'
+		+ '<title>Name badges – ' + badgeEsc(opts.title) + '</title><style>' + css + '</style></head><body' + (accent ? ' data-accent="1"' : '') + '>'
 		+ '<main><div class="bar"><h1>Name badges – ' + badgeEsc(opts.title) + '</h1>'
 		+ '<p>' + n + ' named and ' + opts.blanks + ' blank, on ' + sheetCount + ' sheet' + (sheetCount === 1 ? '' : 's') + ' of ' + per + '.</p>'
 		+ '<p>Names and affiliations print exactly as typed. Click any of them to correct it here before printing; changes here are not saved.</p>'
@@ -401,6 +529,6 @@ function badgeSheetHtml(opts) {
 		+ '<p>Print at actual size (100%, not "fit to page"), with margins set to none and headers and footers off. Try one sheet on plain paper first, held against a sheet of badges to the light.</p>'
 		+ '<button type="button" onclick="print()">Print</button></div>'
 		+ sheets.join('') + '</main>'
-		+ '<script>' + badgeCaseFlag.toString() + ';(' + badgePrintPage.toString() + ')(document);<\/script></body></html>';
+		+ '<script>' + badgeCaseFlag.toString() + ';const badgeEsc = ' + badgeEsc.toString() + ';(' + badgePrintPage.toString() + ')(document);<\/script></body></html>';
 }
 `;

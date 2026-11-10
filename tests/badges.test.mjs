@@ -48,12 +48,19 @@ test('badge settings: defaults, a known sheet, and settings that cannot be used 
 	assert.equal(s.colour, '#000000');
 	assert.equal(s.font, null);
 	assert.deepEqual(s.ignored, []);
-	const amybo = badgeSummary({ BADGE_TEMPLATE: 'avery-4822', BADGE_COLOUR: '#007cbb', BADGE_FONT_URL: '/fonts/Montserrat-SemiBold.woff2', BADGE_FONT_FAMILY: 'Montserrat SemiBold', BADGE_LOGO_URL: '/logo.svg' }, { in_person_max: 1 }, [reg('A B'), reg('C D')]);
+	const amybo = badgeSummary({ BADGE_TEMPLATE: 'avery-4822', BADGE_COLOUR: '#007cbb', BADGE_AFFILIATION_COLOUR: '#007CBB', BADGE_TAG: ' EVENT’26 ', BADGE_TAG_COLOUR: '#007CBB', BADGE_TAG_WIDTH: '0.64', BADGE_ACCENT_COLOUR: '#87bd25', BADGE_FONT_URL: '/fonts/Montserrat-SemiBold.woff2', BADGE_FONT_FAMILY: 'Montserrat SemiBold', BADGE_LOGO_URL: '/logo.svg' }, { in_person_max: 1 }, [reg('A B'), reg('C D')]);
 	assert.equal(amybo.template, 'avery-4822');
 	assert.equal(amybo.blanks_for_room, 0, 'never negative');
 	assert.equal(amybo.colour, '#007CBB');
 	assert.deepEqual(amybo.font, { url: '/fonts/Montserrat-SemiBold.woff2', family: 'Montserrat SemiBold' });
 	assert.equal(amybo.logo_url, '/logo.svg');
+	assert.deepEqual([amybo.affiliation_colour, amybo.tag, amybo.tag_colour, amybo.tag_width, amybo.accent_colour], ['#007CBB', 'EVENT’26', '#007CBB', 0.64, '#87BD25']);
+	assert.deepEqual([s.affiliation_colour, s.tag, s.tag_colour, s.tag_width, s.accent_colour], [null, '', null, 1, null], 'all off by default');
+	const odd = badgeSummary({ BADGE_TAG_WIDTH: '2', BADGE_ACCENT_COLOUR: 'green', BADGE_LOGO_POSITION: 'corner' }, { in_person_max: 1 }, []);
+	assert.equal(odd.tag_width, 1);
+	assert.equal(odd.accent_colour, null);
+	assert.equal(odd.logo_position, 'corner');
+	assert.equal(odd.ignored.length, 2, odd.ignored.join(' | '));
 	const bad = badgeSummary({ BADGE_TEMPLATE: 'avery-9999', BADGE_COLOUR: 'blue', BADGE_FONT_URL: '/f.woff2', BADGE_FONT_FAMILY: 'x"; } body { color: red' }, { in_person_max: 1 }, []);
 	assert.equal(bad.template, 'plain-a4');
 	assert.equal(bad.colour, '#000000');
@@ -134,22 +141,29 @@ test('names and affiliations typed all in one case are flagged, never changed', 
 	assert.equal(js.badgeCaseFlag(''), '');
 });
 
-test('the logo goes at the side when it is tall and the badge wide, otherwise across the top; a choice wins', () => {
+test('the logo goes in the top corner of a landscape badge, a banner across the top; a choice wins', () => {
 	const a = preset('avery-4822');
 	const portrait = { ...a, badge_w: 60, badge_h: 90, sheet_w: 210, cols: 2 };
-	assert.equal(js.badgeLogoPosition(a, 7087 / 9493, 'auto'), 'right', 'AMYBO\'s portrait lockup on a landscape badge');
-	assert.equal(js.badgeLogoPosition(a, 1, 'auto'), 'right', 'square');
-	assert.equal(js.badgeLogoPosition(a, 400 / 120, 'auto'), 'top', 'a wide lockup');
-	assert.equal(js.badgeLogoPosition(a, 0, 'auto'), 'top', 'shape unknown');
+	assert.equal(js.badgeLogoPosition(a, 7087 / 4905, 'auto'), 'corner', 'AMYBO\'s logo on a landscape badge');
+	assert.equal(js.badgeLogoPosition(a, 7087 / 9493, 'auto'), 'corner', 'a tall one too');
+	assert.equal(js.badgeLogoPosition(a, 0, 'auto'), 'corner', 'shape unknown');
+	assert.equal(js.badgeLogoPosition(a, 400 / 120, 'auto'), 'top', 'a banner');
 	assert.equal(js.badgeLogoPosition(portrait, 0.75, 'auto'), 'top', 'portrait badge');
-	assert.equal(js.badgeLogoPosition(a, 0.75, 'left'), 'left');
-	assert.equal(js.badgeLogoPosition(a, 0.75, 'top'), 'top');
-	const L = js.badgeLayout(a, { logo: 'x', logoAspect: 0.75, logoPosition: 'auto', showTitle: false, oneLine: false });
-	assert.equal(L.pos, 'right');
-	assert.equal(L.logoW, 30, 'a third of the badge width');
-	assert.ok(L.pad >= 4.5 && L.pad <= 5, 'about 5 mm margins');
+	for (const p of ['right', 'left', 'top', 'corner']) assert.equal(js.badgeLogoPosition(a, 0.75, p), p);
+	const C = js.badgeLayout(a, { logo: 'x', logoAspect: 7087 / 4905, logoPosition: 'auto', tag: 'EVENT’26', tagWidth: 0.64, showTitle: false, oneLine: false });
+	assert.equal(C.pos, 'corner');
+	assert.ok(near(C.logoW, 19.8), 'about 20 mm wide on a 90 mm badge: ' + C.logoW);
+	assert.ok(near(C.logoH, 13.7), 'its height from its shape: ' + C.logoH);
+	assert.ok(near(C.tagW, 12.7), 'the tag line 0.64 of the logo\'s width: ' + C.tagW);
+	assert.ok(C.pad >= 4.5 && C.pad <= 5, 'about 5 mm margins');
+	assert.equal(C.tw, C.iw, 'the names run the full width');
+	assert.ok(C.headH + C.gap + C.givenH + C.familyH + C.affH + 3 * C.gap <= C.ih + 0.1);
+	assert.ok(C.givenH > C.familyH && C.familyH > C.affH);
+	const tall = js.badgeLayout(a, { logo: 'x', logoAspect: 0.5, logoPosition: 'corner', showTitle: false });
+	assert.ok(tall.logoH <= 0.3 * tall.ih + 0.1, 'a tall logo is narrowed rather than allowed to crowd the names');
+	const L = js.badgeLayout(a, { logo: 'x', logoAspect: 0.75, logoPosition: 'right', showTitle: false, oneLine: false });
+	assert.equal(L.logoW, 30, 'a side column: a third of the badge width');
 	assert.ok(near(L.tw + L.logoW + L.colGap, L.iw), 'the text has the rest of the width');
-	assert.ok(L.givenH + L.familyH + L.affH + 3 * L.gap <= L.ih + 0.1);
 	assert.ok(L.givenH > L.familyH && L.familyH > L.affH);
 });
 
@@ -191,12 +205,23 @@ test('the print page: page size, one section per sheet, names as typed and escap
 	assert.match(marked, /font-family: "Montserrat SemiBold", Arial/);
 	assert.match(marked, /aria-label="Name: amy brown, badge 1"/, 'one line: the full name');
 	assert.match(marked, /<img src="data:image\/svg\+xml;base64,AAAA" alt="">/);
-	assert.match(marked, /class="badge pos-top"/, 'shape unknown: across the top');
-	const side = js.badgeSheetHtml({ title: 'T', people, blanks: 1, geometry: a, logo: 'l.svg', logoAspect: 0.75, logoPosition: 'auto', guides: false, markNoImages: false, oneLine: false, showTitle: false, colour: '', font: null });
+	assert.match(marked, /class="badge pos-corner"/, 'shape unknown, landscape badge: the corner');
+	const side = js.badgeSheetHtml({ title: 'T', people, blanks: 1, geometry: a, logo: 'l.svg', logoAspect: 0.75, logoPosition: 'right', guides: false, markNoImages: false, oneLine: false, showTitle: false, colour: '', font: null });
 	assert.match(side, /class="badge pos-right"/);
 	assert.match(side, /class="badge pos-right blank"/, 'blanks keep the same layout');
 	assert.match(side, /class="logo" style="width:30mm;/);
 	assert.doesNotMatch(marked.slice(0, marked.indexOf('<script>')), /<\/script>/);
+	const amybo = js.badgeSheetHtml({ title: 'T', people: [{ given: 'Anne-Marie', family: 'St. Clair-Jones', affiliation: 'X', no_images: false }], blanks: 1, geometry: a, logo: 'l.svg', logoAspect: 1.44, logoPosition: 'auto',
+		tag: 'EVENT’26', tagColour: '#007CBB', tagWidth: 0.64, colour: '#000000', affColour: '#007cbb', accent: '#87BD25', guides: false, markNoImages: false, oneLine: false, showTitle: false, font: null });
+	assert.match(amybo, /class="badge pos-corner"/);
+	assert.match(amybo, /class="badge pos-corner blank"/, 'blanks keep the same layout');
+	assert.equal((amybo.match(/>EVENT’26</g) || []).length, 2, 'the tag on every badge, named or blank');
+	assert.match(amybo, /\.mark-block \.tag \{ color: #007CBB;[^}]*width: 12\.\dmm; align-self: flex-end; text-align: right;/);
+	assert.match(amybo, /\.aff \{ color: #007cbb; \} \.acc \{ color: #87BD25; \}/);
+	assert.match(amybo, /<body data-accent="1">/, 'the print page draws the dots on i and j (measured there, from the font)');
+	assert.match(amybo, /\.tt \{ display: inline-block; color: #87BD25; \}/);
+	assert.match(amybo, />Anne-Marie</, 'the real text is in the page; the drawing is added by the print page');
+	assert.match(html, /<body>/, 'no accent unless asked');
 	// A sheet with no room below the badges puts the key on a page of its own.
 	const l4785 = js.badgeSheetHtml({ title: 'T', people, blanks: 0, geometry: { ...preset('avery-l4785'), margin_top: 22 }, logo: '', guides: false, markNoImages: true, oneLine: false, showTitle: true, colour: '', font: null });
 	assert.match(l4785, /class="sheet key"/);

@@ -19,10 +19,15 @@ ADMIN_EMAILS = "events@example.org"                  # comma-separated; only the
 # Name badges on the admin page (all optional; the README's settings reference lists the sheets):
 # BADGE_TEMPLATE = "avery-4822"                      # the sheet to start with (default plain-a4)
 # BADGE_LOGO_URL = "/images/badge-logo.svg"          # a logo when none is chosen on the page
-# BADGE_LOGO_POSITION = "auto"                       # auto, right, left or top
+# BADGE_LOGO_POSITION = "auto"                       # auto, corner, top, right or left
+# BADGE_TAG = "EVENT’26"                             # a short line under the logo, its colour and share of its width:
+# BADGE_TAG_COLOUR = "#007CBB"
+# BADGE_TAG_WIDTH = "0.64"
 # BADGE_FONT_URL = "/fonts/Example-SemiBold.woff2"   # a font file on your site, and its name:
 # BADGE_FONT_FAMILY = "Example SemiBold"
-# BADGE_COLOUR = "#000000"                           # text colour
+# BADGE_COLOUR = "#000000"                           # the names' colour, and the affiliation's:
+# BADGE_AFFILIATION_COLOUR = "#007CBB"
+# BADGE_ACCENT_COLOUR = "#87BD25"                    # the dots on i and j in their own colour
 
 [[d1_databases]]
 binding = "DB"

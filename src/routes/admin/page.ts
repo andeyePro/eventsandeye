@@ -184,9 +184,13 @@ const HTML = /* html */ `<!doctype html>
 				<div><label for="b-preset">Badge sheet</label><select id="b-preset"></select></div>
 				<div><label for="b-logo">Logo (SVG, PNG or JPEG; it stays on this computer)</label><input id="b-logo" type="file" accept="image/svg+xml,image/png,image/jpeg,.svg,.png,.jpg,.jpeg" /><p class="small" id="b-logo-note"></p></div>
 				<div><label for="b-blanks">Blank badges (empty: enough for the room, filling the last sheet)</label><input id="b-blanks" type="number" min="0" step="1" /></div>
-				<div><label for="b-logopos">Logo position (automatic: a tall logo at the side, a wide one across the top)</label><select id="b-logopos"><option value="auto">Automatic, by its shape</option><option value="right">On the right</option><option value="left">On the left</option><option value="top">Across the top</option></select></div>
+				<div><label for="b-logopos">Logo position (automatic: the top corner of a landscape badge, otherwise across the top)</label><select id="b-logopos"><option value="auto">Automatic</option><option value="corner">Top corner, names beneath</option><option value="right">On the right</option><option value="left">On the left</option><option value="top">Across the top</option></select></div>
 				<div><label for="b-names">Names</label><select id="b-names"><option value="split">Given name, family name beneath</option><option value="one">Full name on one line</option></select></div>
-				<div><label for="b-colour">Text colour</label><input id="b-colour" type="color" value="#000000" /></div>
+				<div><label for="b-tag">Line under the logo (optional, such as EVENT’26)</label><input id="b-tag" type="text" maxlength="40" /></div>
+				<div><label for="b-colour">Name colour</label><input id="b-colour" type="color" value="#000000" /></div>
+				<div><label for="b-affcolour">Affiliation colour</label><input id="b-affcolour" type="color" value="#000000" /></div>
+				<div><label for="b-tagcolour">Colour of the line under the logo</label><input id="b-tagcolour" type="color" value="#000000" /></div>
+				<div><label for="b-accent">Accent colour, for the dots on i and j</label><input id="b-accent" type="color" value="#0069a0" /></div>
 			</div>
 			<details><summary>Badge and sheet sizes (mm)</summary>
 				<p class="small">Changing any of these makes the sheet "Custom". Margins are from the sheet's top and left edges to the first badge; gaps are between badges.</p>
@@ -201,9 +205,11 @@ const HTML = /* html */ `<!doctype html>
 					<div><label for="b-margin_left">Left margin</label><input id="b-margin_left" type="number" min="0" step="0.01" /></div>
 					<div><label for="b-gap_x">Gap across</label><input id="b-gap_x" type="number" min="0" step="0.01" /></div>
 					<div><label for="b-gap_y">Gap down</label><input id="b-gap_y" type="number" min="0" step="0.01" /></div>
+					<div><label for="b-tagw">Width of the line under the logo (share of the logo's width, 0.2 to 1)</label><input id="b-tagw" type="number" min="0.2" max="1" step="0.01" value="1" /></div>
 				</div>
 			</details>
 			<label><input type="checkbox" id="b-title" checked style="width:auto" /> Print the event title above the names (untick if the logo already says it)</label>
+			<label><input type="checkbox" id="b-acc-on" style="width:auto" /> Draw the dots on i and j in the accent colour, and the hyphens in names that have no i or j</label>
 			<label><input type="checkbox" id="b-guides" style="width:auto" /> Print cut lines around each badge</label>
 			<label><input type="checkbox" id="b-noimg" style="width:auto" /> Mark the badges of people who asked us not to share images of them, with a small crossed-out camera explained on each sheet</label>
 			<p id="b-count" class="small" role="status"></p>
@@ -714,6 +720,14 @@ function showBadges(s) {
 		badgeUsePreset(badgeData.template);
 		$('b-colour').value = badgeData.colour || '#000000';
 		$('b-logopos').value = badgeData.logo_position || 'auto';
+		$('b-tag').value = badgeData.tag || '';
+		$('b-tagw').value = String(badgeData.tag_width || 1);
+		$('b-affcolour').value = badgeData.affiliation_colour || badgeData.colour || '#000000';
+		$('b-tagcolour').value = badgeData.tag_colour || badgeData.colour || '#000000';
+		if (badgeData.accent_colour) $('b-accent').value = badgeData.accent_colour;
+		$('b-acc-on').checked = !!badgeData.accent_colour;
+		// A site logo usually carries the event's name already.
+		$('b-title').checked = !badgeData.logo_url;
 	}
 	const notes = [];
 	if (badgeData.logo_url) notes.push('Without a file, the site\'s logo is used (BADGE_LOGO_URL).');
@@ -750,6 +764,7 @@ $('badge-form').addEventListener('submit', async (e) => {
 	if (!tab) { toast('The browser stopped the new tab opening: allow pop-ups for this page, then try again.'); return; }
 	const html = badgeSheetHtml({ title: badgeEvent.title, people: badgeData.people, blanks, geometry: g, logo: badgeLogoUrl(), guides: $('b-guides').checked, markNoImages: $('b-noimg').checked,
 		logoAspect: badgeLogo ? badgeAspect : await siteLogoAspect(), logoPosition: $('b-logopos').value, oneLine: $('b-names').value === 'one', showTitle: $('b-title').checked, colour: $('b-colour').value,
+		affColour: $('b-affcolour').value, tag: $('b-tag').value.trim(), tagColour: $('b-tagcolour').value, tagWidth: Number($('b-tagw').value) || 1, accent: $('b-acc-on').checked ? $('b-accent').value : '',
 		font: badgeData.font ? { family: badgeData.font.family, url: new URL(badgeData.font.url, location.href).href } : null });
 	const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
 	tab.location.href = url;
