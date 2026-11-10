@@ -2,6 +2,7 @@
 
 ## 2026-11-10
 
+- [x] **Radio buttons far enough apart** — The booking form's choices are at least 1.5rem tall, so its radio buttons and tick boxes are 24px or more apart (WCAG 2.2 target size) on any page, not just one with Starlight's line height. The plain HTML form failed axe's `target-size` check in the browser tests.
 - [x] **Lapsed holds are kept, not deleted** — When an unconfirmed registration's hold runs out, its place is released but the registration stays, so it can still be confirmed by its owner or with "Confirm for them", getting a place (or tour or opt-in place) if one is free then, otherwise the waiting list. It is deleted with everything else 30 days after the event. The admin page tags it "unconfirmed, hold lapsed: nothing held"; the confirm email and the organiser's half-way warning say what lapsing means; a lapsed hold restarts the count of replacements, as deletion did. No migration, wrapper or setting. Checked in `tests/e2e.mjs`.
 - [x] **Set-up check as a traffic light** — The admin page's set-up check no longer disappears when all is well, so its absence is never taken as good news. It is always at the top, with a light and a sentence saying the same thing: green "All in order", amber for warnings, red for problems (counted), and grey while it checks or when the check could not run. Notes (such as the `ACCESS_MFA` reminder) are listed under any light. Colour is never the only signal. Checked in `tests/browser/admin.mjs`.
 
