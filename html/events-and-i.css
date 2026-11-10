@@ -7,7 +7,8 @@
 	.eai .field { display: grid; gap: 0.35rem; border: 0; padding: 0; margin: 0; }
 	.eai .field label:not(.choice), .eai legend { font-weight: 600; }
 	
-	.eai .rsvp .choice { display: flex; gap: 0.5rem; align-items: flex-start; font-weight: normal; }
+	
+	.eai .rsvp .choice { display: flex; gap: 0.5rem; align-items: flex-start; font-weight: normal; min-height: 1.5rem; }
 	.eai .rsvp .choice input { margin-top: 0.3rem; }
 	.eai #rsvp-tours, .eai #rsvp-optins { display: grid; gap: 0.35rem; }
 	.eai #rsvp-polls { display: grid; gap: 1rem; }

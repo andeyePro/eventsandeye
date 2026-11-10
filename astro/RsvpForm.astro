@@ -113,7 +113,9 @@ if (!siteKey) throw new Error('Set PUBLIC_TURNSTILE_SITE_KEY for production buil
 	.field label:not(.choice), legend { font-weight: 600; }
 	/* :global because tour and opt-in choices are added by the script after the page loads, and Astro's scoped
 	   styles only reach elements written in this file. */
-	.rsvp :global(.choice) { display: flex; gap: 0.5rem; align-items: flex-start; font-weight: normal; }
+	/* min-height keeps the radio buttons and tick boxes at least 24px apart (WCAG 2.2 target size), even on a page whose
+	   line height is tighter than Starlight's. */
+	.rsvp :global(.choice) { display: flex; gap: 0.5rem; align-items: flex-start; font-weight: normal; min-height: 1.5rem; }
 	.rsvp :global(.choice input) { margin-top: 0.3rem; }
 	#rsvp-tours, #rsvp-optins { display: grid; gap: 0.35rem; }
 	#rsvp-polls { display: grid; gap: 1rem; }
