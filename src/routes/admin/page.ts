@@ -344,6 +344,7 @@ async function load() {
 		stat('in-person waiting list', c.inPerson.waiting),
 		stat('remote confirmed', c.remote),
 		stat('unconfirmed', c.pending),
+		stat('asked us not to share images of them', s.registrations.filter((r) => r.no_images && r.status === 'confirmed').length),
 		...c.tours.map((t) => stat(t.label + ' (waiting ' + t.waiting + ')' + (t.open ? '' : ' – booking closed'), t.confirmed + ' / ' + (t.capacity ?? '∞'))),
 		...c.optins.map((o) => stat(o.label + ' signed up (waiting ' + o.waiting + ')', o.confirmed + ' / ' + (o.capacity ?? '∞'))),
 		stat('registration closes', uk(s.event.deadline)),
@@ -394,7 +395,8 @@ async function load() {
 			...(r.status === 'confirmed' ? optSessions.filter((x) => waitingFor.includes(x.id)).map((x) => '<button data-promote="optin" data-session="' + esc(x.id) + '" data-id="' + esc(r.id) + '">Promote to ' + esc(x.label.toLowerCase()) + '</button>') : []),
 			'<button class="danger" data-delete="' + esc(r.id) + '" data-name="' + esc(r.name) + '" data-confirmed="' + (r.status === 'confirmed' ? '1' : '0') + '">Remove</button>',
 		].join(' ');
-		return '<tr><td>' + esc(r.name) + '</td><td>' + esc(r.email) + '</td><td>' + pend + where + '</td><td>' + tourCell + '</td><td>' + esc(r.affiliation) + '</td><td>' + esc(r.needs) + '</td><td>' + esc(r.extra_answer) + '</td><td>' + (r.share_contact ? 'yes' : 'no') + '</td><td>' + esc(r.instructions_version) + '</td><td>' + actions + '</td></tr>';
+		const noRec = r.no_images ? ' <span class="tag wait">no images</span>' : '';
+		return '<tr><td>' + esc(r.name) + noRec + '</td><td>' + esc(r.email) + '</td><td>' + pend + where + '</td><td>' + tourCell + '</td><td>' + esc(r.affiliation) + '</td><td>' + esc(r.needs) + '</td><td>' + esc(r.extra_answer) + '</td><td>' + (r.share_contact ? 'yes' : 'no') + '</td><td>' + esc(r.instructions_version) + '</td><td>' + actions + '</td></tr>';
 	}).join('') || '<tr><td colspan="10">No registrations yet.</td></tr>';
 	$('csv-link').href = '/api/admin/export?format=csv&event=' + encodeURIComponent(eventId);
 	$('log-link').href = '/api/admin/sent-log?event=' + encodeURIComponent(eventId);

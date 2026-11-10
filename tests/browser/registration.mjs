@@ -231,8 +231,8 @@ try {
 		await page.keyboard.press('Space');
 		check('Space chooses the first way to attend', (await page.evaluate(() => document.querySelector('input[name=attendance]:checked')?.value)) === 'in_person');
 		const order = [];
-		for (let i = 0; i < 9; i++) { await page.keyboard.press('Tab'); order.push(await at()); }
-		const want = ['tour_id=none', `optins=${DINNER}`, 'rsvp-affiliation', 'rsvp-needs', 'rsvp-extra', 'rsvp-consent', 'A', 'rsvp-share', 'BUTTON'];
+		for (let i = 0; i < 10; i++) { await page.keyboard.press('Tab'); order.push(await at()); }
+		const want = ['tour_id=none', `optins=${DINNER}`, 'rsvp-affiliation', 'rsvp-needs', 'rsvp-extra', 'rsvp-consent', 'A', 'rsvp-share', 'rsvp-no-images', 'BUTTON'];
 		check('Tab order follows the page', JSON.stringify(order) === JSON.stringify(want), order.join(' > '));
 		const ring = await page.$eval('#rsvp-consent', (e) => { e.focus(); const c = getComputedStyle(e); return c.outlineStyle !== 'none' && parseFloat(c.outlineWidth) > 0; });
 		check('focused checkbox has a visible focus ring', ring);

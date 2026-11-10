@@ -6,7 +6,7 @@ import { syncHosts } from './hosts';
 import { buildIcs } from './ics';
 import {
 	alreadyRegisteredIntro, type Brand, calendarUpdateEmail, cancellationEmail, confirmEmail, declinedEmail, type EventRow, instructionsEmail, messageEmail,
-	organiserConfirmedIntro, 	hostReleasedEmail, notification, onlyWaiting, optedIn, optinWaiting, type RegistrationRow, type SessionRow, waitingForPlace, waitlistReminderEmail,
+	organiserConfirmedIntro, 	hostReleasedEmail, noImagesEmail, notification, onlyWaiting, optedIn, optinWaiting, type RegistrationRow, type SessionRow, waitingForPlace, waitlistReminderEmail,
 } from './templates';
 import { modeOf } from './mode';
 import { mdToHtml, mdToText } from './markdown';
@@ -182,6 +182,7 @@ export interface RegistrationInput {
 	optins?: unknown;
 	consent?: unknown;
 	share_contact?: unknown;
+	no_images?: unknown;
 	/** Poll rankings from the booking form: [{ poll, ranking, bar }]. */
 	polls?: unknown;
 }
@@ -207,6 +208,7 @@ function parseCommon(input: RegistrationInput, sessions: SessionRow[]) {
 	return {
 		name, attendance, extras, tour_id, optins, affiliation: cleanLine(input.affiliation, 200), needs: cleanText(input.needs, 1000), extra_answer: cleanText(input.extra_answer, 500),
 		share_contact: truthy(input.share_contact) ? 1 : 0,
+		no_images: truthy(input.no_images) ? 1 : 0,
 	} as const;
 }
 
@@ -265,9 +267,9 @@ export async function register(env: Env, eventId: string, input: RegistrationInp
 	const id = randomToken(16);
 	try {
 		await env.DB.prepare(
-			`INSERT INTO registrations (id, event_id, name, email, attendance, affiliation, needs, extra_answer, optins, optins_waiting, share_contact, status, place, tour_id, tour_place,
-				consent_at, created_at, updated_at, hold_expires_at, resends) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		).bind(id, ev.id, c.name, email, c.attendance, c.affiliation, c.needs, c.extra_answer, c.optins, optins_waiting, c.share_contact, 'pending', place, c.tour_id, tour_place,
+			`INSERT INTO registrations (id, event_id, name, email, attendance, affiliation, needs, extra_answer, optins, optins_waiting, share_contact, no_images, status, place, tour_id, tour_place,
+				consent_at, created_at, updated_at, hold_expires_at, resends) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		).bind(id, ev.id, c.name, email, c.attendance, c.affiliation, c.needs, c.extra_answer, c.optins, optins_waiting, c.share_contact, c.no_images, 'pending', place, c.tour_id, tour_place,
 			nowS, nowS, nowS, new Date(now + holdMs(ev, now)).toISOString(), resends).run();
 	} catch (e) {
 		// The same address submitted twice at once: the other submission's confirm email is on its way.
@@ -371,6 +373,18 @@ async function totalsLines(env: Env, ev: EventRow, sessions: SessionRow[]) {
 	];
 }
 
+/** When a confirmed registrant asks that no images of them are shared (on confirming, or later on their manage page),
+ * so the request is on record rather than only said on the day: they are emailed (and invited to send a photo for
+ * checking official media), and the organiser is told. */
+async function notifyNoImages(env: Env, ev: EventRow, reg: RegistrationRow) {
+	const pid = await sendEmail(env, noImagesEmail(brand(env), ev, reg, await manageUrl(env, reg.id)));
+	await recordDelivery(env, reg.id, 'no_images', pid);
+	await sendEmail(env, notification(brand(env), `Asked not to have images shared: ${ev.title}`, [
+		`${reg.name}${reg.affiliation ? ` (${reg.affiliation})` : ''}, ${reg.email}, has asked us not to share images of them. They have been emailed, and invited to reply with a photo so you can check the official photos and recordings before publishing.`,
+		`They are marked "no images" on the admin page and in the CSV: ${siteUrl(env)}/admin/rsvps/`,
+	]));
+}
+
 /** Tells the organiser when a confirmed registrant newly joins the in-person, a tour or an opt-in waiting list, with current totals. */
 async function notifyWaitlist(env: Env, ev: EventRow, sessions: SessionRow[], reg: RegistrationRow, event: boolean, tour: boolean, verb: string, optinIds: string[] = []) {
 	if (!event && !tour && !optinIds.length) return;
@@ -393,7 +407,7 @@ export function publicStatus(reg: RegistrationRow, sessions: SessionRow[]) {
 	const tour = reg.tour_id ? sessions.find((t) => t.id === reg.tour_id) : null;
 	return {
 		name: reg.name, email: reg.email, attendance: reg.attendance, mode: modeOf(reg), affiliation: reg.affiliation, needs: reg.needs, extra_answer: reg.extra_answer ?? null, optins: reg.optins ? reg.optins.split(',') : [], optin_labels: optedIn(reg, sessions).map((s) => s.label),
-		optins_waiting: ids(reg.optins_waiting), optin_waiting_labels: optedIn(reg, sessions).filter((s) => optinWaiting(reg, s.id)).map((s) => s.label), share_contact: !!reg.share_contact,
+		optins_waiting: ids(reg.optins_waiting), optin_waiting_labels: optedIn(reg, sessions).filter((s) => optinWaiting(reg, s.id)).map((s) => s.label), share_contact: !!reg.share_contact, no_images: !!reg.no_images,
 		status: reg.status, place: reg.place, tour_id: reg.tour_id, tour_label: tour?.label ?? null, tour_place: reg.tour_place,
 		hold_expires_at: reg.status === 'pending' ? reg.hold_expires_at : null,
 	};
@@ -462,6 +476,7 @@ export async function confirm(env: Env, id: string, opts: { byOrganiser?: boolea
 		await recordDelivery(env, reg.id, 'waitlist_confirmed', pid);
 	}
 	await notifyWaitlist(env, ev, sessions, reg, joinsWaitlist, joinsTourWaitlist, opts.byOrganiser ? 'was confirmed by an organiser and joined' : 'has confirmed and joined', ids(reg.optins_waiting));
+	if (reg.no_images) await notifyNoImages(env, ev, reg);
 	await syncHosts(env, brand(env), ev, sessions);
 	return { ok: true as const, already: false, registration: confirmStatus(reg, sessions) };
 }
@@ -549,15 +564,16 @@ export async function updateRegistration(env: Env, id: string, input: Registrati
 		if ((burst?.n ?? 0) >= MAX_CHANGE_EMAILS_PER_HOUR) throw new UserError(`You have changed your registration many times in the last hour. Please wait a while, or email ${notifyEmail(env)}.`, 429);
 	}
 	await env.DB.prepare(
-		`UPDATE registrations SET name=?, attendance=?, affiliation=?, needs=?, extra_answer=?, optins=?, optins_waiting=?, optins_waitlist_since=?, share_contact=?, place=?, waitlist_since=?,
+		`UPDATE registrations SET name=?, attendance=?, affiliation=?, needs=?, extra_answer=?, optins=?, optins_waiting=?, optins_waitlist_since=?, share_contact=?, no_images=?, place=?, waitlist_since=?,
 			tour_id=?, tour_place=?, tour_waitlist_since=?, updated_at=? WHERE id=?`,
-	).bind(c.name, c.attendance, c.affiliation, c.needs, c.extra_answer, c.optins, joinIds(waitingNow), optins_waitlist_since, c.share_contact, place, waitlist_since,
+	).bind(c.name, c.attendance, c.affiliation, c.needs, c.extra_answer, c.optins, joinIds(waitingNow), optins_waitlist_since, c.share_contact, c.no_images, place, waitlist_since,
 		c.tour_id, tour_place, tour_waitlist_since, now, id).run();
 	if (reg.status === 'confirmed') {
 		const updated = (await getRegistration(env, id))!;
 		const newEvent = updated.place === 'waitlist' && reg.place !== 'waitlist';
 		const newTour = updated.tour_place === 'waitlist' && !(reg.tour_place === 'waitlist' && reg.tour_id === updated.tour_id);
 		await notifyWaitlist(env, ev, sessions, updated, newEvent, newTour, 'changed their registration and joined', newlyWaiting);
+		if (updated.no_images && !reg.no_images) await notifyNoImages(env, ev, updated);
 		// A remote registrant moving in person gets full joining instructions once they have a place; otherwise only calendar changes go out.
 		// Anyone who now qualifies for joining instructions but never had them (a remote person moving in person with a
 		// place, or someone leaving the in-person waiting list to join remotely) gets them in full.
@@ -1165,14 +1181,14 @@ export async function adminSummary(env: Env, eventId: string) {
 }
 
 export function registrationsCsv(regs: Omit<RegistrationRow, 'calendar_state'>[], sessions: SessionRow[]): string {
-	const cols = ['name', 'email', 'attendance', 'status', 'place', 'tour', 'tour_place', 'signed_up_for', 'waiting_for', 'affiliation', 'needs', 'extra_answer', 'share_contact', 'instructions_version', 'created_at', 'confirmed_at'];
+	const cols = ['name', 'email', 'attendance', 'status', 'place', 'tour', 'tour_place', 'signed_up_for', 'waiting_for', 'affiliation', 'needs', 'extra_answer', 'share_contact', 'no_images', 'instructions_version', 'created_at', 'confirmed_at'];
 	const esc = (v: unknown) => {
 		let s = v == null ? '' : String(v).replace(/\t/g, ' ');
 		if (/^[\s]*[=+\-@]/.test(s) || /^[\r\n]/.test(s)) s = `'${s}`; // defuse spreadsheet formula injection
 		return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 	};
 	const rows = regs.map((r) => [r.name, r.email, modeOf(r) === 'extras' ? 'opt-in sessions only' : r.attendance, r.status, r.place, sessions.find((t) => t.id === r.tour_id)?.label ?? '', r.tour_place, optedIn(r, sessions).map((s) => s.label).join('; '),
-		optedIn(r, sessions).filter((s) => optinWaiting(r, s.id)).map((s) => s.label).join('; '), r.affiliation, r.needs, r.extra_answer ?? '', r.share_contact ? 'yes' : 'no', r.instructions_version, r.created_at, r.confirmed_at].map(esc).join(','));
+		optedIn(r, sessions).filter((s) => optinWaiting(r, s.id)).map((s) => s.label).join('; '), r.affiliation, r.needs, r.extra_answer ?? '', r.share_contact ? 'yes' : 'no', r.no_images ? 'yes' : 'no', r.instructions_version, r.created_at, r.confirmed_at].map(esc).join(','));
 	return [cols.join(','), ...rows].join('\r\n') + '\r\n';
 }
 

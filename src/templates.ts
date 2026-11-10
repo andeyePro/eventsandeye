@@ -65,6 +65,8 @@ export interface RegistrationRow {
 	calendar_dirty?: number;
 	optins_waitlist_since?: string | null;
 	share_contact: number;
+	/** 1 = asked that no images of them from the event are shared (migration 0011). */
+	no_images?: number;
 	status: 'pending' | 'confirmed';
 	place: 'place' | 'waitlist' | null;
 	tour_id: string | null;
@@ -214,6 +216,7 @@ export function confirmEmail(b: Brand, ev: EventRow, reg: RegistrationRow, sessi
 		...statusLines(reg, sessions).map((l) => l.replace('You have an in-person place.', 'An in-person place is held for you.').replace(/^You have a place at (.*)\.$/, 'A place at $1 is held for you.')
 			.replace('You are on the waiting list for an in-person place. We will email you if a place becomes available.', opts.unheld ? 'An in-person place: places are filling up, so one can be held only once you confirm. If one is free then, it is yours; if not, you join the waiting list.' : '$&').replace(/^You are on the waiting list for (.*?)\.( We will email you if a place becomes available\.)?$/, opts.unheld ? 'For $1, a place if one is free when you confirm; if not, its waiting list.' : '$&').replace('You are booked on', 'A place is held for you on').replace('You are on the waiting list for an in-person place. We will email you if a place becomes available.', 'You are joining the waiting list for an in-person place.').replace(/^You are on the waiting list for (.*)\. We will email you if a place becomes available\.$/, 'You are joining the waiting list for $1.')),
 		reg.share_contact ? 'You chose to share your email address with the hosts of the sessions you attend.' : 'Session hosts will see only your name and whether you have a place.',
+		...(reg.no_images ? ["You asked us not to share images of you at this event: once you confirm, we'll email you about it."] : []),
 	];
 	const waiting = waitingForPlace(reg, sessions);
 	// Nothing is deleted when the hold lapses: a place is released, and confirming later still works.
@@ -401,6 +404,21 @@ ${removed.length ? `<p>Removed:</p><ul>${removed.map((l) => `<li><s>${escapeHtml
 		return `${i + 1}. ${added.has(l.id) || changedDetail.has(l.id) ? `**${t}**` : t}`;
 	}).join('\n')}${removed.length ? `\n\nRemoved:\n${removed.map((l) => `- ~~${l.name} – ${l.detail}~~`).join('\n')}` : ''}\n\nEmails are shown only for people who agreed to share them with session hosts. If plans change at the last minute, please tell the organisers at ${b.notify} so they can reach everyone else. Please use this list only for this session, and delete it afterwards.${textFooter(b)}`;
 	return { to: s.host_email!, subject, html, text };
+}
+
+/** To a registrant who asked that no images of them are shared: what the organisers will do, what they can't promise,
+ * and an offer to check official photos and recordings against a photo of them before publication. */
+export function noImagesEmail(b: Brand, ev: EventRow, reg: RegistrationRow, manageUrl: string): OutgoingEmail {
+	const subject = `Not sharing images of you: ${ev.title}`;
+	const paras = [
+		`You asked us not to share images of you at the ${ev.title}. We will do our best to keep you out of the photos and recordings we publish.`,
+		`To help us, you are welcome to reply to this email with a photo of yourself, so that we can check our official photos and recordings before we publish them. We will use it only for that, and delete it once we have checked them.`,
+		...(modeOf(reg) === 'remote' ? ['As you are joining online, please keep your camera off during the sessions.'] : []),
+		`Please note that we cannot control what other attendees photograph or share.`,
+	];
+	const html = layout(b, subject, `<p>Hello ${escapeHtml(reg.name)},</p>${paras.map((p) => `<p>${escapeHtml(p)}</p>`).join('')}${button(manageUrl, 'Manage my registration')}`);
+	const text = `Hello ${reg.name},\n\n${paras.join('\n\n')}\n\nTo change this, or anything else: ${manageUrl}${textFooter(b)}`;
+	return { to: reg.email, subject, html, text };
 }
 
 export function notification(b: Brand, subject: string, lines: string[]): OutgoingEmail {

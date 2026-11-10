@@ -307,6 +307,31 @@ try {
 	  check('the re-added dinner entry keeps its UID and continues at SEQUENCE:2', /SEQUENCE:2/.test(again) && !!icsProp(dinaCancel, 'UID')[0] && icsProp(again, 'UID')[0] === icsProp(dinaCancel, 'UID')[0], icsProp(again, 'UID').concat(icsProp(dinaCancel, 'UID'), icsProp(again, 'SEQUENCE')).join(' ')); }
 	await req('DELETE', '/api/rsvp/manage', { t: dinaManage });
 
+	console.log('\nAsking us not to share images');
+	{
+		const nora = 'nora@example.org';
+		await register({ name: 'Nora', email: nora, attendance: 'remote', no_images: true });
+		const nm = await last(nora);
+		check('the confirm email repeats the request', /You asked us not to share images of you/.test(nm.text_body), nm.text_body.slice(0, 600));
+		const told = async () => (await mailsTo(NOTIFY)).filter((x) => /Asked not to have images shared/.test(x.subject) && /Nora/.test(x.text_body)).length;
+		const asked = async () => (await mailsTo(nora)).filter((x) => /^Not sharing images of you/.test(x.subject));
+		check('the organiser is not told before the address is confirmed', (await told()) === 0);
+		await req('POST', '/api/rsvp/confirm', { t: tokenFrom(nm.text_body, 'confirm') });
+		check('confirming tells the organiser, once', (await told()) === 1);
+		{ const m = await asked();
+		  check('…and emails Nora: best endeavours, a photo to check official media, the camera off online, other attendees', m.length === 1 && /do our best/.test(m[0].text_body) && /reply to this email with a photo/.test(m[0].text_body) && /keep your camera off/.test(m[0].text_body) && /cannot control what other attendees/.test(m[0].text_body), m[0]?.text_body); }
+		const noraManage = tokenFrom((await last(nora)).text_body, 'manage');
+		r = await req('GET', `/api/rsvp/manage?t=${encodeURIComponent(noraManage)}`);
+		check('the manage view shows the request', r.data.registration?.no_images === true, JSON.stringify(r.data.registration));
+		r = await req('POST', '/api/rsvp/manage', { t: noraManage, name: 'Nora', attendance: 'remote', tour_id: 'none', no_images: false });
+		check('unticking it on the manage page is saved, and emails nobody', r.data.registration?.no_images === false && (await told()) === 1, JSON.stringify(r.data));
+		r = await req('POST', '/api/rsvp/manage', { t: noraManage, name: 'Nora', attendance: 'remote', tour_id: 'none', no_images: true });
+		check('ticking it on the manage page tells the organiser and emails Nora again', r.data.registration?.no_images === true && (await told()) === 2 && (await asked()).length === 2, JSON.stringify(r.data));
+		r = await req('GET', `/api/admin/export?format=csv&event=${EVENT}`, undefined, ADMIN);
+		check('the CSV has a no_images column, yes for Nora', typeof r.data === 'string' && /no_images/.test(r.data) && r.data.split('\r\n').some((l) => /^Nora,/.test(l) && /,no,yes,/.test(l)), String(r.data).slice(0, 400));
+		await req('DELETE', '/api/rsvp/manage', { t: noraManage });
+	}
+
 	console.log('\nDinner capacity and waiting list');
 	const dinnerCap = async () => (await req('GET', `/api/admin/summary?event=${EVENT}`, undefined, ADMIN)).data.capacity.optins.find((o) => o.id === DINNER);
 	const capBefore = await dinnerCap();

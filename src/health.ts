@@ -9,7 +9,7 @@ import { type Env, isDev, siteUrl } from './env';
 export interface SetupFinding { level: 'error' | 'warning' | 'note'; text: string }
 
 /** The newest migration this version needs: the check asks for `wrangler d1 migrations apply` until it is there. */
-export const LATEST_MIGRATION = '0010_status.sql';
+export const LATEST_MIGRATION = '0011_no_images.sql';
 /** The cron is expected every five minutes; a few missed runs are worth a warning. */
 const CRON_LATE_MS = 20 * 60_000;
 

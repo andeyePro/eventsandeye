@@ -17,7 +17,6 @@
 - [ ] **Poll email replies:** try real replies from Gmail, Outlook and Apple Mail through Email Routing, and check that Cloudflare's `Authentication-Results` header reaches the Worker (it has been reported missing on Worker delivery; replies without it are accepted on the From address and signed reference alone).
 - [ ] **Moving an event: polls and scheduled messages (decision needed):** moving an event moves its sessions and deadlines but not a poll's closing time (moving a closed poll's close could reopen it) nor scheduled messages (a "see you tomorrow" would still go on the old date). Either move them too, or have the event save say how many polls and scheduled messages it left where they were.
 - [ ] **Packaging:** publish to npm with typed exports for the route handlers.
-- [ ] **Asking not to be recorded:** an optional tick box on the form and the manage page for attendees who would rather not appear in photos, video or a recording of the online sessions. Show it to the organiser (admin page, CSV) and to session hosts in their lists, so a person can be kept out of shot or given a badge marker. Needs a migration (a column on registrations), a line in the starter's privacy notice, and the usual 30-day deletion. Requested by Martin, 2026-11-10.
 
 ### Sharing contact details with session hosts (options to decide)
 

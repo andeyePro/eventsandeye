@@ -144,6 +144,7 @@ form.addEventListener('submit', async (e) => {
 	body.event = event;
 	body.consent = (document.getElementById('rsvp-consent') as HTMLInputElement).checked;
 	body.share_contact = (document.getElementById('rsvp-share') as HTMLInputElement).checked;
+	body.no_images = (document.getElementById('rsvp-no-images') as HTMLInputElement).checked;
 	body.optins = fd.getAll('optins').map(String);
 	body.polls = [...pollOrders].filter(([, s]) => s.touched).map(([poll, s]) => ({ poll, ranking: s.ids.filter((x) => x !== BAR), bar: s.ids.indexOf(BAR) }));
 	btn.disabled = true;

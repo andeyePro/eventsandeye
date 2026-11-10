@@ -51,7 +51,7 @@ test('example values, test keys and DEV_MODE on a live site are reported', async
 test('missing secrets, a missing migration and a cron Worker that never ran are errors', async () => {
 	const env = { ...good, RESEND_API_KEY: undefined, TOKEN_SECRET: 'short' };
 	const f = await setupChecks({ ...env, DB: db({ migration: '0009_chunked_sending.sql' }) }, req());
-	for (const re of [/RESEND_API_KEY is not set/, /TOKEN_SECRET is missing or shorter/, /missing migrations.*0010_status/, /cron Worker has not run yet/]) {
+	for (const re of [/RESEND_API_KEY is not set/, /TOKEN_SECRET is missing or shorter/, /missing migrations.*0011_no_images/, /cron Worker has not run yet/]) {
 		assert.ok(f.some((x) => x.level === 'error' && re.test(x.text)), `${re}: ${JSON.stringify(f)}`);
 	}
 });

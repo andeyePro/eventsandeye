@@ -86,6 +86,7 @@ function fill(v: View) {
 	document.getElementById('m-closed')!.hidden = v.event.open;
 	(form.querySelector(`input[name=tour_id][value="${r.tour_id ?? 'none'}"]`) as HTMLInputElement).checked = true;
 	(document.getElementById('m-share') as HTMLInputElement).checked = !!r.share_contact;
+	(document.getElementById('m-no-images') as HTMLInputElement).checked = !!r.no_images;
 	const mine = Array.isArray(r.optins) ? r.optins : [];
 	document.getElementById('m-optins')!.replaceChildren(...(v.optins ?? []).map((o) => {
 		const l = document.createElement('label');
@@ -245,6 +246,7 @@ form.addEventListener('submit', async (e) => {
 	if (!form.reportValidity()) return;
 	const fd: Record<string, unknown> = Object.fromEntries(new FormData(form).entries());
 	fd.share_contact = (document.getElementById('m-share') as HTMLInputElement).checked;
+	fd.no_images = (document.getElementById('m-no-images') as HTMLInputElement).checked;
 	fd.optins = new FormData(form).getAll('optins').map(String);
 	busy(true);
 	try { fill(await call('POST', fd)); out.textContent = 'Your changes have been saved.'; } catch (err) {
