@@ -77,7 +77,7 @@ export async function setupChecks(env: Env, request: Request, now = Date.now()):
 		cron = row ? JSON.parse(row.value) : null;
 	} catch { readable = false; } // no status table yet: the missing migration above says what to do
 	if (!readable) return out;
-	if (!cron) error('The cron Worker has not run yet. It sends scheduled messages and the rest of big ones, deletes unconfirmed registrations and deletes everything 30 days after the event: deploy it (README step 10). Its first run, within five minutes, clears this.');
+	if (!cron) error('The cron Worker has not run yet. It sends scheduled messages and the rest of big ones, releases places held by unconfirmed registrations and deletes everything 30 days after the event: deploy it (README step 10). Its first run, within five minutes, clears this.');
 	else {
 		const late = now - Date.parse(cron.at);
 		if (late > CRON_LATE_MS) warning(`The cron Worker last ran ${Math.round(late / 60_000)} minutes ago; it should run every five. Check it is deployed and look at its log (\`npx wrangler tail --config workers/cron/wrangler.toml\`).`);

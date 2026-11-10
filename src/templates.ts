@@ -216,16 +216,18 @@ export function confirmEmail(b: Brand, ev: EventRow, reg: RegistrationRow, sessi
 		reg.share_contact ? 'You chose to share your email address with the hosts of the sessions you attend.' : 'Session hosts will see only your name and whether you have a place.',
 	];
 	const waiting = waitingForPlace(reg, sessions);
-	const held = modeOf(reg) === 'in_person' && !waiting ? 'your place will be released' : 'it will be deleted';
+	// Nothing is deleted when the hold lapses: a place is released, and confirming later still works.
+	const holdsPlace = modeOf(reg) === 'in_person' && !waiting;
 	// On the waiting list there's no place to lose: the point of confirming is to stay on the list.
 	const why = !waiting ? '' : opts.unheld ? ' and take a place if one is still free' : reg.place === 'waitlist' ? ' and join the waiting list: we will email you if a place comes up, for example if we can book a bigger room' : ' and join the waiting list: we will email you if a place comes up';
 	const notMeUrl = `${confirmUrl}${confirmUrl.includes('?') ? '&' : '?'}not-me=1`;
 	const holdUntil = ukDateTime(reg.hold_expires_at ?? ev.deadline, ev.timezone);
+	const lapse = holdsPlace ? `If you don't complete your registration by ${holdUntil}, your place will be released; completing it later still gets you a place if one is free.` : `Please complete your registration by ${holdUntil}.`;
 	const html = layout(b, subject, `
 <h1 style="font-size:22px;margin-top:0">Please complete your registration</h1>
 <p>Hello,</p>
 <p>Someone, hopefully you, registered this address for the <strong>${escapeHtml(ev.title)}</strong>, on ${escapeHtml(when(ev))}.</p>
-<p><strong>Your registration is not complete yet.</strong> Please click the button below now to confirm your email address${why}. If you don't complete your registration, ${held} on ${escapeHtml(holdUntil)}.</p>
+<p><strong>Your registration is not complete yet.</strong> Please click the button below now to confirm your email address${why}. ${escapeHtml(lapse)}</p>
 <p>You are confirming:</p><ul>${choices.map((l) => `<li>${escapeHtml(l)}</li>`).join('')}</ul>
 ${button(confirmUrl, 'Complete registration')}
 <p style="font-size:14px;overflow-wrap:anywhere;word-break:break-all">If the button does not work, copy this link into your browser:<br><a href="${escapeHtml(confirmUrl)}">${escapeHtml(confirmUrl)}</a></p>
@@ -238,7 +240,7 @@ Someone, hopefully you, registered this address for the ${ev.title}, on ${when(e
 YOUR REGISTRATION IS NOT COMPLETE YET. Please open this link now and click "Complete registration" to confirm your email address${why}:
 ${confirmUrl}
 
-If you don't complete your registration, ${held} on ${holdUntil}.
+${lapse}
 
 You are confirming:
 ${choices.map((l) => `- ${l}`).join('\n')}

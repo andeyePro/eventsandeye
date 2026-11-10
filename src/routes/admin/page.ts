@@ -378,7 +378,9 @@ async function load() {
 
 	$('regs').querySelector('tbody').innerHTML = s.registrations.map((r) => {
 		const tour = tours.find((t) => t.id === r.tour_id);
-		const pend = r.status === 'pending' ? '<span class="tag pending">unconfirmed</span> ' : '';
+		// A lapsed hold is kept, holding nothing: confirming (or Confirm for them) gives a place only if one is free then.
+		const lapsed = r.status === 'pending' && r.hold_expires_at && r.hold_expires_at <= new Date().toISOString();
+		const pend = r.status === 'pending' ? '<span class="tag pending">' + (lapsed ? 'unconfirmed, hold lapsed: nothing held' : 'unconfirmed') + '</span> ' : '';
 		const where = r.attendance === 'remote' ? 'Remote' : !r.place ? (() => { const chosen = s.sessions.filter((x) => x.optin && (r.optins || '').split(',').includes(x.id)); const waiting = (r.optins_waiting || '').split(','); const all = chosen.length && chosen.every((x) => waiting.includes(x.id));
 			return '<span class="tag ' + (all ? 'wait' : 'ok') + '">' + esc(chosen.map((x) => x.label).join(', ') || 'Opt-in') + ' only' + (all ? ': waiting' : '') + '</span>'; })() : r.place === 'waitlist' ? '<span class="tag wait">in person: waiting since ' + esc(uk(r.waitlist_since)) + '</span>' : '<span class="tag ok">in person</span>';
 		const waitingFor = (r.optins_waiting || '').split(',');

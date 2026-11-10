@@ -247,7 +247,9 @@ export async function register(env: Env, eventId: string, input: RegistrationInp
 	// An unconfirmed earlier registration is replaced by this one, so what the owner confirms is what they last asked for
 	// (and the confirm email lists it). The earlier confirm link stops working. After a few replacements the address is
 	// left alone until it confirms or the hold lapses: each replacement is another email to an address nobody has verified.
-	const resends = existing ? (existing.resends ?? 0) + 1 : 0;
+	// A lapsed hold starts the count again, as when lapsed registrations were deleted.
+	const lapsed = !!existing?.hold_expires_at && existing.hold_expires_at <= new Date().toISOString();
+	const resends = existing && !lapsed ? (existing.resends ?? 0) + 1 : 0;
 	if (resends > MAX_RESENDS) return { ok: true as const };
 	if (existing) await env.DB.prepare(`DELETE FROM registrations WHERE id = ? AND status = 'pending'`).bind(existing.id).run();
 
@@ -402,7 +404,7 @@ export function publicStatus(reg: RegistrationRow, sessions: SessionRow[]) {
  * but has not pressed the button; their email says so, so the earlier confirm link does not leave them wondering. */
 export async function confirm(env: Env, id: string, opts: { byOrganiser?: boolean } = {}) {
 	let reg = await getRegistration(env, id);
-	if (!reg) throw new UserError('This registration no longer exists. Unconfirmed registrations are deleted after a while, so please register again.', 404);
+	if (!reg) throw new UserError('This registration no longer exists, so please register again.', 404);
 	const ev = await getEvent(env, reg.event_id);
 	const sessions = await getSessions(env, ev.id);
 	if (reg.status === 'confirmed') return { ok: true as const, already: true, registration: confirmStatus(reg, sessions) };
@@ -410,7 +412,7 @@ export async function confirm(env: Env, id: string, opts: { byOrganiser?: boolea
 	const now = nowIso();
 	let place = reg.place, tour_place = reg.tour_place, optins_waiting = reg.optins_waiting ?? null;
 	if (reg.hold_expires_at && reg.hold_expires_at <= now) {
-		// Hold lapsed but not yet swept: re-check availability as if registering now (this row no longer holds a place).
+		// Hold lapsed: re-check availability as if registering now (this row no longer holds a place).
 		const cap = await capacity(env, ev, sessions, now);
 		if (reg.attendance === 'in_person' && reg.place) place = cap.inPerson.available ? 'place' : 'waitlist';
 		if (reg.tour_id) tour_place = cap.tours.find((t) => t.id === reg!.tour_id)?.available ? 'place' : 'waitlist';
@@ -433,9 +435,9 @@ export async function confirm(env: Env, id: string, opts: { byOrganiser?: boolea
 		 WHERE id=? AND status='pending'`,
 	).bind(now, now, place, tour_place, optins_waiting, joinsWaitlist ? 1 : 0, now, joinsTourWaitlist ? 1 : 0, now, optins_waiting ? 1 : 0, now, id).run();
 	if (!upd.meta.changes) {
-		// Two clicks at once, or the cron swept the hold between the read and the update: the other request's email stands.
+		// Two clicks at once, or the registration was replaced or deleted between the read and the update: the other request's email stands.
 		const again = await getRegistration(env, id);
-		if (!again) throw new UserError('This registration no longer exists. Unconfirmed registrations are deleted after a while, so please register again.', 404);
+		if (!again) throw new UserError('This registration no longer exists, so please register again.', 404);
 		return { ok: true as const, already: true, registration: confirmStatus(again, sessions) };
 	}
 	reg = (await getRegistration(env, id))!;
@@ -1207,7 +1209,7 @@ export async function sentLogMarkdown(env: Env, eventId: string): Promise<string
 
 export async function runScheduled(env: Env, now = Date.now()) {
 	const nowS = new Date(now).toISOString();
-	const report = { messagesSent: 0, calendarUpdates: 0, holdsWarned: 0, holdsExpired: 0, retentionDeleted: 0 };
+	const report = { messagesSent: 0, calendarUpdates: 0, holdsWarned: 0, retentionDeleted: 0 };
 	await recordCronRun(env, now);
 
 	const pending = (await env.DB.prepare(`SELECT * FROM registrations WHERE status='pending'`).all<RegistrationRow>()).results;
@@ -1216,10 +1218,10 @@ export async function runScheduled(env: Env, now = Date.now()) {
 	for (const r of pending) {
 		if (!r.hold_expires_at) continue;
 		const exp = Date.parse(r.hold_expires_at), start = Date.parse(r.created_at);
-		if (exp <= now) {
-			await env.DB.prepare(`DELETE FROM registrations WHERE id=? AND status='pending'`).bind(r.id).run();
-			report.holdsExpired++;
-		} else if (!r.hold_warned_at && now >= start + (exp - start) / 2) {
+		// A lapsed hold is not deleted: the registration stays (holding nothing) so that it can still be confirmed, by its
+		// owner or with "Confirm for them", getting a place if one is free then. Retention deletes it with the rest.
+		if (exp <= now) continue;
+		if (!r.hold_warned_at && now >= start + (exp - start) / 2) {
 			// Marked first: a failed send must not block the deletions below or repeat every five minutes.
 			await env.DB.prepare('UPDATE registrations SET hold_warned_at=? WHERE id=?').bind(nowS, r.id).run();
 			warn.set(r.event_id, [...(warn.get(r.event_id) ?? []), r]);
@@ -1231,7 +1233,7 @@ export async function runScheduled(env: Env, now = Date.now()) {
 			const what = (r: RegistrationRow) => r.attendance === 'in_person' ? (r.place === 'place' ? 'held in-person place' : r.place === 'waitlist' ? 'registration (waiting list, or a place if one is free when they confirm)' : 'sign-up for the optional sessions') : 'remote registration';
 			const shown = regs.slice(0, 20);
 			await sendEmail(env, notification(brand(env), regs.length === 1 ? `Unconfirmed registration half way to expiry: ${ev.title}` : `${regs.length} unconfirmed registrations half way to expiry: ${ev.title}`, [
-				...shown.map((r) => `${r.name} registered at ${ukDateTime(r.created_at, ev.timezone)} but has not confirmed their email address. Their ${what(r)} will be deleted at ${ukDateTime(r.hold_expires_at!, ev.timezone)} unless they confirm.`),
+				...shown.map((r) => `${r.name} registered at ${ukDateTime(r.created_at, ev.timezone)} but has not confirmed their email address. Their ${what(r)} lapses at ${ukDateTime(r.hold_expires_at!, ev.timezone)} unless they confirm. The registration is kept: they (or you, with "Confirm for them" on the admin page) can still confirm after that, and get a place if one is free then.`),
 				...(regs.length > shown.length ? [`And ${regs.length - shown.length} more. Many unconfirmed registrations at once can mean someone is registering made-up addresses: see the admin page.`] : []),
 			]));
 			report.holdsWarned += regs.length;

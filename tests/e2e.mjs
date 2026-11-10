@@ -267,7 +267,7 @@ try {
 	check('Alice registers', r.status === 200 && r.data.ok, JSON.stringify(r.data));
 	let mails = await mailsTo(alice);
 	check('Alice gets one confirm-your-email message', mails.length === 1 && /Complete your registration/.test(mails[0].subject));
-	check('confirm email states until when the place is held', /If you don't complete your registration, your place will be released on \w+day, \d+ \w+ \d{4} at \d\d:\d\d\./.test(mails[0].text_body), mails[0].text_body.slice(0, 400));
+	check('confirm email states until when the place is held', /If you don't complete your registration by \w+day, \d+ \w+ \d{4} at \d\d:\d\d, your place will be released; completing it later still gets you a place if one is free\./.test(mails[0].text_body), mails[0].text_body.slice(0, 400));
 	check('confirm email says registration is not complete, and carries the Events&I beta footer', /NOT COMPLETE YET/.test(mails[0].text_body) && /Complete registration/.test(mails[0].html_body) && /Events&amp;I<\/a> \(beta\)/.test(mails[0].html_body) && /Events&I \(beta\)/.test(mails[0].text_body));
 	const aliceConfirm = tokenFrom(mails[0].text_body, 'confirm');
 	check('confirm link present; no manage link before the address is confirmed', !!aliceConfirm && !tokenFrom(mails[0].text_body, 'manage'));
@@ -284,7 +284,7 @@ try {
 	r = await register({ name: 'Dina', email: dina, attendance: 'extras', optins: [DINNER], tour_id: TOUR1 });
 	check('dinner only registers', r.status === 200 && r.data.ok, JSON.stringify(r.data));
 	let dm = await last(dina);
-	check('its confirm email says dinner only, and that the registration (not a place) would be deleted', /You are joining us for dinner only\./.test(dm.text_body) && /it will be deleted on/.test(dm.text_body) && !/place will be released/.test(dm.text_body), dm.text_body.slice(0, 500));
+	check('its confirm email says dinner only, with a date to confirm by and no place to be released', /You are joining us for dinner only\./.test(dm.text_body) && /Please complete your registration by/.test(dm.text_body) && !/place will be released/.test(dm.text_body), dm.text_body.slice(0, 500));
 	r = await req('POST', '/api/rsvp/confirm', { t: tokenFrom(dm.text_body, 'confirm') });
 	check('confirm page result knows it is dinner only', r.data.ok && r.data.registration.mode === 'extras' && r.data.registration.place === null, JSON.stringify(r.data));
 	dm = await last(dina);
@@ -397,7 +397,7 @@ try {
 	r = await req('POST', '/api/rsvp/confirm', { t: bobConfirm });
 	bobManage = await manageOf(bob);
 	check('Bob confirms → in-person waiting list and tour waiting list', r.data.registration.place === 'waitlist' && r.data.registration.tour_place === 'waitlist', JSON.stringify(r.data));
-	{ const bc = (await mailsTo(bob))[0]; check('on the waiting list, the confirm email says confirming joins the waiting list and no place is held', /join the waiting list: we will email you if a place comes up/.test(bc.text_body) && /it will be deleted on/.test(bc.text_body) && !/place will be released/.test(bc.text_body) && /You are joining the waiting list for an in-person place\./.test(bc.text_body), bc.text_body.slice(0, 600)); }
+	{ const bc = (await mailsTo(bob))[0]; check('on the waiting list, the confirm email says confirming joins the waiting list and no place is held', /join the waiting list: we will email you if a place comes up/.test(bc.text_body) && /Please complete your registration by/.test(bc.text_body) && !/place will be released/.test(bc.text_body) && /You are joining the waiting list for an in-person place\./.test(bc.text_body), bc.text_body.slice(0, 600)); }
 	{ const bm = await mailsTo(bob); check('Bob gets his manage link but no joining instructions or calendar while waiting', bm.length === 2 && /Thank you for confirming/.test(bm[1].text_body) && /waiting list/.test(bm[1].text_body) && !/Joining instructions/.test(bm[1].subject) && bm[1].att.length === 0 && !!tokenFrom(bm[1].text_body, 'manage'), bm.map((x) => x.subject).join(' | ')); }
 	let hello = await mailsTo(NOTIFY);
 	check('organiser told about the new waiting-list registration with totals', hello.some((x) => /waiting-list registration/.test(x.subject) && /In person: 1 confirmed of 1 places, 1 on the waiting list/.test(x.text_body)), hello.map((x) => x.subject).join(' | '));
@@ -619,7 +619,11 @@ try {
 	check('warning not repeated', (await mailsTo(NOTIFY)).filter((x) => /half way/.test(x.subject) && /Eve/.test(x.text_body)).length === 1);
 	await cron(created + 49 * 3600_000);
 	const eveConfirm = tokenFrom((await mailsTo(eve))[0].text_body, 'confirm');
-	check('after the hold: unconfirmed registration deleted', (await req('POST', '/api/rsvp/confirm', { t: eveConfirm })).status === 404);
+	// Changed 2026-11-10: a lapsed hold is no longer deleted, so the registration can still be confirmed.
+	check('the warning says the registration is kept after the hold', (await mailsTo(NOTIFY)).some((x) => /half way/.test(x.subject) && /registration is kept/.test(x.text_body)));
+	r = await req('POST', '/api/rsvp/confirm', { t: eveConfirm });
+	check('after the hold: the unconfirmed registration is kept and can still be confirmed', r.status === 200 && r.data.ok, JSON.stringify(r.data));
+	await req('DELETE', '/api/rsvp/manage', { t: tokenFrom((await mailsTo(eve)).at(-1).text_body, 'manage') });
 
 	console.log('\nTour booking deadlines (separate from the registration deadline)');
 	r = await req('POST', '/api/admin/sessions', { event: EVENT, sessions: [{ id: TOUR1, booking_deadline: new Date(Date.now() - 60_000).toISOString() }] }, ADMIN);
