@@ -130,8 +130,8 @@ try {
 	check('two sheets, each 210 × 297 mm', m.sheets.length === 2 && m.sheets.every((s) => near(s.w, 210 * PX) && near(s.h, 297 * PX)), JSON.stringify(m.sheets));
 	check('@page is A4 with no margin', /size: 210mm 297mm/.test(m.page) && /margin: 0/.test(m.page), m.page);
 	check('16 badges: 7 named, then 9 blank', m.badges.length === 16 && m.badges.slice(0, 7).every((b) => !b.blank) && m.badges.slice(7).every((b) => b.blank));
-	const want = (i) => ({ left: 15 + (i % 2) * 90, top: 28.5 + Math.floor(i / 2) * 60 });
-	check('every badge is 90 × 60 mm, in the Avery 4822 grid (15 mm in, 28.5 mm down, no gaps)', m.badges.every((b, i) => near(b.w, 90 * PX) && near(b.h, 60 * PX) && near(b.left, want(i % 8).left * PX) && near(b.top, want(i % 8).top * PX)),
+	const want = (i) => ({ left: 10.18 + (i % 2) * 100, top: 28.5 + Math.floor(i / 2) * 60 });
+	check('every badge is 90 × 60 mm, in Avery’s 4822 grid (10.18 mm in, a 10 mm gap between the columns, 28.5 mm down)', m.badges.every((b, i) => near(b.w, 90 * PX) && near(b.h, 60 * PX) && near(b.left, want(i % 8).left * PX) && near(b.top, want(i % 8).top * PX)),
 		JSON.stringify(m.badges.slice(0, 3).map((b) => [b.left / PX, b.top / PX, b.w / PX, b.h / PX])));
 	const bad = m.badges.flatMap((b) => b.parts.filter((p) => p.over || p.outside).map((p) => `${p.cls}: ${p.text}`));
 	check('nothing overflows its box or its badge', !bad.length, bad.join(' | '));

@@ -30,9 +30,9 @@ const inch = (x: number) => Math.round(x * 25.4 * 1000) / 1000;
 
 /**
  * Only sheets whose layout could be checked. The Avery 4822 holders take Avery's L4728 micro-perforated inserts:
- * 90 × 60 mm, 8 to an A4 sheet. Eight of them fit portrait A4 only as 2 across and 4 down, and perforated cards are
- * butted together, so the grid is centred with no gaps: 15 mm at each side, 28.5 mm at top and bottom. Avery's own
- * template page could not be reached to confirm the margins, hence the README's advice to test on plain paper first.
+ * 90 × 60 mm, 8 to an A4 sheet, 2 across and 4 down. The geometry is read from Avery's own Word template for 4822
+ * (avery.co.uk/template-4822): a 28.5 mm top margin, the left column's edge 10.18 mm from the sheet's edge, a 10 mm
+ * gap between the columns and none between the rows.
  */
 export const BADGE_PRESETS: BadgePreset[] = [
 	{
@@ -47,8 +47,8 @@ export const BADGE_PRESETS: BadgePreset[] = [
 	},
 	{
 		id: 'avery-4822', label: 'Avery 4822 / L4728 (90 × 60 mm, 8 per A4)', guides: false,
-		sheet_w: 210, sheet_h: 297, cols: 2, rows: 4, badge_w: 90, badge_h: 60, margin_top: 28.5, margin_left: 15, gap_x: 0, gap_y: 0,
-		source: 'Avery L4728: 90 × 60 mm, 8 per A4 sheet, for the 4822 holders; grid centred, no gaps (margins worked out, not published)',
+		sheet_w: 210, sheet_h: 297, cols: 2, rows: 4, badge_w: 90, badge_h: 60, margin_top: 28.5, margin_left: 10.18, gap_x: 10, gap_y: 0,
+		source: 'Avery\'s Word template for 4822 (avery.co.uk/template-4822, Avery-UK_4822_Word_Template.doc): A4, top margin 28.49 mm, rows exactly 60 mm, columns 90 mm with a 9.98 mm gap, the first 10.18 mm from the left edge',
 	},
 	{
 		id: 'avery-l4785', label: 'Avery L4785 labels (80 × 50 mm, 10 per A4)', guides: false,
