@@ -77,15 +77,15 @@ test('every built-in sheet fits its paper, and the Avery sheets have the publish
 	const a = preset('avery-4822');
 	assert.deepEqual([a.sheet_w, a.sheet_h, a.cols, a.rows, a.badge_w, a.badge_h], [210, 297, 2, 4, 90, 60]);
 	assert.equal(js.badgePerSheet(a), 8);
-	// As in Avery's 4822 Word template: 28.5 mm down (equal top and bottom), 10.18 mm in, a 10 mm gap between columns.
-	assert.deepEqual([a.margin_top, a.margin_left, a.gap_x, a.gap_y], [28.5, 10.18, 10, 0]);
+	// As in Avery's 4822 Word template: 28.5 mm down (equal top and bottom), 10 mm in, a 10 mm gap between columns.
+	assert.deepEqual([a.margin_top, a.margin_left, a.gap_x, a.gap_y], [28.5, 10, 10, 0]);
 	assert.equal(a.margin_top * 2 + a.rows * a.badge_h, a.sheet_h);
 	assert.equal(js.badgePerSheet(preset('avery-l4785')), 10);
 	assert.equal(js.badgePerSheet(preset('avery-5395')), 8);
 	assert.ok(Math.abs(preset('avery-5395').badge_w - 85.725) < 0.01 && Math.abs(preset('avery-5395').sheet_h - 279.4) < 0.01);
 	assert.equal(js.badgePerSheet(preset('plain-a4')), 1);
-	assert.deepEqual(js.badgePositions(a).slice(0, 3), [{ left: 10.2, top: 28.5 }, { left: 110.2, top: 28.5 }, { left: 10.2, top: 88.5 }]);
-	assert.deepEqual(js.badgePositions(a).at(-1), { left: 110.2, top: 208.5 });
+	assert.deepEqual(js.badgePositions(a).slice(0, 3), [{ left: 10, top: 28.5 }, { left: 110, top: 28.5 }, { left: 10, top: 88.5 }]);
+	assert.deepEqual(js.badgePositions(a).at(-1), { left: 110, top: 208.5 });
 });
 
 test('a layout that does not fit, or makes no sense, is refused with a sentence', () => {
