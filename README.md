@@ -54,7 +54,7 @@ npx wrangler d1 create events                    # put the database_id it prints
 npx wrangler d1 migrations apply events --remote
 ```
 
-Then: add the form, check-email, confirm, manage and privacy pages (step 3); a Turnstile widget (6) and a Resend domain (7); the secrets `TOKEN_SECRET`, `RESEND_API_KEY` and `TURNSTILE_SECRET_KEY` (8); Cloudflare Access with two-factor sign-in on `/admin/*` and `/api/admin/*` (9); the cron Worker with the same settings and secrets (10). Deploy, create your event on the admin page, `/admin/rsvps/`, and work through its set-up check until it disappears.
+Then: add the form, check-email, confirm, manage and privacy pages (step 3); a Turnstile widget (6) and a Resend domain (7); the secrets `TOKEN_SECRET`, `RESEND_API_KEY` and `TURNSTILE_SECRET_KEY` (8); Cloudflare Access with two-factor sign-in on `/admin/*` and `/api/admin/*` (9); the cron Worker with the same settings and secrets (10). Deploy, create your event on the admin page, `/admin/rsvps/`, and work through its set-up check until its light is green.
 
 ## Set it up
 
@@ -146,7 +146,7 @@ These steps assume your site's repository is checked out locally and Events&I go
 
     The admin page's set-up check says if the cron has not run, or runs with a different `TOKEN_SECRET`, `SITE_URL` or Resend key.
 
-11. **Deploy and try it.** First turn preview deployments off, or make them static only (see the note under step 12): previews get the live database and settings. Push your site so Pages builds it, then open `/admin/rsvps/`: it should ask you to sign in, and its set-up check should be empty (work through anything it lists). Create your event there if you did not seed it. Then register with your own email, confirm, change and cancel. Check that a calendar invitation shows as an invitation in Gmail and Outlook before opening registration widely. If something goes wrong, see [Troubleshooting](#troubleshooting).
+11. **Deploy and try it.** First turn preview deployments off, or make them static only (see the note under step 12): previews get the live database and settings. Push your site so Pages builds it, then open `/admin/rsvps/`: it should ask you to sign in, and its set-up check should show a green light (work through anything it lists). Create your event there if you did not seed it. Then register with your own email, confirm, change and cancel. Check that a calendar invitation shows as an invitation in Gmail and Outlook before opening registration widely. If something goes wrong, see [Troubleshooting](#troubleshooting).
 
 12. **Optional: answer poll suggestions by email.** Without this, suggestions are decided on the admin page (the email about each one links there). To decide by replying, the cron Worker receives the replies through Cloudflare Email Routing:
 
@@ -184,7 +184,7 @@ Logs: `npx wrangler pages deployment tail` for the site (choose the production d
 
 Everything day to day happens on the admin page, `/admin/rsvps/`:
 
-- **Set-up check:** at the top, only when something needs putting right: settings missing or still at their example values, test keys on the live site, database migrations not applied, a cron Worker that has not run in the last 20 minutes, and a cron Worker whose `TOKEN_SECRET`, `SITE_URL`, `EMAIL_FROM` or Resend key differ from the site's (which would break the links in what it sends).
+- **Set-up check:** always at the top, as a light: green when all is in order, amber for warnings, red for problems (grey while it checks, or if the check could not run). It lists settings missing or still at their example values, test keys on the live site, database migrations not applied, a cron Worker that has not run in the last 20 minutes, and a cron Worker whose `TOKEN_SECRET`, `SITE_URL`, `EMAIL_FROM` or Resend key differ from the site's (which would break the links in what it sends).
 
 - **Events:** switch between events, edit one (title, venue, dates, time zone, the form's wording), create a new one, or clone this one to a new date (programme, latest joining instructions and polls' options; never people, hosts or answers). Sessions can be added there too, and deleted while nobody has booked them. None of this emails anyone.
 

@@ -48,7 +48,14 @@ const HTML = /* html */ `<!doctype html>
 	legend { font-weight: 700; }
 	#toast { position: fixed; bottom: 1rem; right: 1rem; background: #111; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; max-width: 30rem; }
 	#toast:empty { display: none; }
-	#setup { border-color: #b3261e; }
+	/* The set-up check is always shown, as a light: green when nothing needs doing, amber for warnings, red for problems,
+	   grey while checking or when the check could not run. The words say the same, so the colour is never the only signal. */
+	#setup { border-left: 6px solid #767676; }
+	#setup[data-light='green'] { border-left-color: #1e7b34; } #setup[data-light='amber'] { border-left-color: #b26b00; } #setup[data-light='red'] { border-left-color: #b3261e; }
+	#setup-status { display: flex; align-items: center; gap: 0.5rem; margin: 0; font-weight: 700; }
+	#setup-status::before { content: ''; flex: none; width: 0.9rem; height: 0.9rem; border-radius: 50%; background: #767676; forced-color-adjust: none; }
+	#setup[data-light='green'] #setup-status::before { background: #1e7b34; } #setup[data-light='amber'] #setup-status::before { background: #e69500; } #setup[data-light='red'] #setup-status::before { background: #b3261e; }
+	#setup-list:empty { display: none; }
 	#setup li { margin: 0.3rem 0; }
 	#setup .error::marker { content: '✗ '; color: #b3261e; } #setup .warning::marker { content: '! '; color: #8a5a00; } #setup .note::marker { content: 'i '; color: #444; }
 </style>
@@ -61,7 +68,7 @@ const HTML = /* html */ `<!doctype html>
 	<span class="small">Events&amp;I ${VERSION}</span>
 </header>
 <main>
-	<section aria-labelledby="h-setup" id="setup" hidden><h2 id="h-setup">Set-up check</h2><p class="small">Things to put right in your Cloudflare settings. This list disappears when everything is in order.</p><ul id="setup-list"></ul></section>
+	<section aria-labelledby="h-setup" id="setup" data-light="grey"><h2 id="h-setup">Set-up check</h2><p id="setup-status" role="status">Checking your Cloudflare settings…</p><ul id="setup-list"></ul></section>
 	<section aria-labelledby="h-summary"><h2 id="h-summary">Summary</h2><div class="stats" id="stats"></div></section>
 
 	<section aria-labelledby="h-events" id="events">
@@ -293,9 +300,16 @@ function sessionEdits() {
 }
 
 function showSetup(findings) {
-	const list = (findings || []).filter((f) => f.level !== 'note' || findings.some((x) => x.level !== 'note'));
-	$('setup').hidden = !list.length;
-	$('setup-list').innerHTML = list.map((f) => '<li class="' + esc(f.level) + '">' + esc(f.text) + '</li>').join('');
+	const n = (level) => (findings || []).filter((f) => f.level === level).length;
+	const errors = n('error'), warnings = n('warning');
+	const plural = (k, word) => k + ' ' + word + (k === 1 ? '' : 's');
+	const [light, text] = !Array.isArray(findings) ? ['grey', 'Not checked: the check could not run. Reload the page; if this stays, look at the site\'s log.']
+		: errors ? ['red', plural(errors, 'problem') + ' to put right' + (warnings ? ', and ' + plural(warnings, 'warning') : '') + ':']
+		: warnings ? ['amber', plural(warnings, 'warning') + ', worth putting right:']
+		: ['green', 'All in order: settings, database and cron Worker.'];
+	$('setup').dataset.light = light;
+	$('setup-status').textContent = text;
+	$('setup-list').innerHTML = (findings || []).map((f) => '<li class="' + esc(f.level) + '">' + esc(f.text) + '</li>').join('');
 }
 
 async function load() {

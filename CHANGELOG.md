@@ -1,5 +1,9 @@
 # Events&I – changelog
 
+## 2026-11-10
+
+- [x] **Set-up check as a traffic light** — The admin page's set-up check no longer disappears when all is well, so its absence is never taken as good news. It is always at the top, with a light and a sentence saying the same thing: green "All in order", amber for warnings, red for problems (counted), and grey while it checks or when the check could not run. Notes (such as the `ACCESS_MFA` reminder) are listed under any light. Colour is never the only signal. Checked in `tests/browser/admin.mjs`.
+
 ## 2026-11-07
 
 - [x] **Confirm for them** — Unconfirmed registrations on the admin page have a "Confirm for them" button, for someone who has told the organiser they are coming but has not pressed the button in the confirm email. The organiser pastes the address the person gave them; if it differs from the one typed in the form, they must say that one was mistyped (the registration is corrected to the pasted address and only it is emailed), and if it is more than one character out, which may be someone else's address, also that they have its owner's permission. The server enforces both, and refuses a correction to an address that already has a registration. It then confirms exactly as the button would (a place if one is free, otherwise the waiting list), and the person gets the usual joining instructions (or waiting-list email) opening with a line saying the organiser confirmed for them, so the unused link does not worry them. It goes through `/api/admin/promote` (`what: 'confirm'`), so host sites need no new function wrapper, migration or setting. Checked in `tests/e2e.mjs`.

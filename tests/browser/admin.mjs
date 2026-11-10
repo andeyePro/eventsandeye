@@ -122,6 +122,7 @@ try {
 	check("Lena's dinner-only tag does not look like a confirmed place while she waits", !(await row(page, 'Lena Fischer').locator('.tag.ok').count()));
 	check('no console errors on load', !page.errors.length, page.errors.join(' | '));
 	check('the set-up check says the cron Worker has not run', /cron Worker has not run/.test(await page.textContent('#setup')) && await page.locator('#setup').isVisible());
+	check('…on a red light, in words as well as colour', (await page.getAttribute('#setup', 'data-light')) === 'red' && /problem/.test(await page.textContent('#setup-status')));
 	check('download links point at this event', (await page.getAttribute('#csv-link', 'href')).endsWith(`event=${EVENT}`) && (await page.getAttribute('#log-link', 'href')).endsWith(`event=${EVENT}`));
 
 	// ================================================================== promoting
@@ -327,7 +328,8 @@ try {
 	// ================================================================== the set-up check clears
 	await h.cron();
 	await page.reload(); await page.waitForSelector('#regs tbody tr');
-	check('the set-up check disappears once the cron Worker has run', await page.locator('#setup').isHidden(), await page.textContent('#setup'));
+	// Changed 2026-11-10: the check no longer disappears when all is well; it stays, on a green light that says so.
+	check('the set-up check turns green once the cron Worker has run', await page.locator('#setup').isVisible() && (await page.getAttribute('#setup', 'data-light')) === 'green' && /All in order/.test(await page.textContent('#setup-status')), await page.textContent('#setup'));
 
 	// ================================================================== keyboard
 	console.log('Keyboard');
