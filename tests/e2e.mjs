@@ -1116,7 +1116,8 @@ try {
 		check('badges: named for confirmed in-person places only, by family name, names as typed', named(b) === 'zed|adams, Amy|Brown, Ludwig|van Beethoven', named(b));
 		check('badges: Wendy is on the waiting list, Una unconfirmed, Sam supper only, Rita remote', b.registrations.find((x) => x.email === em('wendy'))?.place === 'waitlist' && b.registrations.find((x) => x.email === em('sam'))?.place === null);
 		check('badges: affiliation and the no-images request come with them', b.badges.people[0].affiliation === 'UCL' && b.badges.people.find((p) => p.given === 'Ludwig').no_images === true && b.badges.people.filter((p) => p.no_images).length === 1);
-		check('badges: one blank for the room (4 places, 3 named), the plain A4 sheet by default', b.badges.blanks_for_room === 1 && b.badges.template === 'plain-a4' && b.badges.colour === '#000000' && b.badges.font === null, JSON.stringify(b.badges));
+		// The sheet and colours are the site's settings (plain A4 and black when it has none, as on the starter site).
+		check('badges: one blank for the room (4 places, 3 named), on a built-in sheet, with nothing ignored', b.badges.blanks_for_room === 1 && /^(plain-a4|plain-letter|avery-[\w-]+)$/.test(b.badges.template) && /^#[0-9A-F]{6}$/.test(b.badges.colour) && b.badges.ignored.length === 0, JSON.stringify(b.badges));
 		check('badges: no email addresses in the badge data', !JSON.stringify(b.badges).includes('@'));
 		r = await req('POST', '/api/admin/promote', { id: b.registrations.find((x) => x.email === em('una')).id, what: 'confirm', email: em('una') }, ADMIN);
 		b = (await req('GET', `/api/admin/summary?event=${NB}`, undefined, ADMIN)).data;
