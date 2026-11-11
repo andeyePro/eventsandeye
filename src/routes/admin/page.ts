@@ -539,17 +539,21 @@ document.body.addEventListener('click', async (e) => {
 });
 async function loadPolls() {
 	const d = await api('/api/admin/polls?event=' + encodeURIComponent(eventId));
+	const firstPublic = d.polls.find((x) => x.public_results)?.id;
 	$('polls-box').innerHTML = d.polls.map((p) => {
 		const pid = esc(p.id);
+		// The event's first public poll is also at the address without a poll id, which is the one to give out.
+		const publicUrl = location.origin + '/api/rsvp/poll-results?event=' + encodeURIComponent(eventId) + (p.id === firstPublic ? '' : '&poll=' + encodeURIComponent(p.id));
 		const pending = p.options.filter((o) => o.status === 'pending');
 		const decided = p.options.filter((o) => o.suggested_label && o.status !== 'pending');
 		const rows = p.tally.results.map((r) => '<tr><td>' + esc(r.label) + '</td><td>' + r.willing + '</td><td>' + r.out + '</td><td>' + r.first + '</td><td>' + r.score + '</td><td class="small">' + esc((r.names || []).join(', ')) + '</td><td><button class="secondary" data-poll-rename="' + esc(r.id) + '" data-label="' + esc(r.label) + '">Rename</button> <button class="danger" data-poll-remove="' + esc(r.id) + '" data-label="' + esc(r.label) + '">Remove</button></td></tr>').join('');
 		return '<fieldset data-poll="' + pid + '"><legend>' + esc(p.question) + '</legend>'
-			+ '<p class="small">' + (p.open ? 'Open' : 'Closed') + ', ' + (p.closes_at ? 'closes ' + esc(uk(p.closes_at)) : 'closes when the event ends') + '. ' + p.tally.voters + ' answer(s)' + (p.tally.nothing ? ', of whom ' + p.tally.nothing + ' would join none of the options' : '') + '. Suggestions ' + (p.allow_suggestions ? 'on' : 'off') + '.</p>'
+			+ '<p class="small">' + (p.open ? 'Open' : 'Closed') + ', ' + (p.closes_at ? 'closes ' + esc(uk(p.closes_at)) : 'closes when the event ends') + '. ' + p.tally.voters + ' answer(s)' + (p.tally.nothing ? ', of whom ' + p.tally.nothing + ' would join none of the options' : '') + '. Suggestions ' + (p.allow_suggestions ? 'on' : 'off') + '.' + (p.public_results ? ' <strong>Totals public</strong> at <a href="' + esc(publicUrl) + '">' + esc(publicUrl) + '</a>.' : '') + '</p>'
 			+ (pending.length ? '<h3>Suggestions waiting for you</h3><ul>' + pending.map((o) => '<li><strong>' + esc(o.label) + '</strong> from ' + esc(o.suggested_by_name || 'someone who has since cancelled') + ' <button data-poll-decide="add" data-option="' + esc(o.id) + '">Add for everyone</button> <button class="secondary" data-poll-decide="use" data-option="' + esc(o.id) + '" data-label="' + esc(o.label) + '">Add in my words…</button> <button class="danger" data-poll-decide="reject" data-option="' + esc(o.id) + '">Don\'t add</button></li>').join('') + '</ul>' : '')
 			+ '<div style="overflow-x:auto" tabindex="0" role="region" aria-label="Results: ' + esc(p.question) + '"><table><caption class="small" style="text-align:left">Sorted by how many would join, then by preference (each person\'s top choice above their line scores most).</caption><thead><tr><th scope="col">Option</th><th scope="col">Would join</th><th scope="col">Would stay at home</th><th scope="col">First choice</th><th scope="col">Score</th><th scope="col">Who would join</th><th scope="col">Actions</th></tr></thead><tbody>' + (rows || '<tr><td colspan="7">No options yet.</td></tr>') + '</tbody></table></div>'
 			+ '<div class="row"><div><label for="po-' + pid + '">Add an option</label><input id="po-' + pid + '" type="text" maxlength="80" /></div></div><button data-poll-add="' + pid + '">Add option</button> '
 			+ '<button class="secondary" data-poll-toggle="' + pid + '" data-allow="' + (p.allow_suggestions ? '1' : '0') + '">' + (p.allow_suggestions ? 'Stop taking suggestions' : 'Take suggestions') + '</button> '
+			+ '<button class="secondary" data-poll-public="' + pid + '" data-public="' + (p.public_results ? '1' : '0') + '">' + (p.public_results ? 'Hide the totals' : 'Make the totals public') + '</button> '
 			+ '<button class="secondary" data-poll-close="' + pid + '" data-open="' + (p.open ? '1' : '0') + '">' + (p.open ? 'Close now' : 'Reopen until the event ends') + '</button> '
 			+ '<button class="danger" data-poll-delete="' + pid + '">Delete poll</button>'
 			+ (decided.length ? '<details><summary class="small">Decided suggestions</summary><ul class="small">' + decided.map((o) => '<li>' + esc(o.suggested_label || o.label) + ' (' + esc(o.suggested_by_name || 'since cancelled') + '): ' + (o.status === 'active' ? 'added as ' + esc(o.label) : o.merged_into ? 'merged into an existing option' : 'not added') + ', ' + esc(o.decided_by || '') + ', ' + esc(uk(o.decided_at)) + '</li>').join('') + '</ul></details>' : '')
@@ -583,6 +587,9 @@ $('polls-box').addEventListener('click', async (e) => {
 			await act({ action: 'add_option', poll: b.dataset.pollAdd, label: $('po-' + b.dataset.pollAdd).value }); toast('Option added. People who have already answered see it as new, below their line.');
 		} else if (b.dataset.pollToggle) {
 			await act({ action: 'update', poll: b.dataset.pollToggle, allow_suggestions: b.dataset.allow !== '1' }); toast('Saved.');
+		} else if (b.dataset.pollPublic) {
+			if (b.dataset.public !== '1' && !confirm('Make this poll\'s totals public? Anyone with the link can see, live, each option with how many would join, stay at home or put it first. Never names or anyone\'s ranking. Suggestions show once you add them.')) return;
+			await act({ action: 'update', poll: b.dataset.pollPublic, public_results: b.dataset.public !== '1' }); toast(b.dataset.public === '1' ? 'Totals hidden.' : 'Totals public.');
 		} else if (b.dataset.pollClose) {
 			await act({ action: 'update', poll: b.dataset.pollClose, closes_at: b.dataset.open === '1' ? new Date().toISOString() : null }); toast('Saved.');
 		} else if (b.dataset.pollDelete) {
