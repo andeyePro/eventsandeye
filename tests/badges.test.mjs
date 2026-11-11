@@ -12,7 +12,7 @@ const js = new Function(`${BADGE_JS}; return { badgePerSheet, badgeGeometryProbl
 const near = (a, b) => Math.abs(a - b) < 0.11;
 const preset = (id) => BADGE_PRESETS.find((p) => p.id === id);
 
-const reg = (name, over = {}) => ({ name, status: 'confirmed', attendance: 'in_person', place: 'place', affiliation: null, no_images: 0, ...over });
+const reg = (name, over = {}) => ({ name, status: 'confirmed', attendance: 'in_person', place: 'place', affiliation: null, no_images: 0, updated_at: '2026-11-01T10:00:00.000Z', ...over });
 
 test('named badges: confirmed, in person, with a place; nobody else', () => {
 	assert.equal(wantsBadge(reg('A')), true);
@@ -37,7 +37,8 @@ test('names are split into given and family names, keeping lower-case particles 
 test('sorted by family name, then given name, ignoring case and accents; names kept as typed', () => {
 	const people = badgePeople([reg('zed adams'), reg('Ludwig van Beethoven'), reg('Amy Brown', { affiliation: ' UCL ', no_images: 1 }), reg('Bea Ádams'), reg('Cher'), reg('Remote Person', { attendance: 'remote', place: null })]);
 	assert.deepEqual(people.map((p) => `${p.given}|${p.family}`), ['Bea|Ádams', 'zed|adams', 'Amy|Brown', 'Cher|', 'Ludwig|van Beethoven']);
-	assert.deepEqual(people.find((p) => p.given === 'Amy'), { given: 'Amy', family: 'Brown', affiliation: 'UCL', no_images: true });
+	assert.deepEqual(people.find((p) => p.given === 'Amy'), { given: 'Amy', family: 'Brown', affiliation: 'UCL', no_images: true, changed_at: '2026-11-01T10:00:00.000Z' });
+	assert.equal(badgePeople([reg('Late Comer', { updated_at: '2026-11-11T09:00:00.000Z' })])[0].changed_at, '2026-11-11T09:00:00.000Z', 'when last confirmed, promoted or edited: for a second print run');
 });
 
 test('badge settings: defaults, a known sheet, and settings that cannot be used are reported', () => {

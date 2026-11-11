@@ -80,6 +80,14 @@ try {
 	await page.fill('#b-blanks', '1');
 	check('typing a number of blanks uses it as it is', /7 named and 1 blank: 8 badges on 1 sheet of 8/.test(await page.textContent('#b-count')));
 	await page.fill('#b-blanks', '');
+	await page.fill('#b-since', '2099-01-01T00:00');
+	check('a "since" time after everyone: no named badges, and no blanks unless asked for', /0 named \(of 7\) and 0 blank/.test(await page.textContent('#b-count')), await page.textContent('#b-count'));
+	await page.fill('#b-since', '2000-01-01T00:00');
+	check('a "since" time before everyone: all 7, with blanks only to fill the last sheet', /7 named \(of 7\) and 1 blank: 8 badges on 1 sheet of 8/.test(await page.textContent('#b-count')), await page.textContent('#b-count'));
+	await page.fill('#b-blanks', '9');
+	check('…or as many blanks as typed', /7 named \(of 7\) and 9 blank: 16 badges on 2 sheets of 8/.test(await page.textContent('#b-count')), await page.textContent('#b-count'));
+	await page.fill('#b-blanks', '');
+	await page.fill('#b-since', '');
 	await page.$eval('#badges details', (d) => { d.open = true; });
 	await page.fill('#b-cols', '3');
 	check('a layout too wide for the sheet is explained', /mm across/.test(await page.textContent('#b-count')) && (await page.inputValue('#b-preset')) === 'custom');

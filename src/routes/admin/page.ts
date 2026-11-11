@@ -184,6 +184,7 @@ const HTML = /* html */ `<!doctype html>
 				<div><label for="b-preset">Badge sheet</label><select id="b-preset"></select></div>
 				<div><label for="b-logo">Logo (SVG, PNG or JPEG; it stays on this computer)</label><input id="b-logo" type="file" accept="image/svg+xml,image/png,image/jpeg,.svg,.png,.jpg,.jpeg" /><p class="small" id="b-logo-note"></p></div>
 				<div><label for="b-blanks">Blank badges (empty: enough for the room, filling the last sheet)</label><input id="b-blanks" type="number" min="0" step="1" /></div>
+				<div><label for="b-since">Only people confirmed, promoted or edited since (<span class="tzl">UK time</span>; empty: everyone)</label><input id="b-since" type="datetime-local" /><p class="small">For a second print run: enter when you last printed, and type how many blanks you want. Left empty, the blanks just fill the last sheet.</p></div>
 				<div><label for="b-logopos">Logo position (automatic: the top corner of a landscape badge, otherwise across the top)</label><select id="b-logopos"><option value="auto">Automatic</option><option value="corner">Top corner, names beneath</option><option value="right">On the right</option><option value="left">On the left</option><option value="top">Across the top</option></select></div>
 				<div><label for="b-names">Names</label><select id="b-names"><option value="split">Given name, family name beneath</option><option value="one">Full name on one line</option></select></div>
 				<div><label for="b-tag">Line under the logo (optional, such as EVENT’26)</label><input id="b-tag" type="text" maxlength="40" /></div>
@@ -698,15 +699,19 @@ function badgeUsePreset(id) {
 	$('b-guides').checked = p.guides;
 }
 const badgeLogoUrl = () => badgeLogo || (badgeData && badgeData.logo_url ? new URL(badgeData.logo_url, location.href).href : '');
+// With a "since" time: only the people confirmed, promoted or edited from then on, and blanks only to fill the last sheet.
+function badgeSince() { const v = $('b-since').value; return v ? ukLocalToIso(v) : ''; }
+function badgeChosen() { const s = badgeSince(); return s ? badgeData.people.filter((p) => p.changed_at >= s) : badgeData.people; }
+const badgeRoom = (named) => badgeSince() ? named : badgeEvent.in_person_max;
 function badgeCount() {
 	if (!badgeData) return;
 	const g = badgeGeometry(), problem = badgeGeometryProblem(g);
-	const named = badgeData.people.length;
+	const named = badgeChosen().length;
 	if (problem) { $('b-count').textContent = problem; return; }
-	const per = badgePerSheet(g), blanks = badgeBlanks(named, badgeEvent.in_person_max, per, $('b-blanks').value);
-	$('b-blanks').placeholder = String(badgeBlanks(named, badgeEvent.in_person_max, per, ''));
+	const per = badgePerSheet(g), blanks = badgeBlanks(named, badgeRoom(named), per, $('b-blanks').value);
+	$('b-blanks').placeholder = String(badgeBlanks(named, badgeRoom(named), per, ''));
 	const sheets = Math.ceil((named + blanks) / per);
-	$('b-count').textContent = named + ' named and ' + blanks + ' blank: ' + (named + blanks) + ' badges on ' + sheets + ' sheet' + (sheets === 1 ? '' : 's') + ' of ' + per + '.';
+	$('b-count').textContent = named + ' named' + (badgeSince() ? ' (of ' + badgeData.people.length + ')' : '') + ' and ' + blanks + ' blank: ' + (named + blanks) + ' badges on ' + sheets + ' sheet' + (sheets === 1 ? '' : 's') + ' of ' + per + '.';
 }
 function showBadges(s) {
 	badgeData = s.badges; badgeEvent = s.event;
@@ -757,12 +762,13 @@ $('badge-form').addEventListener('submit', async (e) => {
 	e.preventDefault();
 	const g = badgeGeometry(), problem = badgeGeometryProblem(g);
 	if (problem) { toast(problem); $('b-preset').focus(); return; }
-	const blanks = badgeBlanks(badgeData.people.length, badgeEvent.in_person_max, badgePerSheet(g), $('b-blanks').value);
-	if (!badgeData.people.length && !blanks) { toast('No badges to print: nobody is confirmed in person yet, and no blanks are wanted.'); return; }
+	const chosen = badgeChosen();
+	const blanks = badgeBlanks(chosen.length, badgeRoom(chosen.length), badgePerSheet(g), $('b-blanks').value);
+	if (!chosen.length && !blanks) { toast(badgeSince() ? 'No badges to print: nobody has been confirmed, promoted or edited since then, and no blanks are wanted.' : 'No badges to print: nobody is confirmed in person yet, and no blanks are wanted.'); return; }
 	// Opened before anything is awaited, so the browser counts it as the click's own tab, then filled.
 	const tab = window.open('', '_blank');
 	if (!tab) { toast('The browser stopped the new tab opening: allow pop-ups for this page, then try again.'); return; }
-	const html = badgeSheetHtml({ title: badgeEvent.title, people: badgeData.people, blanks, geometry: g, logo: badgeLogoUrl(), guides: $('b-guides').checked, markNoImages: $('b-noimg').checked,
+	const html = badgeSheetHtml({ title: badgeEvent.title, people: chosen, blanks, geometry: g, logo: badgeLogoUrl(), guides: $('b-guides').checked, markNoImages: $('b-noimg').checked,
 		logoAspect: badgeLogo ? badgeAspect : await siteLogoAspect(), logoPosition: $('b-logopos').value, oneLine: $('b-names').value === 'one', showTitle: $('b-title').checked, colour: $('b-colour').value,
 		affColour: $('b-affcolour').value, tag: $('b-tag').value.trim(), tagColour: $('b-tagcolour').value, tagWidth: Number($('b-tagw').value) || 1, accent: $('b-acc-on').checked ? $('b-accent').value : '',
 		font: badgeData.font ? { family: badgeData.font.family, url: new URL(badgeData.font.url, location.href).href } : null });

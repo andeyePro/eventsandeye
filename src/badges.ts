@@ -87,10 +87,12 @@ export function splitName(name: string) {
 }
 const collate = new Intl.Collator('en-GB', { sensitivity: 'base', numeric: true });
 
-/** Named badges, by family name then given name. Names are kept exactly as typed: never re-cased. */
-export function badgePeople(regs: Pick<RegistrationRow, 'status' | 'attendance' | 'place' | 'name' | 'affiliation' | 'no_images'>[]) {
+/** Named badges, by family name then given name. Names are kept exactly as typed: never re-cased.
+ * changed_at is when the registration was last confirmed, promoted or edited, for printing only the badges that are new
+ * or may have changed since an earlier print run. */
+export function badgePeople(regs: Pick<RegistrationRow, 'status' | 'attendance' | 'place' | 'name' | 'affiliation' | 'no_images' | 'updated_at'>[]) {
 	return regs.filter(wantsBadge)
-		.map((r) => ({ ...splitName(r.name), affiliation: r.affiliation?.trim() || null, no_images: !!r.no_images }))
+		.map((r) => ({ ...splitName(r.name), affiliation: r.affiliation?.trim() || null, no_images: !!r.no_images, changed_at: r.updated_at || '' }))
 		.sort((a, b) => collate.compare(a.family || a.given, b.family || b.given) || collate.compare(a.given, b.given));
 }
 
@@ -173,6 +175,7 @@ function badgeGeometryProblem(g) {
 /**
  * How many blank badges: by default enough for every place in the room (in-person maximum less the named badges),
  * then more to fill the last sheet, which would otherwise be wasted. A number the organiser types is used as it is.
+ * For a later run of only the new badges, pass the number of named badges as roomMax: just enough to fill the last sheet.
  */
 function badgeBlanks(named, roomMax, perSheet, typed) {
 	if (typed !== '' && typed != null && Number.isFinite(Number(typed)) && Number(typed) >= 0) return Math.floor(Number(typed));

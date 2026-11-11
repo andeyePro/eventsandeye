@@ -1,5 +1,9 @@
 # Events&I – changelog
 
+## 2026-11-11
+
+- [x] **Name badges: a second print run** — "Only people confirmed, promoted or edited since" on the admin page's Name badges section prints just the badges that are new, or may have changed, since an earlier run (by each registration's `updated_at`), instead of the whole list again. With it set, blanks default to filling the last sheet rather than the room; a typed number is still used as it is.
+
 ## 2026-11-10
 
 - [x] **Avery 4822 layout from Avery's template** — The 4822 sheet was a guess (a centred grid with no gap) and printed out of line with the inserts. It now follows Avery's own Design & Print template for L4728: 28.5 mm from the top, the first column 10 mm from the left edge and a 10 mm gap between the columns.
