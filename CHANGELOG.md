@@ -1,5 +1,11 @@
 # Events&I – changelog
 
+## 2026-11-11
+
+Upgrading: apply migration 0012, and copy the new function wrapper `functions/api/rsvp/poll-results.ts` (`cp -Rn eventsandeye/examples/functions/. functions/`).
+
+- [x] **Public poll totals** — An organiser can make a poll's totals public on the admin page ("Make the totals public", off by default, asks first). `GET /api/rsvp/poll-results?event=<id>[&poll=<id>]` then returns the question, how many answered, how many would join none of the options, and for each option how many would join, stay at home or put it first, and its score, sorted as on the admin page; never names or anyone's ranking. Suggestions appear only once an organiser adds them. Open to any origin (a slide opened from a file) and never cached; 404 while hidden. Migration 0012 adds the per-poll setting. Checked in `tests/e2e.mjs`.
+
 ## 2026-11-10
 
 - [x] **Asking us not to share images** — An optional tick box on the booking form and the manage page, "please don't share images of me at this event", so the request is on record before the day rather than said in person. When a confirmed registrant ticks it (on confirming, or later on their manage page) they are emailed: the organisers will do their best to keep them out of published photos and recordings; they may reply with a photo of themselves so official media can be checked before publication (used only for that, and deleted once checked); online attendees are asked to keep their camera off; and the organisers cannot control what other attendees share. The organiser is emailed too, the admin page tags them "no images" and counts them, the CSV has a `no_images` column, and the confirm email repeats the request. Unticking emails nobody. Upgrading: apply migration 0011 (no new function wrapper or setting); the set-up check asks for it. Checked in `tests/e2e.mjs`.

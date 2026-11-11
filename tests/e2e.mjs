@@ -700,6 +700,18 @@ try {
 		check('tally: who would join, who would stay at home, first choices, preference', ap.tally.voters === 2 && row('Camping').willing === 2 && row('Hiking').willing === 2 && row('Skiing').willing === 1 && row('Skiing').out === 1 && row('Football').out === 2 && row('Skiing').first === 1 && row('Camping').score === 3 && row('Hiking').score === 3, JSON.stringify(ap.tally));
 		check('tally sorted by who would join, and the organiser sees names', ['Camping', 'Hiking'].includes(ap.tally.results[0].label) && ap.tally.results.at(-1).willing === 0 && row('Camping').names.join() === 'Pat,Quinn', JSON.stringify(ap.tally.results.map((x) => x.label)));
 
+		const PUBLIC = `/api/rsvp/poll-results?event=${EVENT}`;
+		r = await req('GET', PUBLIC);
+		check('poll totals are not public until an organiser says so → 404', r.status === 404);
+		r = await req('POST', POLLS, { action: 'update', poll: POLL, public_results: true }, ADMIN);
+		let pres = await fetch(`${BASE}${PUBLIC}`, { headers: { origin: 'null' } });
+		let pub = await pres.json();
+		check('made public: totals for any origin, never cached, in the admin page\'s order', r.data.ok && pres.status === 200 && pres.headers.get('access-control-allow-origin') === '*' && /no-store/.test(pres.headers.get('cache-control') || '')
+			&& pub.voters === 2 && pub.stayingHome === 0 && pub.question === 'What shall we do on Saturday?' && pub.options.map((o) => o.label).join() === ap.tally.results.map((x) => x.label).join()
+			&& pub.options.find((o) => o.label === 'Camping').willing === 2 && pub.options.find((o) => o.label === 'Skiing').out === 1 && pub.options.find((o) => o.label === 'Skiing').firstChoices === 1 && pub.options.find((o) => o.label === 'Hiking').score === 3, JSON.stringify(pub));
+		check('…with no names, addresses or rankings in it', !/Pat|Quinn|@|names|ranking/.test(JSON.stringify(pub)) && Object.keys(pub.options[0]).sort().join() === 'firstChoices,id,label,out,score,willing', JSON.stringify(pub.options[0]));
+		check('…and by poll id too; an unknown or other event\'s poll → 404', (await req('GET', `${PUBLIC}&poll=${POLL}`)).status === 200 && (await req('GET', `${PUBLIC}&poll=nope`)).status === 404 && (await req('GET', `/api/rsvp/poll-results?event=nope&poll=${POLL}`)).status === 404);
+
 		r = await req('GET', `/api/rsvp/status?event=${EVENT}`);
 		const sp = (r.data.polls || []).find((p) => p.id === POLL);
 		check('the booking form gets the open poll and its options', sp && sp.options.map((o) => o.label).join() === 'Skiing,Camping,Hiking,Football,Rugby', JSON.stringify(r.data.polls));
@@ -734,6 +746,7 @@ try {
 		check('Pat ranks their own suggestion first', r.data.ok && r.data.polls.find((p) => p.id === POLL).ballot.ranking[0] === PADDLE, JSON.stringify(r.data));
 		check('Quinn cannot rank Pat\'s pending suggestion → 409', (await vote(quinn, [PADDLE, HIKE], 1)).status === 409);
 		check('the organiser sees the pending suggestion and who made it', (await req('GET', `${POLLS}?event=${EVENT}`, undefined, ADMIN)).data.polls.find((p) => p.id === POLL).options.some((o) => o.id === PADDLE && o.status === 'pending' && o.suggested_by_name === 'Pat'));
+		check('a suggestion still waiting for the organisers is not in the public totals', !(await (await fetch(`${BASE}/api/rsvp/poll-results?event=${EVENT}`)).json()).options.some((o) => o.id === PADDLE));
 
 		console.log('\nReplying to a suggestion by email');
 		const inbound = async (raw) => (await (await fetch(`${BASE}/api/dev/inbound`, { method: 'POST', body: raw })).json());
@@ -771,6 +784,9 @@ try {
 		check('the organiser gets a confirmation; Pat is not emailed and sees it on their page', /Done: "Paddle boarding" added as "Paddleboarding on the Thames"/.test(back.text_body) && (await mailsTo('pat@example.org')).every((m) => !/Paddle/.test(m.text_body)) && pv.notes.some((n) => /"Paddle boarding" was added for everyone as "Paddleboarding on the Thames"/.test(n)), back.text_body + JSON.stringify(pv.notes));
 		const qv = await view(quinn);
 		check('Quinn now sees it, as new and not yet in their order', qv.options.some((o) => o.id === PADDLE && !o.pending) && !qv.ballot.ranking.includes(PADDLE), JSON.stringify(qv.ballot));
+		check('once added, it is in the public totals', (await (await fetch(`${BASE}/api/rsvp/poll-results?event=${EVENT}`)).json()).options.some((o) => o.id === PADDLE && o.label === 'Paddleboarding on the Thames'));
+		r = await req('POST', POLLS, { action: 'update', poll: POLL, public_results: false }, ADMIN);
+		check('hidden again → 404', r.data.ok && (await req('GET', `/api/rsvp/poll-results?event=${EVENT}`)).status === 404);
 		r = await inbound(plain({ subject: `Re: ${sm.subject}`, body: 'no\r\n' }));
 		check('a second answer changes nothing and says it was already decided', r.result.action === 'decided' && r.result.already && (await view(pat)).options.some((o) => o.id === PADDLE && !o.pending) && /already been decided/.test((await last(NOTIFY)).text_body), JSON.stringify(r));
 

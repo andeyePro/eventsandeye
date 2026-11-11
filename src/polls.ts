@@ -20,6 +20,7 @@ export interface PollRow {
 	closes_at: string | null;
 	sort: number;
 	created_at: string;
+	public_results: number;
 }
 
 export interface OptionRow {
@@ -345,6 +346,23 @@ export async function adminPolls(env: Env, eventId: string) {
 	return { ok: true as const, polls };
 }
 
+/**
+ * A poll's live totals for anyone (a slide, a page on the site), once an organiser has made them public: counts only,
+ * never names or anyone's ranking. Options are those on everyone's list, so a suggestion shows only once an organiser
+ * has added it. Without a poll id, the event's first public poll. Sorted as on the admin page.
+ */
+export async function publicResults(env: Env, eventId: string, pollId = '') {
+	const p = pollId
+		? await env.DB.prepare('SELECT * FROM polls WHERE id = ? AND event_id = ? AND public_results = 1').bind(pollId, eventId).first<PollRow>()
+		: await env.DB.prepare('SELECT * FROM polls WHERE event_id = ? AND public_results = 1 ORDER BY sort, created_at LIMIT 1').bind(eventId).first<PollRow>();
+	if (!p) throw new UserError('No public poll results for this event.', 404);
+	const t = tally(await getOptions(env, p.id), await getBallots(env, p.id));
+	return {
+		updatedAt: nowIso(), question: p.question, voters: t.voters, stayingHome: t.nothing,
+		options: t.results.map((r) => ({ id: r.id, label: r.label, willing: r.willing, out: r.out, firstChoices: r.first, score: r.score })),
+	};
+}
+
 const labelsFrom = (v: unknown) => {
 	const raw = Array.isArray(v) ? v.map(String) : typeof v === 'string' ? v.split('\n') : [];
 	const out: string[] = [];
@@ -383,7 +401,8 @@ export async function adminPollAction(env: Env, input: Record<string, unknown>) 
 			if (!question) throw new UserError('Please write the question.');
 			const closes = input.closes_at === undefined ? p.closes_at : optDate(input.closes_at);
 			const allow = input.allow_suggestions === undefined ? p.allow_suggestions : input.allow_suggestions === false ? 0 : 1;
-			await env.DB.prepare('UPDATE polls SET question = ?, closes_at = ?, allow_suggestions = ? WHERE id = ?').bind(question, closes, allow, p.id).run();
+			const pub = input.public_results === undefined ? p.public_results : input.public_results === true ? 1 : 0;
+			await env.DB.prepare('UPDATE polls SET question = ?, closes_at = ?, allow_suggestions = ?, public_results = ? WHERE id = ?').bind(question, closes, allow, pub, p.id).run();
 			return { ok: true as const };
 		}
 		case 'delete': {
