@@ -2,6 +2,7 @@
 
 ## 2026-11-11
 
+- [x] **Name badges: guillotine marks** — "Cutting guides" on the Name badges section is now a choice of none, guillotine marks or dashed lines around each badge (the old tick box). Guillotine marks leave the badges clean: a short line at each column edge in the top and bottom margins, to cut the sheet into strips, and a hairline at the right-hand end of each row edge, to cut the strips into badges. Drawn with borders, so they print without "Background graphics".
 - [x] **Name badges: a second print run** — "Only people confirmed, promoted or edited since" on the admin page's Name badges section prints just the badges that are new, or may have changed, since an earlier run (by each registration's `updated_at`), instead of the whole list again. With it set, blanks default to filling the last sheet rather than the room; a typed number is still used as it is.
 
 ## 2026-11-10

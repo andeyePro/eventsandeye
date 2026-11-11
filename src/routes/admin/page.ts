@@ -211,7 +211,7 @@ const HTML = /* html */ `<!doctype html>
 			</details>
 			<label><input type="checkbox" id="b-title" checked style="width:auto" /> Print the event title above the names (untick if the logo already says it)</label>
 			<label><input type="checkbox" id="b-acc-on" style="width:auto" /> Draw the dots on i and j in the accent colour, and the hyphens in names that have no i or j</label>
-			<label><input type="checkbox" id="b-guides" style="width:auto" /> Print cut lines around each badge</label>
+			<div><label for="b-guides">Cutting guides, for plain card</label><select id="b-guides"><option value="none">None (for sheets that are already cut)</option><option value="marks">Guillotine marks: short lines in the top and bottom margins to cut strips, and a hairline at each badge's right-hand corners to cut the strips up</option><option value="lines">Dashed lines around each badge</option></select></div>
 			<label><input type="checkbox" id="b-noimg" style="width:auto" /> Mark the badges of people who asked us not to share images of them, with a small crossed-out camera explained on each sheet</label>
 			<p id="b-count" class="small" role="status"></p>
 			<button type="submit">Open the badges to print</button>
@@ -696,7 +696,7 @@ function badgeUsePreset(id) {
 	const p = BADGE_PRESETS.find((x) => x.id === id);
 	if (!p) return;
 	for (const f of BADGE_FIELDS) $('b-' + f).value = p[f];
-	$('b-guides').checked = p.guides;
+	$('b-guides').value = p.guides ? 'lines' : 'none';
 }
 const badgeLogoUrl = () => badgeLogo || (badgeData && badgeData.logo_url ? new URL(badgeData.logo_url, location.href).href : '');
 // With a "since" time: only the people confirmed, promoted or edited from then on, and blanks only to fill the last sheet.
@@ -768,7 +768,7 @@ $('badge-form').addEventListener('submit', async (e) => {
 	// Opened before anything is awaited, so the browser counts it as the click's own tab, then filled.
 	const tab = window.open('', '_blank');
 	if (!tab) { toast('The browser stopped the new tab opening: allow pop-ups for this page, then try again.'); return; }
-	const html = badgeSheetHtml({ title: badgeEvent.title, people: chosen, blanks, geometry: g, logo: badgeLogoUrl(), guides: $('b-guides').checked, markNoImages: $('b-noimg').checked,
+	const html = badgeSheetHtml({ title: badgeEvent.title, people: chosen, blanks, geometry: g, logo: badgeLogoUrl(), guides: $('b-guides').value, markNoImages: $('b-noimg').checked,
 		logoAspect: badgeLogo ? badgeAspect : await siteLogoAspect(), logoPosition: $('b-logopos').value, oneLine: $('b-names').value === 'one', showTitle: $('b-title').checked, colour: $('b-colour').value,
 		affColour: $('b-affcolour').value, tag: $('b-tag').value.trim(), tagColour: $('b-tagcolour').value, tagWidth: Number($('b-tagw').value) || 1, accent: $('b-acc-on').checked ? $('b-accent').value : '',
 		font: badgeData.font ? { family: badgeData.font.family, url: new URL(badgeData.font.url, location.href).href } : null });

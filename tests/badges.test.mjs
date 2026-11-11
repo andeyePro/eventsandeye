@@ -8,7 +8,7 @@ import { build } from 'esbuild';
 
 const out = await build({ entryPoints: [new URL('../src/badges.ts', import.meta.url).pathname], bundle: true, format: 'esm', write: false, platform: 'neutral' });
 const { BADGE_JS, BADGE_PRESETS, DEFAULT_BADGE_TEMPLATE, badgePeople, badgeSummary, splitName, wantsBadge } = await import(`data:text/javascript;base64,${Buffer.from(out.outputFiles[0].text).toString('base64')}`);
-const js = new Function(`${BADGE_JS}; return { badgePerSheet, badgeGeometryProblem, badgeBlanks, badgeNameFit, badgeCaseFlag, badgePositions, badgeLayout, badgeLogoPosition, badgeSheetHtml };`)();
+const js = new Function(`${BADGE_JS}; return { badgePerSheet, badgeGeometryProblem, badgeBlanks, badgeNameFit, badgeCaseFlag, badgePositions, badgeLayout, badgeLogoPosition, badgeSheetHtml, badgeCutMarks };`)();
 const near = (a, b) => Math.abs(a - b) < 0.11;
 const preset = (id) => BADGE_PRESETS.find((p) => p.id === id);
 
@@ -227,4 +227,24 @@ test('the print page: page size, one section per sheet, names as typed and escap
 	const l4785 = js.badgeSheetHtml({ title: 'T', people, blanks: 0, geometry: { ...preset('avery-l4785'), margin_top: 22 }, logo: '', guides: false, markNoImages: true, oneLine: false, showTitle: true, colour: '', font: null });
 	assert.match(l4785, /class="sheet key"/);
 	assert.match(l4785, /plain paper/);
+});
+
+test('guillotine marks: strips from the margins, then badges from each strip, and no lines around the badges', () => {
+	const a = preset('avery-4822');
+	const m = js.badgeCutMarks(a);
+	const v = m.filter((x) => x.v), hz = m.filter((x) => !x.v);
+	assert.deepEqual([...new Set(v.map((x) => x.x))], [10, 100, 110, 200], 'a line at each column edge');
+	assert.equal(v.length, 8, 'four above and four below');
+	assert.ok(v.every((x) => x.y + x.len <= 27.5 + 0.001 || x.y >= 269.5 - 0.001), 'all in the margins, clear of the badges, so they are cut away');
+	assert.equal(hz.length, 10, 'five row edges in each of two strips');
+	assert.deepEqual([...new Set(hz.map((x) => x.y))], [28.5, 88.5, 148.5, 208.5, 268.5]);
+	assert.ok(hz.every((x) => [100, 200].some((r) => near(x.x + x.len, r)) && x.len <= 2), 'short, ending at the strip\'s right-hand edge');
+	// A gap between rows gives each badge its own top and bottom mark.
+	assert.equal(js.badgeCutMarks({ ...a, rows: 2, gap_y: 5 }).filter((x) => !x.v && x.x < 100).length, 4);
+	const people = [{ given: 'Amy', family: 'Brown', affiliation: null, no_images: false }];
+	const html = js.badgeSheetHtml({ title: 'T', people, blanks: 0, geometry: a, logo: '', guides: 'marks', markNoImages: false, oneLine: false, showTitle: false, colour: '', font: null });
+	assert.equal((html.match(/class="cm c[vh]"/g) || []).length, 18);
+	assert.doesNotMatch(html, /outline: 0.2mm dashed/);
+	assert.doesNotMatch(html, /\.cm \{[^}]*background/, 'drawn with borders: browsers leave backgrounds out of a print');
+	assert.match(js.badgeSheetHtml({ title: 'T', people, blanks: 0, geometry: a, logo: '', guides: 'lines', markNoImages: false, oneLine: false, showTitle: false, colour: '', font: null }), /outline: 0.2mm dashed/);
 });

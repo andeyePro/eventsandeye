@@ -218,6 +218,15 @@ try {
 	await page.waitForTimeout(300);
 	await page.selectOption('#b-names', 'one');
 	await page.check('#b-title');
+	await page.selectOption('#b-guides', 'marks');
+	const [gm] = await Promise.all([ctx.waitForEvent('page'), page.click('#badge-form button[type=submit]')]);
+	await gm.waitForSelector('body[data-fitted="1"]');
+	const cm = await gm.evaluate(() => { const mm = document.querySelector('.sheet').getBoundingClientRect().width / 210, s = document.querySelector('.sheet').getBoundingClientRect();
+		const r = (e) => { const b = e.getBoundingClientRect(); return { x: (b.left - s.left) / mm, y: (b.top - s.top) / mm, w: b.width / mm, h: b.height / mm }; };
+		return { v: [...document.querySelector('.sheet').querySelectorAll('.cv')].map(r), h: [...document.querySelector('.sheet').querySelectorAll('.ch')].map(r), outline: getComputedStyle(document.querySelector('.badge')).outlineStyle }; });
+	check('guillotine marks: 8 short lines in the margins at the column edges, none around the badges', cm.v.length === 8 && cm.outline === 'none' && cm.v.every((m) => [10, 100, 110, 200].some((x) => Math.abs(m.x - x) < 0.3) && (m.y + m.h < 28.5 || m.y > 268.5) && m.w < 0.6), JSON.stringify(cm.v));
+	check('…and a hairline at the right-hand end of each row edge, visible', cm.h.length === 10 && cm.h.every((m) => [28.5, 88.5, 148.5, 208.5, 268.5].some((y) => Math.abs(m.y - y) < 0.3) && [100, 200].some((x) => Math.abs(m.x + m.w - x) < 0.3) && m.h > 0 && m.h < 0.6), JSON.stringify(cm.h));
+	await gm.close();
 	await page.selectOption('#b-preset', 'plain-a4');
 	const [one] = await Promise.all([ctx.waitForEvent('page'), page.click('#badge-form button[type=submit]')]);
 	await one.waitForSelector('body[data-fitted="1"]');

@@ -421,6 +421,26 @@ function badgeLayout(g, o) {
  *   all colours '#rrggbb'),
  *   font ({ url, family } or null) }
  */
+/**
+ * Marks for cutting plain card with a guillotine, for one sheet, in mm from its top left corner. Nothing is drawn around
+ * the badges. In the margins above and below the grid, a short line at each column's left and right edge, to cut the
+ * sheet into vertical strips: they fall away with the margins. Then, at the right-hand end of each row's top and bottom
+ * edge, a short hairline just inside the strip, to cut the strip into badges along it.
+ */
+function badgeCutMarks(g) {
+	const xs = [], ys = [], out = [];
+	for (let c = 0; c < g.cols; c++) { const l = g.margin_left + c * (g.badge_w + g.gap_x); for (const x of [l, l + g.badge_w]) if (!xs.some((v) => Math.abs(v - x) < 0.01)) xs.push(x); }
+	for (let r = 0; r < g.rows; r++) { const t = g.margin_top + r * (g.badge_h + g.gap_y); for (const y of [t, t + g.badge_h]) if (!ys.some((v) => Math.abs(v - y) < 0.01)) ys.push(y); }
+	const top = g.margin_top, bottom = ys[ys.length - 1], below = g.sheet_h - bottom;
+	for (const x of xs) {
+		if (top >= 2) out.push({ v: true, x: badgeRound(x), y: badgeRound(Math.max(0, top - 6)), len: badgeRound(Math.min(5, top - 1)) });
+		if (below >= 2) out.push({ v: true, x: badgeRound(x), y: badgeRound(bottom + 1), len: badgeRound(Math.min(5, below - 1)) });
+	}
+	const tick = Math.min(2, g.badge_w / 10);
+	for (let c = 0; c < g.cols; c++) { const right = g.margin_left + c * (g.badge_w + g.gap_x) + g.badge_w; for (const y of ys) out.push({ v: false, x: badgeRound(right - tick), y: badgeRound(y), len: badgeRound(tick) }); }
+	return out;
+}
+
 function badgeSheetHtml(opts) {
 	const g = opts.geometry, h = g.badge_h;
 	const L = badgeLayout(g, opts);
@@ -471,13 +491,17 @@ function badgeSheetHtml(opts) {
 	const all = opts.people.map(badge);
 	for (let i = 0; i < opts.blanks; i++) all.push(badge(null, 0));
 	const per = badgePerSheet(g), pos = badgePositions(g), sheets = [];
+	// true is the older spelling of 'lines'.
+	const guides = opts.guides === true ? 'lines' : opts.guides === 'lines' || opts.guides === 'marks' ? opts.guides : '';
+	// Borders, not backgrounds: browsers leave backgrounds out of a print unless asked.
+	const cutMarks = guides !== 'marks' ? '' : badgeCutMarks(g).map((m) => '<i class="cm ' + (m.v ? 'cv' : 'ch') + '" aria-hidden="true" style="left:' + m.x + 'mm;top:' + m.y + 'mm;' + (m.v ? 'height:' : 'width:') + m.len + 'mm"></i>').join('');
 	const below = g.sheet_h - (g.margin_top + g.rows * h + (g.rows - 1) * g.gap_y);
 	const legendText = 'Key: the crossed-out camera marks someone who has asked us not to share images of them. Please keep them out of photos and recordings you publish.';
 	// The key goes in the space below the badges when there is room for it; otherwise on a page of its own, for plain paper.
 	const legendOnSheet = mark && below >= 8;
 	for (let s = 0; s * per < all.length; s++) {
 		const items = all.slice(s * per, (s + 1) * per).map((b, i) => b.replace('<div class="badge', '<div style="left:' + pos[i].left + 'mm;top:' + pos[i].top + 'mm" class="badge'));
-		sheets.push('<section class="sheet" aria-label="Sheet ' + (s + 1) + '">' + items.join('')
+		sheets.push('<section class="sheet" aria-label="Sheet ' + (s + 1) + '">' + items.join('') + cutMarks
 			+ (legendOnSheet ? '<p class="legend" style="top:' + badgeRound(g.sheet_h - below / 2 - 2) + 'mm"><span class="noimg">' + BADGE_NO_IMAGES_SVG + '</span> ' + badgeEsc(legendText) + '</p>' : '')
 			+ '</section>');
 	}
@@ -509,7 +533,8 @@ function badgeSheetHtml(opts) {
 		+ ' .fit { position: relative; } .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }'
 		+ ' .tt { display: inline-block; color: ' + (accent || colour) + '; }'
 		+ ' .text { display: flex; flex-direction: column; justify-content: center; gap: ' + L.gap + 'mm; } .pos-top .text { flex: 1 1 auto; min-height: 0; }'
-		+ (opts.guides ? ' .badge { outline: 0.2mm dashed #777; outline-offset: -0.1mm; }' : '')
+		+ (guides === 'lines' ? ' .badge { outline: 0.2mm dashed #777; outline-offset: -0.1mm; }' : '')
+		+ (guides === 'marks' ? ' .cm { position: absolute; display: block; width: 0; height: 0; border: 0 solid #000; } .cv { border-left-width: 0.1mm; margin-left: -0.05mm; } .ch { border-top-width: 0.1mm; margin-top: -0.05mm; }' : '')
 		+ ' .badge > *, .text > * { flex: none; }'
 		+ ' .logo { display: flex; align-items: center; justify-content: center; } .logo img { display: block; width: 100%; height: 100%; object-fit: contain; object-position: center; }'
 		+ ' .fit { width: 100%; overflow: hidden; display: flex; flex-direction: column; justify-content: center; line-height: 1.25; overflow-wrap: normal; text-wrap: balance; white-space: normal; }'
